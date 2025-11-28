@@ -351,6 +351,11 @@ fn full_address_to_multisigner(
                 Err(e) => Err(Error::SecretStringError(e)),
             }
         }
+        Encryption::Penumbra => {
+            // penumbra uses bip44 derivation (m/44'/6532'/0'), not substrate-style paths
+            // this function is for substrate key derivation, penumbra keys are handled separately
+            Err(Error::PenumbraNotSubstrate)
+        }
     };
     full_address.zeroize();
     multisigner_result

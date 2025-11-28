@@ -19,6 +19,12 @@ sp-core = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a0
 sp-runtime = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false}
 thiserror = "1.0.57"
 log = "0.4"
+# penumbra dependencies
+transaction_signing = { path = "../transaction_signing", optional = true, features = ["penumbra"] }
+
+[features]
+default = []
+penumbra = ["transaction_signing"]
 
 [dev-dependencies]
 pretty_assertions = "1"

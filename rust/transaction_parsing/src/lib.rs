@@ -30,6 +30,12 @@ use parse_transaction::{parse_transaction, parse_transaction_with_proof};
 pub mod dynamic_derivations;
 mod error;
 
+// penumbra support
+#[cfg(feature = "penumbra")]
+pub mod penumbra;
+#[cfg(feature = "penumbra")]
+use penumbra::process_penumbra_transaction;
+
 #[cfg(test)]
 mod tests;
 use crate::dynamic_derivations::decode_dynamic_derivations;
@@ -64,6 +70,8 @@ fn handle_scanner_input(database: &sled::Db, payload: &str) -> Result<Transactio
         "04" => parse_transaction_bulk(database, data_hex),
         "06" => parse_transaction_with_proof(database, data_hex),
         "08" => process_any_chain_message(database, data_hex),
+        #[cfg(feature = "penumbra")]
+        "10" => process_penumbra_transaction(database, data_hex),
         "80" => load_metadata(database, data_hex),
         "81" => load_types(database, data_hex),
         "c1" => add_specs(database, data_hex),

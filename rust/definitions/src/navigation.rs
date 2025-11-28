@@ -775,6 +775,51 @@ pub struct MKeysInfoExport {
     pub frames: Vec<QrData>,
 }
 
+// penumbra transaction types
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraSpendAction {
+    pub note_value: String,
+    pub note_asset: String,
+    pub note_address: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraOutputAction {
+    pub value: String,
+    pub asset: String,
+    pub dest_address: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraSwapAction {
+    pub input_value: String,
+    pub input_asset: String,
+    pub output_asset: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraDelegateAction {
+    pub amount: String,
+    pub validator: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraVoteAction {
+    pub proposal_id: u64,
+    pub vote: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraTransactionSummary {
+    pub chain_id: String,
+    pub expiry_height: Option<u64>,
+    pub fee: String,
+    pub fee_asset: String,
+    pub spend_count: u64,
+    pub output_count: u64,
+    pub effect_hash: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Card {
     AuthorCard { f: MAddressCard },
@@ -812,4 +857,11 @@ pub enum Card {
     VarNameCard { f: String },
     VerifierCard { f: MVerifierDetails },
     WarningCard { f: String },
+    // penumbra cards
+    PenumbraSummaryCard { f: PenumbraTransactionSummary },
+    PenumbraSpendCard { f: PenumbraSpendAction },
+    PenumbraOutputCard { f: PenumbraOutputAction },
+    PenumbraSwapCard { f: PenumbraSwapAction },
+    PenumbraDelegateCard { f: PenumbraDelegateAction },
+    PenumbraVoteCard { f: PenumbraVoteAction },
 }

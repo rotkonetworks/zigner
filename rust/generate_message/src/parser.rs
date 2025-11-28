@@ -877,5 +877,9 @@ fn into_sufficient(
             let signature = ecdsa::Signature::from_raw(into_sign);
             Ok(SufficientCrypto::Ecdsa { public, signature })
         }
+        Encryption::Penumbra => {
+            // penumbra uses decaf377-rdsa which is not compatible with SufficientCrypto
+            Err(Error::NotSupported)
+        }
     }
 }

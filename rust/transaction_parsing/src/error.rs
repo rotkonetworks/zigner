@@ -594,6 +594,10 @@ pub enum Error {
         needed to decode historical transaction."
     )]
     HistoryUnknownNetwork { name: String },
+
+    /// Penumbra transaction parsing error
+    #[error("Penumbra parsing error: {0}")]
+    PenumbraParseError(String),
 }
 
 fn display_parsing_errors(network_name: &str, errors: &[(u32, parser::Error)]) -> String {

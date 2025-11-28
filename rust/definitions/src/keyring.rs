@@ -64,6 +64,7 @@ enum NetworkSpecsKeyContent {
     Sr25519(H256),
     Ecdsa(H256),
     Ethereum(H256),
+    Penumbra(H256),
 }
 
 impl NetworkSpecsKey {
@@ -75,6 +76,7 @@ impl NetworkSpecsKey {
             Encryption::Sr25519 => NetworkSpecsKeyContent::Sr25519(*genesis_hash),
             Encryption::Ecdsa => NetworkSpecsKeyContent::Ecdsa(*genesis_hash),
             Encryption::Ethereum => NetworkSpecsKeyContent::Ethereum(*genesis_hash),
+            Encryption::Penumbra => NetworkSpecsKeyContent::Penumbra(*genesis_hash),
         };
         Self(network_key_content.encode())
     }
@@ -103,6 +105,7 @@ impl NetworkSpecsKey {
             NetworkSpecsKeyContent::Sr25519(b) => Ok((b, Encryption::Sr25519)),
             NetworkSpecsKeyContent::Ecdsa(b) => Ok((b, Encryption::Ecdsa)),
             NetworkSpecsKeyContent::Ethereum(b) => Ok((b, Encryption::Ethereum)),
+            NetworkSpecsKeyContent::Penumbra(b) => Ok((b, Encryption::Penumbra)),
         }
     }
 

@@ -37,4 +37,16 @@ pub enum Error {
     /// Associated data is the new checksum.
     #[error("Wrong password.")]
     WrongPasswordNewChecksum(u32),
+
+    /// Penumbra key derivation error
+    #[error("Penumbra key derivation error: {0}")]
+    PenumbraKeyDerivation(String),
+
+    /// Penumbra signing error
+    #[error("Penumbra signing error: {0}")]
+    PenumbraSigning(String),
+
+    /// Penumbra effect hash error
+    #[error("Penumbra effect hash error: {0}")]
+    PenumbraEffectHash(String),
 }

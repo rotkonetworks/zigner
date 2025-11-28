@@ -84,6 +84,7 @@ pub enum Encryption {
     Sr25519,
     Ecdsa,
     Ethereum,
+    Penumbra,
 }
 
 impl Encryption {
@@ -96,6 +97,7 @@ impl Encryption {
             Encryption::Sr25519 => String::from("sr25519"),
             Encryption::Ecdsa => String::from("ecdsa"),
             Encryption::Ethereum => String::from("ethereum"),
+            Encryption::Penumbra => String::from("penumbra"),
         }
     }
 
@@ -106,6 +108,7 @@ impl Encryption {
     pub fn identicon_style(&self) -> IdenticonStyle {
         match self {
             Encryption::Ethereum => IdenticonStyle::Blockies,
+            Encryption::Penumbra => IdenticonStyle::Dots, // using dots for now
             _ => IdenticonStyle::Dots,
         }
     }
@@ -120,6 +123,7 @@ impl TryFrom<String> for Encryption {
             "sr25519" => Ok(Encryption::Sr25519),
             "ecdsa" => Ok(Encryption::Ecdsa),
             "ethereum" => Ok(Encryption::Ethereum),
+            "penumbra" => Ok(Encryption::Penumbra),
             _ => Err(Error::UnknownEncryption(value)),
         }
     }

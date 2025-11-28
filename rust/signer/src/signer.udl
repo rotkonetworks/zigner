@@ -55,6 +55,7 @@ enum Encryption {
     "Sr25519",
     "Ecdsa",
     "Ethereum",
+    "Penumbra",
 };
 
 [Enum]
@@ -925,6 +926,45 @@ dictionary MSCTxSpecPlain {
     string tx_version;
 };
 
+// penumbra transaction types
+dictionary PenumbraSpendAction {
+    string note_value;
+    string note_asset;
+    string note_address;
+};
+
+dictionary PenumbraOutputAction {
+    string value;
+    string asset;
+    string dest_address;
+};
+
+dictionary PenumbraSwapAction {
+    string input_value;
+    string input_asset;
+    string output_asset;
+};
+
+dictionary PenumbraDelegateAction {
+    string amount;
+    string validator;
+};
+
+dictionary PenumbraVoteAction {
+    u64 proposal_id;
+    string vote;
+};
+
+dictionary PenumbraTransactionSummary {
+    string chain_id;
+    u64? expiry_height;
+    string fee;
+    string fee_asset;
+    u64 spend_count;
+    u64 output_count;
+    string effect_hash;
+};
+
 [Enum]
 interface Card {
     AuthorCard(MAddressCard f);
@@ -962,4 +1002,10 @@ interface Card {
     VarNameCard(string f);
     VerifierCard(MVerifierDetails f);
     WarningCard(string f);
+    PenumbraSummaryCard(PenumbraTransactionSummary f);
+    PenumbraSpendCard(PenumbraSpendAction f);
+    PenumbraOutputCard(PenumbraOutputAction f);
+    PenumbraSwapCard(PenumbraSwapAction f);
+    PenumbraDelegateCard(PenumbraDelegateAction f);
+    PenumbraVoteCard(PenumbraVoteAction f);
 };

@@ -137,6 +137,16 @@ pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSi
                 .map_err(|_| Error::WrongPublicKeyLength)?;
             Ok(MultiSigner::Ecdsa(ecdsa::Public::from_raw(into_pubkey)))
         }
+        Encryption::Penumbra => {
+            // penumbra uses decaf377, not substrate multisigner
+            // for now, use ed25519 as a placeholder to avoid crashes
+            // TODO: proper penumbra key handling
+            let into_pubkey: [u8; 32] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
+        }
     }
 }
 
@@ -277,6 +287,13 @@ pub fn base58_or_eth_pubkey_to_multisigner(
 
             let pubkey = ecdsa::Public::from_raw(raw_key);
             Ok(MultiSigner::Ecdsa(pubkey))
+        }
+        Encryption::Penumbra => {
+            // penumbra uses bech32m encoding, not ss58
+            // this function is mainly for substrate chains
+            // for now, treat as ed25519 placeholder
+            let pubkey = ed25519::Public::from_ss58check(base58_or_eth)?;
+            Ok(MultiSigner::Ed25519(pubkey))
         }
     }
 }

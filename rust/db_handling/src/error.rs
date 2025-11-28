@@ -389,6 +389,11 @@ pub enum Error {
 
     #[error("Data packing error: {0}")]
     DataPacking(String),
+
+    /// Penumbra keys use different derivation (bip44 m/44'/6532'/0')
+    /// and cannot be derived using substrate-style paths
+    #[error("Penumbra encryption not supported for substrate-style key derivation")]
+    PenumbraNotSubstrate,
 }
 
 /// DB handling result.

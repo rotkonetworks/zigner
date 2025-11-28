@@ -116,6 +116,10 @@ pub fn make_message(make: Make) -> Result<()> {
                 .concat();
                 (complete_message, format!("{name_stub}_Alice-ecdsa"))
             }
+            Encryption::Penumbra => {
+                // penumbra uses decaf377-rdsa, no alice test key available
+                return Err(Error::NotSupported);
+            }
         },
 
         // no verifier

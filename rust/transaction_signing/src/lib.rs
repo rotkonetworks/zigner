@@ -19,6 +19,17 @@ mod tests;
 mod error;
 pub use error::{Error, Result};
 
+// penumbra signing module
+#[cfg(feature = "penumbra")]
+pub mod penumbra;
+#[cfg(feature = "penumbra")]
+pub use penumbra::{
+    derive_spend_auth_key as penumbra_derive_spend_auth_key,
+    sign_spend as penumbra_sign_spend, sign_transaction as penumbra_sign_transaction,
+    EffectHash as PenumbraEffectHash, PenumbraAuthorizationData,
+    SpendKeyBytes as PenumbraSpendKeyBytes, PENUMBRA_BIP44_PATH, PENUMBRA_COIN_TYPE,
+};
+
 pub use sign_transaction::{create_signature, SignatureAndChecksum, SignatureType};
 
 pub fn handle_stub(database: &sled::Db, checksum: u32) -> Result<()> {
