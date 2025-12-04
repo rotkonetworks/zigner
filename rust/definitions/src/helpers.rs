@@ -138,9 +138,9 @@ pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSi
             Ok(MultiSigner::Ecdsa(ecdsa::Public::from_raw(into_pubkey)))
         }
         Encryption::Penumbra => {
-            // penumbra uses decaf377, not substrate multisigner
-            // for now, use ed25519 as a placeholder to avoid crashes
-            // TODO: proper penumbra key handling
+            // Penumbra uses decaf377-rdsa for signing (handled in transaction_signing::penumbra).
+            // For MultiSigner storage, we use Ed25519 since both are 32-byte keys.
+            // The actual signing uses the proper decaf377 implementation.
             let into_pubkey: [u8; 32] = public
                 .to_vec()
                 .try_into()
