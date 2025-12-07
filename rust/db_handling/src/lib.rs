@@ -44,6 +44,12 @@ pub mod manage_history;
 
 mod error;
 
+#[cfg(feature = "penumbra")]
+pub mod penumbra;
+
+#[cfg(feature = "ledger")]
+pub mod ledger_ed25519;
+
 pub use error::{Error, Result};
 
 #[cfg(test)]

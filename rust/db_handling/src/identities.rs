@@ -90,6 +90,25 @@ use crate::{
 };
 use crate::{Error, Result};
 
+/// Get display address for a multisigner - checks for stored Penumbra address first
+#[cfg(feature = "active")]
+fn get_display_address(
+    database: &sled::Db,
+    multisigner: &MultiSigner,
+    optional_prefix: Option<u16>,
+    encryption: Encryption,
+) -> String {
+    // For Penumbra, try to get the stored bech32m address
+    if encryption == Encryption::Penumbra {
+        let ak_hex = hex::encode(multisigner_to_public(multisigner));
+        if let Ok(Some(address)) = crate::penumbra::get_penumbra_address(database, &ak_hex) {
+            return address;
+        }
+    }
+    // Fall back to default display
+    print_multisigner_as_base58_or_eth_address(multisigner, optional_prefix, encryption)
+}
+
 lazy_static! {
 // stolen from sp_core
 // removed seed phrase part
@@ -331,6 +350,145 @@ pub fn import_all_addrs(
         .apply(database)
 }
 
+/// Derive Penumbra MultiSigner and bech32m address from seed phrase and path
+/// Path format: m/44'/6532'/account'/... (BIP44 style)
+/// Returns (MultiSigner, bech32m_address)
+#[cfg(all(feature = "active", feature = "penumbra"))]
+fn penumbra_derive_multisigner_and_address(seed_phrase: &str, path: &str) -> Result<(MultiSigner, String)> {
+    use crate::penumbra;
+
+    // Parse account number from path (m/44'/6532'/account'/...)
+    // Default to account 0 if parsing fails
+    let account = parse_penumbra_account(path).unwrap_or(0);
+
+    // Derive spend key and full viewing key
+    let spend_key_bytes = penumbra::derive_spend_key_bytes(seed_phrase, account)?;
+    let fvk = spend_key_bytes.full_viewing_key()?;
+
+    // Derive the default address (address index 0 within this account)
+    let address = fvk.get_address(0)?;
+    let bech32m_address = address.to_bech32m()?;
+
+    // Get the verification key (ak) - 32 bytes
+    let ak_bytes = fvk.ak.to_bytes();
+
+    // Store as Ed25519 since both are 32-byte keys
+    let multisigner = MultiSigner::Ed25519(ed25519::Public::from_raw(ak_bytes));
+
+    Ok((multisigner, bech32m_address))
+}
+
+/// Parse account number from Penumbra BIP44 path
+/// Path format: m/44'/6532'/account'/...
+#[cfg(all(feature = "active", feature = "penumbra"))]
+fn parse_penumbra_account(path: &str) -> Option<u32> {
+    // Handle paths like "m/44'/6532'/0'" or just the path_id from network specs
+    let parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
+
+    // Look for the account part (third element, after 44' and 6532')
+    if parts.len() >= 3 {
+        let account_part = parts[2].trim_end_matches('\'');
+        account_part.parse().ok()
+    } else {
+        None
+    }
+}
+
+/// Derive Ledger Ed25519 MultiSigner from seed phrase and path
+/// Path format: m/44'/354'/account'/0'/0' (BIP44 style for Polkadot)
+/// or //ledger//account_number for simplified UI input
+#[cfg(all(feature = "active", feature = "ledger"))]
+fn ledger_derive_multisigner(seed_phrase: &str, path: &str) -> Result<MultiSigner> {
+    use crate::ledger_ed25519;
+
+    // Parse the path to extract SLIP-0044 coin type and account number
+    // Support both full BIP44 path (m/44'/354'/0'/0'/0') and simplified (//ledger//0)
+    let (slip0044, account) = parse_ledger_path(path)?;
+
+    let key_pair = ledger_ed25519::derive_ledger_key(seed_phrase, slip0044, account, 0, 0)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Ledger key derivation failed: {}", e)))?;
+
+    Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(key_pair.public_key)))
+}
+
+/// Parse Ledger BIP44 path to extract SLIP-0044 coin type and account number
+///
+/// Supports two modes:
+///
+/// **Universal mode** (recommended, works on all Substrate networks):
+/// - `//ledger//0` → coin 354 (Polkadot), account 0 - same key for all networks
+/// - `//ledger//1` → coin 354, account 1
+///
+/// **Legacy per-network mode** (different key per network):
+/// - `//polkadot_ledger//0` → coin 354, account 0
+/// - `//kusama_ledger//0` → coin 434, account 0 (different key!)
+/// - `//astar_ledger//0` → coin 810, account 0
+///
+/// **Full BIP44 path**:
+/// - `m/44'/354'/0'/0'/0'` → coin 354, account 0
+#[cfg(all(feature = "active", feature = "ledger"))]
+fn parse_ledger_path(path: &str) -> Result<(u32, u32)> {
+    use crate::ledger_ed25519::{SLIP0044_POLKADOT, SLIP0044_KUSAMA};
+
+    // SLIP-0044 coin types for supported networks (legacy per-network mode)
+    // See: https://github.com/satoshilabs/slips/blob/master/slip-0044.md
+    const SLIP0044_ASTAR: u32 = 810;
+    const SLIP0044_ACALA: u32 = 787;
+
+    // Try parsing as full BIP44 path: m/44'/slip0044'/account'/change'/address'
+    if path.starts_with("m/44'/") || path.starts_with("44'/") {
+        let parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
+        if parts.len() >= 3 {
+            // parts[0] = "44'" (purpose)
+            // parts[1] = "354'" or "434'" (slip0044 coin type)
+            // parts[2] = "0'" (account)
+            let slip0044_str = parts[1].trim_end_matches('\'');
+            let account_str = parts[2].trim_end_matches('\'');
+
+            let slip0044 = slip0044_str.parse::<u32>()
+                .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
+            let account = account_str.parse::<u32>()
+                .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
+
+            return Ok((slip0044, account));
+        }
+    }
+
+    let path_lower = path.to_lowercase();
+
+    // Extract account number - find the last numeric part after //
+    let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
+    let account = parts.iter()
+        .filter_map(|p| p.parse::<u32>().ok())
+        .last()
+        .unwrap_or(0);
+
+    // Universal mode: //ledger//0 (no network prefix)
+    // Uses Polkadot coin type (354) for all networks - same key everywhere
+    if path_lower.contains("ledger") &&
+       !path_lower.contains("polkadot") &&
+       !path_lower.contains("kusama") &&
+       !path_lower.contains("astar") &&
+       !path_lower.contains("acala") {
+        return Ok((SLIP0044_POLKADOT, account));
+    }
+
+    // Legacy per-network mode: //<network>_ledger//0
+    // Different coin type per network - different keys
+    let slip0044 = if path_lower.contains("kusama") {
+        SLIP0044_KUSAMA
+    } else if path_lower.contains("astar") {
+        SLIP0044_ASTAR
+    } else if path_lower.contains("acala") {
+        SLIP0044_ACALA
+    } else {
+        // Default to Polkadot
+        SLIP0044_POLKADOT
+    };
+
+    Ok((slip0044, account))
+}
+
 /// Get public key from seed phrase and derivation path
 fn full_address_to_multisigner(
     mut full_address: String,
@@ -355,6 +513,11 @@ fn full_address_to_multisigner(
             // penumbra uses bip44 derivation (m/44'/6532'/0'), not substrate-style paths
             // this function is for substrate key derivation, penumbra keys are handled separately
             Err(Error::PenumbraNotSubstrate)
+        }
+        Encryption::LedgerEd25519 => {
+            // Ledger uses SLIP-10/BIP32-Ed25519 derivation (m/44'/354'/account'/0'/0')
+            // not substrate-style paths - handled separately in create_address
+            Err(Error::LedgerNotSubstrate)
         }
     };
     full_address.zeroize();
@@ -490,7 +653,8 @@ pub fn process_dynamic_derivations_v1(
         };
         let encryption = derivation_request.encryption;
         derivations.push(DDDetail {
-            base58: print_multisigner_as_base58_or_eth_address(
+            base58: get_display_address(
+                database,
                 multisigner,
                 Some(network_specs.specs.base58prefix),
                 encryption,
@@ -858,16 +1022,42 @@ pub(crate) fn create_address(
     if seed_phrase.is_empty() {
         return Err(Error::EmptySeed);
     }
-    // create fixed-length string to avoid reallocations
-    let mut full_address = String::with_capacity(seed_phrase.len() + path.len());
-    full_address.push_str(seed_phrase);
-    full_address.push_str(path);
 
     let encryption = network_specs
         .map(|ns| ns.encryption)
         .unwrap_or(Encryption::Sr25519);
 
-    let multisigner = full_address_to_multisigner(full_address, encryption)?;
+    // Handle Penumbra separately - it uses BIP44 derivation, not Substrate-style paths
+    let multisigner = if encryption == Encryption::Penumbra {
+        #[cfg(feature = "penumbra")]
+        {
+            let (multisigner, bech32m_address) = penumbra_derive_multisigner_and_address(seed_phrase, path)?;
+            // Store the bech32m address for later retrieval
+            let ak_hex = hex::encode(multisigner_to_public(&multisigner));
+            crate::penumbra::store_penumbra_address(database, &ak_hex, &bech32m_address)?;
+            multisigner
+        }
+        #[cfg(not(feature = "penumbra"))]
+        {
+            return Err(Error::PenumbraNotSubstrate);
+        }
+    } else if encryption == Encryption::LedgerEd25519 {
+        // Ledger Ed25519 uses SLIP-10/BIP32-Ed25519 derivation
+        #[cfg(feature = "ledger")]
+        {
+            ledger_derive_multisigner(seed_phrase, path)?
+        }
+        #[cfg(not(feature = "ledger"))]
+        {
+            return Err(Error::LedgerNotSubstrate);
+        }
+    } else {
+        // create fixed-length string to avoid reallocations
+        let mut full_address = String::with_capacity(seed_phrase.len() + path.len());
+        full_address.push_str(seed_phrase);
+        full_address.push_str(path);
+        full_address_to_multisigner(full_address, encryption)?
+    };
 
     // TODO regex elements may keep the line with password somewhere, how to
     // zeroize then? checked regex crate and it appears that only references are
@@ -1792,7 +1982,8 @@ pub fn export_secret_key(
         qr,
         pubkey: hex::encode(public_key),
         network_info,
-        base58: print_multisigner_as_base58_or_eth_address(
+        base58: get_display_address(
+            database,
             multisigner,
             Some(network_specs.specs.base58prefix),
             address_details.encryption,

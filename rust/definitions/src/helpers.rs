@@ -147,6 +147,15 @@ pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSi
                 .map_err(|_| Error::WrongPublicKeyLength)?;
             Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
         }
+        Encryption::LedgerEd25519 => {
+            // Ledger Ed25519 uses SLIP-10/BIP32-Ed25519 derivation, but the resulting
+            // public key is still a standard Ed25519 key
+            let into_pubkey: [u8; 32] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
+        }
     }
 }
 
@@ -163,6 +172,17 @@ pub fn print_multisigner_as_base58_or_eth_address(
     optional_prefix: Option<u16>,
     encryption: Encryption,
 ) -> String {
+    // Handle Penumbra specially - show spend verification key in hex
+    // Full Penumbra addresses require FVK derivation which isn't available here
+    if encryption == Encryption::Penumbra {
+        return match multi_signer {
+            MultiSigner::Ed25519(pubkey) => {
+                format!("penumbra_ak:{}", hex::encode(pubkey.0))
+            }
+            _ => format!("penumbra_key:{}", hex::encode(multisigner_to_public(multi_signer))),
+        };
+    }
+
     match optional_prefix {
         Some(base58prefix) => {
             let version_for_base58 = Ss58AddressFormat::custom(base58prefix);
@@ -292,6 +312,11 @@ pub fn base58_or_eth_pubkey_to_multisigner(
             // penumbra uses bech32m encoding, not ss58
             // this function is mainly for substrate chains
             // for now, treat as ed25519 placeholder
+            let pubkey = ed25519::Public::from_ss58check(base58_or_eth)?;
+            Ok(MultiSigner::Ed25519(pubkey))
+        }
+        Encryption::LedgerEd25519 => {
+            // Ledger Ed25519 uses standard SS58 encoding for addresses
             let pubkey = ed25519::Public::from_ss58check(base58_or_eth)?;
             Ok(MultiSigner::Ed25519(pubkey))
         }

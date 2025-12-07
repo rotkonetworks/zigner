@@ -85,12 +85,14 @@ pub enum Encryption {
     Ecdsa,
     Ethereum,
     Penumbra,
+    /// Ledger Ed25519 - uses SLIP-10/BIP32-Ed25519 derivation instead of substrate derivation
+    LedgerEd25519,
 }
 
 impl Encryption {
-    /// Display the encryption  
+    /// Display the encryption
     ///
-    /// This is used both in error printing and in json data exports  
+    /// This is used both in error printing and in json data exports
     pub fn show(&self) -> String {
         match &self {
             Encryption::Ed25519 => String::from("ed25519"),
@@ -98,6 +100,7 @@ impl Encryption {
             Encryption::Ecdsa => String::from("ecdsa"),
             Encryption::Ethereum => String::from("ethereum"),
             Encryption::Penumbra => String::from("penumbra"),
+            Encryption::LedgerEd25519 => String::from("ledger_ed25519"),
         }
     }
 
@@ -109,6 +112,7 @@ impl Encryption {
         match self {
             Encryption::Ethereum => IdenticonStyle::Blockies,
             Encryption::Penumbra => IdenticonStyle::Dots, // using dots for now
+            Encryption::LedgerEd25519 => IdenticonStyle::Dots,
             _ => IdenticonStyle::Dots,
         }
     }
@@ -124,6 +128,7 @@ impl TryFrom<String> for Encryption {
             "ecdsa" => Ok(Encryption::Ecdsa),
             "ethereum" => Ok(Encryption::Ethereum),
             "penumbra" => Ok(Encryption::Penumbra),
+            "ledger_ed25519" => Ok(Encryption::LedgerEd25519),
             _ => Err(Error::UnknownEncryption(value)),
         }
     }

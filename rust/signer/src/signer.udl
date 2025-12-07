@@ -56,6 +56,7 @@ enum Encryption {
     "Ecdsa",
     "Ethereum",
     "Penumbra",
+    "LedgerEd25519",
 };
 
 [Enum]
@@ -720,6 +721,10 @@ namespace signer {
 
     [Throws=ErrorDisplayed]
     sequence<QrData> bs_encrypt([ByRef] string secret, [ByRef] string title, [ByRef] string passphrase, u32 total_shards, u32 required_shards);
+
+    // Penumbra FVK export - generate viewing key QR for Prax import
+    [Throws=ErrorDisplayed]
+    PenumbraFvkExport export_penumbra_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
 };
 
 dictionary MKeysNew {
@@ -963,6 +968,15 @@ dictionary PenumbraTransactionSummary {
     u64 spend_count;
     u64 output_count;
     string effect_hash;
+};
+
+// Penumbra FVK export for watch-only wallet import
+dictionary PenumbraFvkExport {
+    u32 account_index;
+    string label;
+    string fvk_bech32m;
+    string wallet_id_bech32m;
+    sequence<u8> qr_data;
 };
 
 [Enum]

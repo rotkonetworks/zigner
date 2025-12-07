@@ -394,6 +394,11 @@ pub enum Error {
     /// and cannot be derived using substrate-style paths
     #[error("Penumbra encryption not supported for substrate-style key derivation")]
     PenumbraNotSubstrate,
+
+    /// Ledger Ed25519 keys use SLIP-10/BIP32-Ed25519 derivation (m/44'/354'/account'/0'/0')
+    /// and cannot be derived using substrate-style paths
+    #[error("Ledger Ed25519 encryption not supported for substrate-style key derivation")]
+    LedgerNotSubstrate,
 }
 
 /// DB handling result.
