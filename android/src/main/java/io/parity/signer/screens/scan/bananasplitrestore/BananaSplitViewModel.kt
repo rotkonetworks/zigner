@@ -3,7 +3,7 @@ package io.parity.signer.screens.scan.bananasplitrestore
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.dependencygraph.ServiceLocator
 import io.parity.signer.domain.backend.AuthOperationResult
 import io.parity.signer.domain.mapState

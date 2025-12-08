@@ -13,7 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.ScreenHeader
 import io.parity.signer.domain.Callback
 import io.parity.signer.screens.scan.transaction.components.TransactionElementSelector

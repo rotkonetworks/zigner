@@ -4,7 +4,7 @@ import android.content.Context
 import timber.log.Timber
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.dependencygraph.ServiceLocator
 import io.parity.signer.domain.KeyAndNetworkModel
 import io.parity.signer.domain.NetworkModel

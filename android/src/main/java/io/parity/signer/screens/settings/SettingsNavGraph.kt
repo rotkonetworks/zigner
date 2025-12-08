@@ -16,6 +16,7 @@ import io.parity.signer.components.documents.PpScreen
 import io.parity.signer.components.documents.TosScreen
 import io.parity.signer.screens.settings.backup.SeedBackupIntegratedScreen
 import io.parity.signer.screens.settings.general.SettingsGeneralNavSubgraph
+import io.parity.signer.screens.settings.penumbrafvk.PenumbraFvkExportIntegratedScreen
 import io.parity.signer.screens.settings.logs.logsNavigationSubgraph
 import io.parity.signer.screens.settings.networks.details.NetworkDetailsSubgraph
 import io.parity.signer.screens.settings.networks.list.networkListDestination
@@ -61,6 +62,11 @@ fun NavGraphBuilder.settingsFullSubgraph(
 				coreNavController.popBackStack(SettingsNavSubgraph.home, false)
 			}
 		}
+		composable(SettingsNavSubgraph.penumbraFvkExport) {
+			PenumbraFvkExportIntegratedScreen(coreNavController) {
+				coreNavController.popBackStack(SettingsNavSubgraph.home, false)
+			}
+		}
 		logsNavigationSubgraph(
 			navController = coreNavController,
 		)
@@ -93,6 +99,7 @@ internal object SettingsNavSubgraph {
 	const val logs = "settings_logs"
 	const val networkList = "settings_manage_networks"
 	const val generalVerifier = "settings_general_verifier"
+	const val penumbraFvkExport = "settings_penumbra_fvk_export"
 
 	object NetworkDetails {
 		internal const val networkKey = "network_key"

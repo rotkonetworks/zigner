@@ -20,7 +20,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.Callback
 import io.parity.signer.domain.KeepScreenOn
 import io.parity.signer.screens.scan.camera.*

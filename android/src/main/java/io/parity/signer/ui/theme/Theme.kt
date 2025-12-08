@@ -52,19 +52,20 @@ fun SignerOldTheme(
 	)
 }
 
+// Zafu-inspired dark palette for Penumbra/Zcash cold wallet
 private val DarkColorPaletteNew = darkColors(
-	primary = Color(0xFFFFFFFF), // text and icons primary
-	primaryVariant = Color(0xFF000000),
-	secondary = Color(0xFFAEAEAE),
-	secondaryVariant = Color(0xFF343434),
-	background = Color(0xFF101015), //primary background
-	surface = Color(0x00110000), // just transparent so text will be primary on it, used for rich text defaults properly
-	error = Color(0xFF2F2424),
-	onPrimary = Color(0xFF1E1E23),
-	onSecondary = Color(0xFFFEFEFE),
-	onBackground = Color(0xFFFEFEFE),
-	onSurface = Color(0xFFFEFEFE),
-	onError = Color(0xFFFF3B30),
+	primary = Color(0xFFE0E0E4), // text and icons primary (zafu text)
+	primaryVariant = Color(0xFF0D0D12),
+	secondary = Color(0xFF707078), // zafu dim
+	secondaryVariant = Color(0xFF2A2A35), // zafu border
+	background = Color(0xFF0D0D12), // zafu background - deep charcoal
+	surface = Color(0x00110000), // just transparent so text will be primary on it
+	error = Color(0xFFC05050), // zafu err
+	onPrimary = Color(0xFF16161D), // zafu surface
+	onSecondary = Color(0xFFE0E0E4),
+	onBackground = Color(0xFFE0E0E4),
+	onSurface = Color(0xFFE0E0E4),
+	onError = Color(0xFFC05050),
 )
 
 private val LightColorPaletteNew = lightColors(

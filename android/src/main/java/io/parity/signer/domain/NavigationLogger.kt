@@ -5,7 +5,7 @@ import timber.log.Timber
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.NavHostController
-import io.parity.signer.BuildConfig
+import net.rotko.zigner.BuildConfig
 
 
 fun NavHostController.addVaultLogger(tag: String = "Navigation") {

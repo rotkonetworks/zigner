@@ -9,7 +9,7 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.ui.theme.textTertiary
 import kotlin.math.min
 

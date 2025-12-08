@@ -52,7 +52,8 @@ object ServiceLocator {
 	val networkExposedStateKeeper by lazy {
 		NetworkExposedStateKeeper(
 			appContext,
-			uniffiInteractor
+			uniffiInteractor,
+			preferencesRepository
 		)
 	}
 	val authentication = Authentication()

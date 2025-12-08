@@ -82,6 +82,10 @@ pub const METATREE: &[u8] = b"metadata";
 /// information in cold database
 pub const ADDRTREE: &[u8] = b"addresses";
 
+/// Tree name for the tree storing Penumbra bech32m addresses
+/// Key: hex-encoded ak (spend verification key), Value: bech32m address string
+pub const PENUMBRA_ADDRS: &[u8] = b"penumbra_addresses";
+
 /// Tree name for the tree storing database settings
 ///
 /// In cold database, the settings tree contains general verifier, types

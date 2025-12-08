@@ -4,7 +4,7 @@ import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.BottomSheetConfirmDialog
 import io.parity.signer.domain.Callback
 import io.parity.signer.ui.theme.SignerNewTheme

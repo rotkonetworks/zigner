@@ -3,7 +3,7 @@ package io.parity.signer.screens.scan.transaction.transactionElements
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.uniffi.MscEraMortal
 
 @Composable

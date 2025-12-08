@@ -1,5 +1,5 @@
 <resources>
-	<string name="app_name">Vault</string>
+	<string name="app_name">Zigner</string>
 	<string name="remove_key_confirm_title">Forget this key?</string>
 	<string name="remove_key_confirm_text">This key will be removed for this network. Are you sure?</string>
 	<string name="remove_key_confirm_cta">Remove key</string>
@@ -87,7 +87,7 @@
 	<string name="log_message_network_custom">custom</string>
 	<string name="menu_option_add_note">Add Note</string>
 	<string name="menu_option_clear_logs">Clear Logs</string>
-	<string name="unlock_device_title">Unlock Polkadot Vault</string>
+	<string name="unlock_device_title">Unlock Zigner</string>
 	<string name="unlock_device_subtitle">Please authenticate yourself</string>
 	<string name="auth_error_message">Authentication error: %s</string>
 	<string name="auth_failed_message">Authentication failed</string>
@@ -126,9 +126,9 @@
 	<string name="camera_no_permission_text">Camera permission not granted</string>
 	<string name="general_got_it">Got it</string>
 	<string name="exposed_now_title">Network Connected</string>
-	<string name="exposed_now_message">Polkadot Vault detects currently connected network; please enable airplane mode, disable Wifi and BT, disconnect all cables and handle security breach according with your security protocol.</string>
+	<string name="exposed_now_message">Zigner detects currently connected network; please enable airplane mode, disable Wifi and BT, disconnect all cables and handle security breach according with your security protocol.</string>
 	<string name="exposed_past_title">Network Was Connected!</string>
-	<string name="exposed_past_message">Your Polkadot Vault device has connected to a mobile, WIFI, tether or Bluetooth network since your last acknowledgement and should be considered unsafe to use.</string>
+	<string name="exposed_past_message">Your Zigner device has connected to a mobile, WIFI, tether or Bluetooth network since your last acknowledgement and should be considered unsafe to use.</string>
 	<string name="exposed_before_cancel_button">Go Back</string>
 	<string name="exposed_before_proceed_button">Acknowledge and Proceed</string>
 	<string name="settings_title">Settings</string>
@@ -138,13 +138,15 @@
 	<string name="settings_backup_keys">Backup keys</string>
 	<string name="settings_wipe_data">Wipe all Data</string>
 	<string name="settings_hardware_key">Hardware seed protection: %1$s</string>
-	<string name="settings_version">Polkadot Vault version: %1$s</string>
+	<string name="settings_version">Zigner version: %1$s</string>
 	<string name="button_next">Next</string>
-	<string name="new_key_set_backup_subtitle">Write down your Secret Recovery Phrase</string>
-	<string name="new_key_set_backup_warning_message">Write it down on a paper and keep  it in a safe place. </string>
+	<string name="new_key_set_backup_subtitle">Backup your Secret Recovery Phrase</string>
+	<string name="new_key_set_backup_warning_message">Choose a backup method: write it down securely or use Banana Split for sharded backup.</string>
 	<string name="new_key_set_backup_cta">Create Key Set</string>
+	<string name="new_key_set_backup_banana_split_button">Banana Split Backup</string>
+	<string name="new_key_set_backup_paper_button">I\'ve Written It Down</string>
 	<string name="new_key_set_backup_bottomsheet_title">Please confirm that you have written down your secret recovery phrase</string>
-	<string name="new_key_set_backup_bottomsheet_checkbox_written">I’ve written down my secret recovery phrase</string>
+	<string name="new_key_set_backup_bottomsheet_checkbox_written">I\'ve written down my secret recovery phrase</string>
 	<string name="new_key_set_backup_bottomsheet_checkbox_keep_careful">I understand that if I lose my secret phrase, my funds will be lost forever</string>
 	<string name="transaction_field_from">From</string>
 	<string name="transaction_field_bitvec">BitVec</string>
@@ -275,7 +277,7 @@
 	<string name="create_derivations_empty">All derived keys already added</string>
 	<string name="create_derivations_failure">Derivation key failure: %1$s</string>
 	<string name="unlock_screen_title">Please Unlock the App</string>
-	<string name="unlock_screen_description">The device has been locked because of failed authentication, please unlock the device to keep using the Polkadot Vault</string>
+	<string name="unlock_screen_description">The device has been locked because of failed authentication, please unlock the device to keep using Zigner</string>
 	<string name="key_set_details_no_keys_title">Key Set Don\'t Have Any Derived Keys</string>
 	<string name="key_sets_empty_title">You Don\'t Have Any Key Sets</string>
 	<string name="key_sets_empty_message">Add a new Key Set to Store Keys and Sign Transactions</string>
@@ -303,7 +305,7 @@
 	<string name="settings_confirmation_wipe_all_title">Wipe All Data?</string>
 	<string name="settings_confirmation_wipe_all_message_yes_label">I Understand, Remove all Data</string>
 	<string name="derivation_key_empty_path_placeholder">Derivation Path is Empty</string>
-	<string name="navigation_error_general_message">Please restart Polkadot Vault app and try again.\nInternal error description: %1$s</string>
+	<string name="navigation_error_general_message">Please restart Zigner app and try again.\nInternal error description: %1$s</string>
 	<string name="general_error_link_clicked_on_airgap_device">No internet! Use different device.</string>
 	<string name="transaction_error_steps_1">Go to Portal where your network is stored</string>
 	<string name="transaction_error_steps_2_url_core_networks">metadata.parity.io</string>
@@ -387,11 +389,11 @@
 	<string name="network_help_metadata_go_scan">Go to “Update Metadata” Tab and Scan the Metadata Animated QR Code</string>
 	<string name="network_help_metadata_scan_cta">Scan Metadata</string>
 	<string name="onboarding_skip">Skip</string>
-	<string name="onboarding_welcome">Welcome to Polkadot Vault</string>
-	<string name="onboarding_header_1">Turn Your Smartphone Into a Hardware Wallet</string>
+	<string name="onboarding_welcome">Welcome to Zigner</string>
+	<string name="onboarding_header_1">Privacy-First Cold Wallet for Penumbra and Zcash</string>
 	<string name="onboarding_header_2">Generate and Store Multiple Private Keys</string>
 	<string name="onboarding_header_3">Sign Transactions While Keeping Your Private Keys Offline</string>
-	<string name="onboarding_header_4">Add New Networks and Update Them Without Breaking the Air Gap</string>
+	<string name="onboarding_header_4">Secure Air-Gapped Transaction Signing</string>
 	<string name="onboarding_cta_continue">Continue</string>
 	<string name="recovert_key_set_title">Key Set Name</string>
 	<string name="recovert_key_set_name_hint">Key Set Name Visible Only to You</string>

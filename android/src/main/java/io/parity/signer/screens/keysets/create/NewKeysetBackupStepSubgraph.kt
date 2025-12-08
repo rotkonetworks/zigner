@@ -67,6 +67,12 @@ fun NewKeysetSubgraph(
 						NewKeySetBackupStepSubgraph.NewKeySetBackupConfirmation
 					)
 				},
+				onBananaSplit = {
+					// Skip to network selection - Banana Split backup can be created after key set creation
+					subgraphNavController.navigate(NewKeySetBackupStepSubgraph.NewKeySetSelectNetworks) {
+						popUpTo(NewKeySetBackupStepSubgraph.NewKeySetBackup)
+					}
+				},
 				onBack = { subgraphNavController.popBackStack() },
 				modifier = Modifier.statusBarsPadding(),
 			)
@@ -78,6 +84,12 @@ fun NewKeysetSubgraph(
 					subgraphNavController.navigate(
 						NewKeySetBackupStepSubgraph.NewKeySetBackupConfirmation
 					)
+				},
+				onBananaSplit = {
+					// Skip to network selection - Banana Split backup can be created after key set creation
+					subgraphNavController.navigate(NewKeySetBackupStepSubgraph.NewKeySetSelectNetworks) {
+						popUpTo(NewKeySetBackupStepSubgraph.NewKeySetBackup)
+					}
 				},
 				onBack = { subgraphNavController.popBackStack() },
 				modifier = Modifier.statusBarsPadding(),

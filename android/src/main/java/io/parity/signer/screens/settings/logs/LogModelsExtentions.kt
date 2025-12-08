@@ -1,7 +1,7 @@
 package io.parity.signer.screens.settings.logs
 
 import android.content.Context
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.DateUtils
 import io.parity.signer.domain.abbreviateString
 import io.parity.signer.domain.toLogDateString

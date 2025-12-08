@@ -3,20 +3,20 @@ plugins {
 	id 'kotlin-android'
 	id 'org.mozilla.rust-android-gradle.rust-android'
 	id 'idea'
-	// Add the Google services Gradle plugin
-  id 'com.google.gms.google-services'
+	// Google services disabled for Zigner - can be re-enabled with new Firebase project
+	// id 'com.google.gms.google-services'
 }
 
 apply plugin: 'kotlin-android'
-apply plugin: 'com.google.gms.google-services'
+// apply plugin: 'com.google.gms.google-services'
 
 android {
 	defaultConfig {
-		applicationId "io.parity.signer"
+		applicationId "net.rotko.zigner"
 		minSdk 23
 		targetSdk 34
-		versionCode 70100
-		versionName "7.1.0"
+		versionCode 1000
+		versionName "0.1.0"
 		ndk {
 			abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
 		}
@@ -56,7 +56,7 @@ android {
 	}
 	compileSdk 34
 	ndkVersion '24.0.8215888'
-    namespace 'io.parity.signer'
+    namespace 'net.rotko.zigner'
 }
 
 android.applicationVariants.all { variant ->
@@ -134,8 +134,8 @@ dependencies {
 	androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 	androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_libs_version"
 	debugImplementation "androidx.compose.ui:ui-tooling:$compose_libs_version"
-	// Import the Firebase BoM
-  implementation platform('com.google.firebase:firebase-bom:33.12.0')
+	// Firebase disabled for Zigner - can be re-enabled with new Firebase project
+	// implementation platform('com.google.firebase:firebase-bom:33.12.0')
 }
 
 preBuild.dependsOn "cargoBuild","buildDB"

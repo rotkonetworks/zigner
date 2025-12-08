@@ -9,7 +9,7 @@ import android.security.keystore.UserNotAuthenticatedException
 import timber.log.Timber
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.FeatureFlags
 import io.parity.signer.domain.FeatureOption
 import io.parity.signer.domain.backend.OperationResult

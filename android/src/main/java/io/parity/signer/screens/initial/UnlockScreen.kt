@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.PrimaryButtonWide
 import io.parity.signer.domain.Callback
 import io.parity.signer.ui.rootnavigation.MainGraphRoutes

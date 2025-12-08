@@ -1,6 +1,6 @@
 package io.parity.signer.domain.backend
 
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.FakeNavigator
 import io.parity.signer.domain.NavigationError
 import io.parity.signer.domain.Navigator

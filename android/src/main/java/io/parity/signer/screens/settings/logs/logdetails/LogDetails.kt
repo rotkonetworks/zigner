@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.backend.CompletableResult
 import io.parity.signer.components.base.ScreenHeader
 import io.parity.signer.domain.Callback

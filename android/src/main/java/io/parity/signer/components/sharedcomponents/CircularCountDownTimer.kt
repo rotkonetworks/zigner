@@ -23,7 +23,7 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.conditional
 import io.parity.signer.domain.submitErrorState
 import io.parity.signer.ui.theme.*

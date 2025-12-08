@@ -49,14 +49,15 @@ val Colors.Action200: Color
 val Colors.Action100: Color
 	get() = if (isLight) Color(0xFFDFEFFF) else Color(0xFF082542)
 
+// Updated crypto colors to use Zafu gold theme
 val Colors.Crypto500: Color
-	get() = if (isLight) Color(0xFFB6EBEE) else Color(0xFF257681)
+	get() = if (isLight) Color(0xFFFFF0D0) else Color(0xFF5A4500)
 val Colors.Crypto400: Color
-	get() = if (isLight) Color(0xFF39929E) else Color(0xFF65A8B1)
+	get() = if (isLight) Color(0xFFF4A31E) else Color(0xFFF4A31E)  // Zafu gold
 val Colors.Crypto200: Color
-	get() = if (isLight) Color(0xFF6CA7AF) else Color(0xFF3D686D)
+	get() = if (isLight) Color(0xFFD4900A) else Color(0xFFB8841A)
 val Colors.Crypto100: Color
-	get() = if (isLight) Color(0xFFDCEDEF) else Color(0xFF21373A)
+	get() = if (isLight) Color(0xFFFFF5E0) else Color(0xFF3D2A00)
 
 val Colors.SignalDanger: Color
 	get() = if (isLight) Color(0xFFFF3B30) else Color(0xFFFF3B30)

@@ -36,7 +36,7 @@ import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.PrimaryButtonWide
 import io.parity.signer.domain.Callback
 import io.parity.signer.screens.scan.errors.COMPOSE_URL_TAG_ANNOTATION

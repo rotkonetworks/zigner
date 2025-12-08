@@ -121,27 +121,31 @@ struct DefaultNetworkInfo {
 }
 
 /// Populate `DefaultNetworkInfo` for default networks
+/// Zigner focuses on Penumbra and Zcash - Substrate networks kept for compatibility
 #[cfg(feature = "active")]
 fn default_network_info() -> [DefaultNetworkInfo; 3] {
     [
+        // Penumbra - primary network for Zigner (BIP44 derivation: m/44'/6532'/account')
         DefaultNetworkInfo {
-            address: String::from("wss://kusama-rpc.polkadot.io"),
-            base58prefix: 2,
-            color: String::from("#000"),
-            decimals: 12,
-            encryption: Encryption::Sr25519,
+            address: String::from("https://grpc.penumbra.zone"),
+            base58prefix: 0, // Not used for Penumbra (uses bech32m)
+            color: String::from("#F4A31E"), // Zafu gold
+            decimals: 6,
+            encryption: Encryption::Penumbra,
             genesis_hash: H256::from_str(
-                "b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe",
+                // Penumbra mainnet chain ID hash (placeholder - mainnet is live)
+                "0000000000000000000000000000000000000000000000000000000000006532",
             )
             .expect("known value"),
-            logo: String::from("kusama"),
-            name: String::from("kusama"),
-            order: 1,
-            path_id: String::from("//kusama"),
-            secondary_color: String::from("#262626"),
-            title: String::from("Kusama"),
-            unit: String::from("KSM"),
+            logo: String::from("penumbra"),
+            name: String::from("penumbra"),
+            order: 0,
+            path_id: String::from("m/44'/6532'/0'"), // BIP44 path for Penumbra
+            secondary_color: String::from("#B8841A"),
+            title: String::from("Penumbra"),
+            unit: String::from("UM"),
         },
+        // Polkadot - Substrate network
         DefaultNetworkInfo {
             address: String::from("wss://rpc.polkadot.io"),
             base58prefix: 0,
@@ -154,29 +158,30 @@ fn default_network_info() -> [DefaultNetworkInfo; 3] {
             .expect("known value"),
             logo: String::from("polkadot"),
             name: String::from("polkadot"),
-            order: 0,
+            order: 1,
             path_id: String::from("//polkadot"),
             secondary_color: String::from("#262626"),
             title: String::from("Polkadot"),
             unit: String::from("DOT"),
         },
+        // Kusama - canary network
         DefaultNetworkInfo {
-            address: String::from("wss://westend-rpc.polkadot.io"),
-            base58prefix: 42,
-            color: String::from("#660D35"),
+            address: String::from("wss://kusama-rpc.polkadot.io"),
+            base58prefix: 2,
+            color: String::from("#000"),
             decimals: 12,
             encryption: Encryption::Sr25519,
             genesis_hash: H256::from_str(
-                "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e",
+                "b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe",
             )
             .expect("known value"),
-            logo: String::from("westend"),
-            name: String::from("westend"),
+            logo: String::from("kusama"),
+            name: String::from("kusama"),
             order: 2,
-            path_id: String::from("//westend"),
+            path_id: String::from("//kusama"),
             secondary_color: String::from("#262626"),
-            title: String::from("Westend"),
-            unit: String::from("WND"),
+            title: String::from("Kusama"),
+            unit: String::from("KSM"),
         },
     ]
 }

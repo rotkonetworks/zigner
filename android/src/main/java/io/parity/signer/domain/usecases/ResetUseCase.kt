@@ -2,7 +2,7 @@ package io.parity.signer.domain.usecases
 
 import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.dependencygraph.ServiceLocator
 import io.parity.signer.domain.AuthResult
 import io.parity.signer.domain.Callback

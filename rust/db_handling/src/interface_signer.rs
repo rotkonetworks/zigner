@@ -41,6 +41,24 @@ use crate::identities::{
 use crate::{db_transactions::TrDbCold, helpers::get_valid_current_verifier};
 use crate::{Error, Result};
 
+/// Get display address for a multisigner - checks for stored Penumbra address first
+fn get_display_address(
+    database: &sled::Db,
+    multisigner: &MultiSigner,
+    optional_prefix: Option<u16>,
+    encryption: Encryption,
+) -> String {
+    // For Penumbra, try to get the stored bech32m address
+    if encryption == Encryption::Penumbra {
+        let ak_hex = hex::encode(multisigner_to_public(multisigner));
+        if let Ok(Some(address)) = crate::penumbra::get_penumbra_address(database, &ak_hex) {
+            return address;
+        }
+    }
+    // Fall back to default display
+    print_multisigner_as_base58_or_eth_address(multisigner, optional_prefix, encryption)
+}
+
 /// Return a `Vec` with all seed names with seed key identicons if seed key is
 /// available.
 ///
@@ -173,7 +191,7 @@ pub fn keys_by_seed_name(database: &sled::Db, seed_name: &str) -> Result<MKeysNe
         // TODO: root always prefix 42 for substrate.
         let address_key = hex::encode(AddressKey::new(root.0.clone(), None).key());
         MAddressCard {
-            base58: print_multisigner_as_base58_or_eth_address(&root.0, None, root.1.encryption),
+            base58: get_display_address(database, &root.0, None, root.1.encryption),
             address_key,
             address,
         }
@@ -186,7 +204,8 @@ pub fn keys_by_seed_name(database: &sled::Db, seed_name: &str) -> Result<MKeysNe
 
             let identicon =
                 make_identicon_from_multisigner(&multisigner, address_details.identicon_style());
-            let base58 = print_multisigner_as_base58_or_eth_address(
+            let base58 = get_display_address(
+                database,
                 &multisigner,
                 Some(network_specs.specs.base58prefix),
                 network_specs.specs.encryption,
@@ -330,7 +349,8 @@ pub fn export_key(
             real_seed_name: address_details.seed_name,
         });
     }
-    let base58 = print_multisigner_as_base58_or_eth_address(
+    let base58 = get_display_address(
+        database,
         multisigner,
         Some(network_specs.base58prefix),
         network_specs.encryption,
@@ -502,7 +522,8 @@ fn dynamic_path_check_unhexed(
                     ..Default::default()
                 },
                 Ok(DerivationCheck::NoPassword(Some((multisigner, address_details)))) => {
-                    let address_base58 = print_multisigner_as_base58_or_eth_address(
+                    let address_base58 = get_display_address(
+                        database,
                         &multisigner,
                         Some(ordered_network_specs.specs.base58prefix),
                         address_details.encryption,

@@ -1,6 +1,7 @@
 package io.parity.signer
 
 import android.app.Application
+import net.rotko.zigner.BuildConfig
 import io.parity.signer.dependencygraph.ServiceLocator
 import io.parity.signer.domain.submitErrorState
 import io.parity.signer.uniffi.ErrorDisplayed

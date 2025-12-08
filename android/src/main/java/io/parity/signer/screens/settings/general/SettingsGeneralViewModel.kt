@@ -2,18 +2,23 @@ package io.parity.signer.screens.settings.general
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import io.parity.signer.dependencygraph.ServiceLocator
 import io.parity.signer.domain.Callback
 import io.parity.signer.domain.NetworkState
 import io.parity.signer.domain.backend.OperationResult
 import io.parity.signer.domain.usecases.ResetUseCase
 import io.parity.signer.screens.error.ErrorStateDestinationState
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 
 class SettingsGeneralViewModel: ViewModel() {
 
 	private val resetUseCase: ResetUseCase = ResetUseCase()
+	private val preferencesRepository = ServiceLocator.preferencesRepository
 
 	val isStrongBoxProtected: Boolean = ServiceLocator.seedStorage.isStrongBoxProtected
 
@@ -27,6 +32,19 @@ class SettingsGeneralViewModel: ViewModel() {
 	val networkState: StateFlow<NetworkState> =
 		ServiceLocator.networkExposedStateKeeper.airGapModeState
 
+	/**
+	 * Online mode allows using Zigner with network radios enabled.
+	 * This is an opt-in feature that bypasses airgap checks.
+	 */
+	val onlineModeEnabled: StateFlow<Boolean> =
+		preferencesRepository.onlineModeEnabled
+			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+	fun setOnlineModeEnabled(enabled: Boolean) {
+		viewModelScope.launch {
+			preferencesRepository.setOnlineModeEnabled(enabled)
+		}
+	}
 
 	/**
 	 * Auth user and wipe the Vault to initial state

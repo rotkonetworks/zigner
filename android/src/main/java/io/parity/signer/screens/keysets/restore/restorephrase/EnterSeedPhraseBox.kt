@@ -38,7 +38,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.ScanIconPlain
 import io.parity.signer.domain.Callback
 import io.parity.signer.domain.DisableScreenshots

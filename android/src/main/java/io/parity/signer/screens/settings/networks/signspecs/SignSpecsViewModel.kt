@@ -3,7 +3,7 @@ package io.parity.signer.screens.settings.networks.signspecs
 import timber.log.Timber
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.bottomsheets.password.EnterPasswordModel
 import io.parity.signer.components.sharedcomponents.KeyCardModelBase
 import io.parity.signer.dependencygraph.ServiceLocator

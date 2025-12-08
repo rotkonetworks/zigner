@@ -22,7 +22,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.bottomsheets.password.EnterPassword
 import io.parity.signer.domain.Callback
 import io.parity.signer.domain.backend.OperationResult

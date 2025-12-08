@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.NetworkLabelWithIcon
 import io.parity.signer.components.base.SignerDivider
 import io.parity.signer.domain.encodeHex

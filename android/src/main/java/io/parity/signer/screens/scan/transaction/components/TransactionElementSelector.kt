@@ -7,12 +7,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.NetworkCard
 import io.parity.signer.components.NetworkCardModel
 import io.parity.signer.components.base.MarkdownText
 import io.parity.signer.components.base.toRichTextStr
 import io.parity.signer.screens.scan.transaction.transactionElements.*
+import io.parity.signer.screens.scan.transaction.transactionElements.TCPenumbraSummary
+import io.parity.signer.screens.scan.transaction.transactionElements.TCPenumbraSpend
+import io.parity.signer.screens.scan.transaction.transactionElements.TCPenumbraOutput
+import io.parity.signer.screens.scan.transaction.transactionElements.TCPenumbraSwap
+import io.parity.signer.screens.scan.transaction.transactionElements.TCPenumbraDelegate
+import io.parity.signer.screens.scan.transaction.transactionElements.TCPenumbraVote
 import io.parity.signer.uniffi.Card
 import io.parity.signer.uniffi.TransactionCard
 
@@ -130,6 +136,14 @@ fun TransactionElementSelector(card: TransactionCard) {
 			is Card.VarNameCard -> TCNameValueElement(
 				value = txCard.f,
 			)
+
+			// Penumbra transaction cards
+			is Card.PenumbraSummaryCard -> TCPenumbraSummary(summary = txCard.f)
+			is Card.PenumbraSpendCard -> TCPenumbraSpend(spend = txCard.f)
+			is Card.PenumbraOutputCard -> TCPenumbraOutput(output = txCard.f)
+			is Card.PenumbraSwapCard -> TCPenumbraSwap(swap = txCard.f)
+			is Card.PenumbraDelegateCard -> TCPenumbraDelegate(delegate = txCard.f)
+			is Card.PenumbraVoteCard -> TCPenumbraVote(vote = txCard.f)
 		}
 	}
 }

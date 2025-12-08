@@ -1,6 +1,6 @@
 package io.parity.signer.domain
 
-import io.parity.signer.BuildConfig
+import net.rotko.zigner.BuildConfig
 
 object FeatureFlags {
 	fun isEnabled(feature: FeatureOption): Boolean {

@@ -3,7 +3,7 @@ package io.parity.signer.domain
 import android.content.Context
 import timber.log.Timber
 import android.widget.Toast
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.dependencygraph.ServiceLocator
 import io.parity.signer.domain.backend.OperationResult
 import io.parity.signer.screens.scan.errors.findErrorDisplayed

@@ -23,7 +23,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import coil.size.Size
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.networkicon.jdenticon.jdenticon_kotlin.Jdenticon
 import io.parity.signer.ui.theme.SignerNewTheme
 import io.parity.signer.ui.theme.appliedStroke

@@ -17,9 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.NotificationFrameTextImportant
 import io.parity.signer.components.base.PrimaryButtonWide
+import io.parity.signer.components.base.SecondaryButtonWide
 import io.parity.signer.components.base.ScreenHeaderProgressWithButton
 import io.parity.signer.domain.Callback
 import io.parity.signer.screens.keysetdetails.backup.SeedPhraseBox
@@ -31,11 +32,13 @@ import io.parity.signer.uniffi.MNewSeedBackup
 /**
  * 2/2 stage to create new key set
  * first is NewKeySetNameScreen
+ * Offers both paper backup and Banana Split backup options
  */
 @Composable
 internal fun NewKeySetBackupScreen(
 	seedPhrase: String,
 	onProceed: Callback,
+	onBananaSplit: Callback,
 	onBack: Callback,
 	modifier: Modifier = Modifier,
 ) {
@@ -70,9 +73,16 @@ internal fun NewKeySetBackupScreen(
 		)
 		Spacer(modifier = Modifier.weight(1f))
 
+		// Banana Split backup option
+		SecondaryButtonWide(
+			label = stringResource(R.string.new_key_set_backup_banana_split_button),
+			modifier = Modifier.padding(horizontal = 32.dp).padding(top = 16.dp),
+			onClicked = onBananaSplit,
+		)
+		// Paper backup / continue option
 		PrimaryButtonWide(
-			label = stringResource(R.string.button_next),
-			modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
+			label = stringResource(R.string.new_key_set_backup_paper_button),
+			modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
 			onClicked = onProceed,
 		)
 	}
@@ -111,7 +121,7 @@ fun MNewSeedBackup.toNewSeedBackupModel(): NewSeedBackupModel =
 @Composable
 private fun PreviewNewKeySetBackupScreen() {
 	SignerNewTheme {
-		NewKeySetBackupScreen("some words many many words secr fphr phrase", {}, {})
+		NewKeySetBackupScreen("some words many many words secr fphr phrase", {}, {}, {})
 	}
 }
 
@@ -121,7 +131,7 @@ private fun PreviewNewKeySetBackupScreen() {
 private fun PreviewNewKeySetBackupScreenNarrow() {
 	Box(modifier = Modifier.size(height = 400.dp, width = 150.dp)) {
 		SignerNewTheme {
-			NewKeySetBackupScreen("some words many many words secr fphr phrase", {}, {})
+			NewKeySetBackupScreen("some words many many words secr fphr phrase", {}, {}, {})
 		}
 	}
 }
@@ -131,7 +141,7 @@ private fun PreviewNewKeySetBackupScreenNarrow() {
 private fun PreviewNewKeySetBackupScreenShort() {
 	Box(modifier = Modifier.size(height = 400.dp, width = 200.dp)) {
 		SignerNewTheme {
-			NewKeySetBackupScreen("some words many many words secr fphr phrase", {}, {})
+			NewKeySetBackupScreen("some words many many words secr fphr phrase", {}, {}, {})
 		}
 	}
 }

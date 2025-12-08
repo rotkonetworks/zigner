@@ -11,7 +11,8 @@ class AllNetworksUseCase(val uniffiInteractor: UniffiInteractor) {
 
 	fun getAllNetworks(): List<NetworkModel> = runBlocking { getNetworks() }
 
-	private val preselectedkeys = listOf<String>("Polkadot", "Kusama", "Westend")
+	// Zigner focuses on Penumbra cold wallet signing
+	private val preselectedkeys = listOf<String>("Penumbra")
 
 	fun getDefaultPreselectedNetworks(): List<NetworkModel> = getAllNetworks()
 		.filter { preselectedkeys.contains(it.title) }

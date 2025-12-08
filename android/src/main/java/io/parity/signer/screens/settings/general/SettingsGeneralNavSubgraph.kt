@@ -33,6 +33,7 @@ internal fun SettingsGeneralNavSubgraph(
 
 	val appVersion = rememberSaveable { vm.getAppVersion(context) }
 	val shieldState = vm.networkState.collectAsStateWithLifecycle()
+	val onlineModeEnabled = vm.onlineModeEnabled.collectAsStateWithLifecycle()
 
 	val menuNavController = rememberNavController()
 
@@ -52,8 +53,21 @@ internal fun SettingsGeneralNavSubgraph(
 			onGeneralVerifier = {
 				coreNavController.navigate(SettingsNavSubgraph.generalVerifier)
 			},
+			onPenumbraFvkExport = {
+				coreNavController.navigate(SettingsNavSubgraph.penumbraFvkExport)
+			},
 			onExposedClicked = { menuNavController.navigate(SettingsGeneralMenu.exposed_shield_alert) },
+			onOnlineModeToggle = {
+				if (onlineModeEnabled.value) {
+					// Disable without confirmation
+					vm.setOnlineModeEnabled(false)
+				} else {
+					// Show confirmation for enabling
+					menuNavController.navigate(SettingsGeneralMenu.online_mode_confirm)
+				}
+			},
 			isStrongBoxProtected = vm.isStrongBoxProtected,
+			isOnlineModeEnabled = onlineModeEnabled.value,
 			appVersion = appVersion,
 			networkState = shieldState,
 		)
@@ -90,6 +104,17 @@ internal fun SettingsGeneralNavSubgraph(
 		composable(SettingsGeneralMenu.exposed_shield_alert) {
 			ExposedAlert(navigateBack = closeAction)
 		}
+		composable(SettingsGeneralMenu.online_mode_confirm) {
+			BottomSheetWrapperRoot(onClosedAction = closeAction) {
+				ConfirmOnlineModeBottomSheet(
+					onCancel = closeAction,
+					onConfirm = {
+						vm.setOnlineModeEnabled(true)
+						closeAction()
+					}
+				)
+			}
+		}
 	}
 }
 
@@ -98,4 +123,5 @@ private object SettingsGeneralMenu {
 	const val empty = "settings_menu_empty"
 	const val wipe_factory = "settings_confirm_reset"
 	const val exposed_shield_alert = "settings_exposed"
+	const val online_mode_confirm = "settings_online_mode_confirm"
 }

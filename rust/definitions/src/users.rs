@@ -58,9 +58,13 @@ impl AddressDetails {
     ) -> Result<(MultiSigner, Self)> {
         let multisigner = address_key.multi_signer().clone();
         let address_details = AddressDetails::decode(&mut &address_details_encoded[..])?;
+        // Allow Ed25519 MultiSigner with Penumbra encryption (both use 32-byte keys)
+        // Similar to ECDSA/Ethereum special case
         if multisigner_to_encryption(&multisigner) != address_details.encryption
             && multisigner_to_encryption(&multisigner) != Encryption::Ecdsa
             && address_details.encryption != Encryption::Ethereum
+            && !(multisigner_to_encryption(&multisigner) == Encryption::Ed25519
+                && address_details.encryption == Encryption::Penumbra)
         {
             return Err(Error::EncryptionMismatch {
                 address_key: address_key.to_owned(),

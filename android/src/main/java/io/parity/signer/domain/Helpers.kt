@@ -1,7 +1,7 @@
 package io.parity.signer.domain
 
 import timber.log.Timber
-import io.parity.signer.BuildConfig
+import net.rotko.zigner.BuildConfig
 import io.parity.signer.uniffi.ErrorDisplayed
 import java.lang.RuntimeException
 

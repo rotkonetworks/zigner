@@ -665,6 +665,57 @@ fn sign_network_spec_with_key(
     .map_err(|e| e.into())
 }
 
+/// Export Penumbra full viewing key for import into watch-only wallet (e.g., Prax)
+///
+/// Derives the FVK from the seed phrase and returns it in multiple formats:
+/// - bech32m encoded strings for display
+/// - QR-encoded binary for scanning
+fn export_penumbra_fvk(
+    seed_phrase: &str,
+    account_index: u32,
+    label: &str,
+) -> Result<PenumbraFvkExport, ErrorDisplayed> {
+    use transaction_signing::penumbra::{FvkExportData, FullViewingKey, SpendKeyBytes};
+
+    // Derive spend key from seed phrase
+    let spend_key_bytes = SpendKeyBytes::from_seed_phrase(seed_phrase, account_index)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to derive spend key: {e}"),
+        })?;
+
+    // Create FVK export data
+    let label_opt = if label.is_empty() {
+        None
+    } else {
+        Some(label.to_string())
+    };
+    let export_data =
+        FvkExportData::from_spend_key(&spend_key_bytes, account_index, label_opt.clone())
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to create FVK export: {e}"),
+            })?;
+
+    // Get bech32m encoded strings
+    let fvk = FullViewingKey::derive_from(&spend_key_bytes).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to derive FVK: {e}"),
+    })?;
+    let wallet_id = fvk.wallet_id().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to compute wallet ID: {e}"),
+    })?;
+
+    Ok(PenumbraFvkExport {
+        account_index,
+        label: label_opt.unwrap_or_default(),
+        fvk_bech32m: fvk.to_bech32m().map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to encode FVK: {e}"),
+        })?,
+        wallet_id_bech32m: wallet_id.to_bech32m().map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to encode wallet ID: {e}"),
+        })?,
+        qr_data: export_data.encode_qr(),
+    })
+}
+
 /// Must be called once to initialize logging from Rust in development mode.
 ///
 /// Do not use in production.

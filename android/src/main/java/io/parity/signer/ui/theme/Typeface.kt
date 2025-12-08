@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import io.parity.signer.R
+import net.rotko.zigner.R
 
 private val InterBoldFont = Font(R.font.inter_bold, FontWeight.Bold)
 private val InterSemiBoldFont = Font(R.font.inter_semibold, FontWeight.SemiBold)

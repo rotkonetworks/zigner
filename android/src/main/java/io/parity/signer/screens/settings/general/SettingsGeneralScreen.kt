@@ -7,10 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Switch
+import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
@@ -26,13 +30,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.components.base.ScreenHeaderClose
 import io.parity.signer.components.exposesecurity.ExposedIcon
 import io.parity.signer.domain.Callback
 import io.parity.signer.domain.NetworkState
 import io.parity.signer.ui.theme.SignerNewTheme
 import io.parity.signer.ui.theme.SignerTypeface
+import io.parity.signer.ui.theme.pink500
 import io.parity.signer.ui.theme.red400
 import io.parity.signer.ui.theme.textSecondary
 import io.parity.signer.ui.theme.textTertiary
@@ -48,8 +53,11 @@ internal fun SettingsScreenGeneralView(
 	onBackup: Callback,
 	onManageNetworks: Callback,
 	onGeneralVerifier: Callback,
+	onPenumbraFvkExport: Callback,
 	onExposedClicked: Callback,
+	onOnlineModeToggle: Callback,
 	isStrongBoxProtected: Boolean,
+	isOnlineModeEnabled: Boolean,
 	appVersion: String,
 	networkState: State<NetworkState?>,
 ) {
@@ -77,12 +85,22 @@ internal fun SettingsScreenGeneralView(
 					onClick = onBackup,
 				)
 				SettingsElement(
+					name = "Export Penumbra FVK",
+					onClick = onPenumbraFvkExport,
+				)
+				SettingsElement(
 					name = stringResource(R.string.documents_privacy_policy),
 					onClick = onShowPrivacyPolicy
 				)
 				SettingsElement(
 					name = stringResource(R.string.documents_terms_of_service),
 					onClick = onShowTerms
+				)
+				SettingsToggleElement(
+					name = "Online Mode",
+					description = "Allow use with WiFi/Bluetooth enabled",
+					isChecked = isOnlineModeEnabled,
+					onClick = onOnlineModeToggle,
 				)
 				SettingsElement(
 					name = stringResource(R.string.settings_wipe_data),
@@ -147,6 +165,48 @@ internal fun SettingsElement(
 	}
 }
 
+@Composable
+internal fun SettingsToggleElement(
+	name: String,
+	description: String,
+	isChecked: Boolean,
+	onClick: Callback,
+) {
+	Row(
+		modifier = Modifier
+			.clickable(onClick = onClick)
+			.padding(vertical = 10.dp),
+		verticalAlignment = Alignment.CenterVertically,
+	) {
+		Column(
+			modifier = Modifier
+				.padding(start = 24.dp)
+				.weight(1f)
+		) {
+			Text(
+				text = name,
+				style = SignerTypeface.TitleS,
+				color = MaterialTheme.colors.primary,
+			)
+			Text(
+				text = description,
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textSecondary,
+			)
+		}
+		Spacer(modifier = Modifier.width(8.dp))
+		Switch(
+			checked = isChecked,
+			onCheckedChange = null, // Handle via row click for confirmation
+			colors = SwitchDefaults.colors(
+				checkedThumbColor = MaterialTheme.colors.pink500,
+				checkedTrackColor = MaterialTheme.colors.pink500.copy(alpha = 0.5f),
+			),
+			modifier = Modifier.padding(end = 16.dp)
+		)
+	}
+}
+
 @Preview(
 	name = "light", group = "general", uiMode = Configuration.UI_MODE_NIGHT_NO,
 	showBackground = true, backgroundColor = 0xFFFFFFFF,
@@ -169,8 +229,11 @@ private fun PreviewSettingsScreen() {
 			onBackup = {},
 			onManageNetworks = {},
 			onGeneralVerifier = {},
+			onPenumbraFvkExport = {},
 			onExposedClicked = {},
+			onOnlineModeToggle = {},
 			isStrongBoxProtected = false,
+			isOnlineModeEnabled = false,
 			appVersion = "0.6.1",
 			networkState = state,
 		)

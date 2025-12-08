@@ -820,6 +820,16 @@ pub struct PenumbraTransactionSummary {
     pub effect_hash: String,
 }
 
+/// Penumbra Full Viewing Key export data for watch-only wallet import
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraFvkExport {
+    pub account_index: u32,
+    pub label: String,
+    pub fvk_bech32m: String,
+    pub wallet_id_bech32m: String,
+    pub qr_data: Vec<u8>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Card {
     AuthorCard { f: MAddressCard },

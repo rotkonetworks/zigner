@@ -5,7 +5,7 @@ import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.ui.theme.SignerNewTheme
 
 const val COMPOSE_URL_TAG_ANNOTATION = "URL"

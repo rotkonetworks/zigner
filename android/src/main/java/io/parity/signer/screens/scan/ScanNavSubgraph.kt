@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.bottomsheets.password.EnterPassword
 import io.parity.signer.domain.Callback
 import io.parity.signer.domain.FakeNavigator

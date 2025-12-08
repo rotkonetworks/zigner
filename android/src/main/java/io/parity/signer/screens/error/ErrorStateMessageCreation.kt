@@ -3,7 +3,7 @@ package io.parity.signer.screens.error
 import android.content.Context
 import android.widget.Toast
 import androidx.navigation.NavController
-import io.parity.signer.R
+import net.rotko.zigner.R
 import io.parity.signer.domain.NavigationError
 import io.parity.signer.domain.backend.AuthOperationResult
 import io.parity.signer.domain.backend.OperationResult
