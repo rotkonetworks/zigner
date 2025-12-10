@@ -36,6 +36,15 @@ pub mod penumbra;
 #[cfg(feature = "penumbra")]
 use penumbra::process_penumbra_transaction;
 
+// penumbra schema support (always available)
+pub mod penumbra_protobuf;
+pub mod penumbra_schema_parser;
+use penumbra_schema_parser::{
+    process_penumbra_schema_update,
+    process_penumbra_schema_digest,
+    process_penumbra_registry,
+};
+
 #[cfg(test)]
 mod tests;
 use crate::dynamic_derivations::decode_dynamic_derivations;
@@ -72,6 +81,9 @@ fn handle_scanner_input(database: &sled::Db, payload: &str) -> Result<Transactio
         "08" => process_any_chain_message(database, data_hex),
         #[cfg(feature = "penumbra")]
         "10" => process_penumbra_transaction(database, data_hex),
+        "12" => process_penumbra_schema_update(database, data_hex),
+        "13" => process_penumbra_schema_digest(database, data_hex),
+        "14" => process_penumbra_registry(database, data_hex),
         "80" => load_metadata(database, data_hex),
         "81" => load_types(database, data_hex),
         "c1" => add_specs(database, data_hex),

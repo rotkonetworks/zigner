@@ -1,0 +1,376 @@
+package net.rotko.zigner.screens.keydetails
+
+import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import net.rotko.zigner.R
+import net.rotko.zigner.components.networkicon.IdentIconWithNetwork
+import net.rotko.zigner.components.NetworkLabelWithIcon
+import net.rotko.zigner.components.base.ScreenHeaderClose
+import net.rotko.zigner.components.base.SignerDivider
+import net.rotko.zigner.components.sharedcomponents.ShowBase58Collapsible
+import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.EmptyNavigator
+import net.rotko.zigner.domain.KeyDetailsModel
+import net.rotko.zigner.domain.intoImageBitmap
+import net.rotko.zigner.ui.helpers.PreviewData
+import net.rotko.zigner.ui.theme.SignerNewTheme
+import net.rotko.zigner.ui.theme.SignerTypeface
+import net.rotko.zigner.ui.theme.appliedStroke
+import net.rotko.zigner.ui.theme.fill12
+import net.rotko.zigner.ui.theme.fill6
+import net.rotko.zigner.ui.theme.pink500
+import net.rotko.zigner.ui.theme.red500
+import net.rotko.zigner.ui.theme.red500fill12
+import net.rotko.zigner.ui.theme.textTertiary
+import io.parity.signer.uniffi.Action
+import io.parity.signer.uniffi.encodeToQr
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+
+/**
+ * Check if network uses FVK (Penumbra or Zcash) - these show FVK QR instead of address
+ */
+private fun isFvkNetwork(networkLogo: String): Boolean {
+	val logo = networkLogo.lowercase()
+	return logo.contains("penumbra") || logo.contains("zcash")
+}
+
+/**
+ * Default main screen with list Seeds/root keys
+ */
+@Composable
+fun KeyDetailsPublicKeyScreen(
+	model: KeyDetailsModel,
+	onBack: Callback,
+	onMenu: Callback,
+	fvkResult: FvkExportResult? = null,
+	fvkLoading: Boolean = false,
+	onRequestFvk: Callback = {},
+) {
+	val isFvkNetwork = isFvkNetwork(model.networkInfo.networkLogo)
+
+	// Auto-request FVK for Penumbra/Zcash on first load
+	LaunchedEffect(isFvkNetwork) {
+		if (isFvkNetwork && fvkResult == null && !fvkLoading) {
+			onRequestFvk()
+		}
+	}
+
+	Column(Modifier.background(MaterialTheme.colors.background)) {
+		ScreenHeaderClose(
+			stringResource(id = R.string.key_details_public_export_title),
+			if (model.isRootKey) {
+				null
+			} else {
+				stringResource(id = R.string.key_details_public_export_derived_subtitle)
+			},
+			onClose = onBack,
+			onMenu = onMenu,
+		)
+		Box(modifier = Modifier.weight(1f)) {
+			Column(
+				modifier = Modifier.verticalScroll(rememberScrollState())
+			) {
+
+				if (model.secretExposed) {
+					ExposedKeyAlarm()
+				}
+
+				val plateShape =
+					RoundedCornerShape(dimensionResource(id = R.dimen.qrShapeCornerRadius))
+				Column(
+					modifier = Modifier
+						.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+						.clip(plateShape)
+						.border(
+							BorderStroke(1.dp, MaterialTheme.colors.appliedStroke),
+							plateShape
+						)
+						.background(MaterialTheme.colors.fill6, plateShape)
+				) {
+					Box(
+						modifier = Modifier
+							.fillMaxWidth(1f)
+							.aspectRatio(1.1f)
+							.background(
+								Color.White,
+								plateShape
+							),
+						contentAlignment = Alignment.Center,
+					) {
+						val isPreview = LocalInspectionMode.current
+
+						when {
+							// FVK networks: show FVK QR (or loading)
+							isFvkNetwork && fvkLoading -> {
+								CircularProgressIndicator(
+									color = MaterialTheme.colors.pink500,
+									modifier = Modifier.size(48.dp)
+								)
+							}
+							isFvkNetwork && fvkResult != null -> {
+								val fvkQrImage = remember(fvkResult) {
+									fvkResult.qrPng.intoImageBitmap()
+								}
+								Image(
+									bitmap = fvkQrImage,
+									contentDescription = "Full Viewing Key QR",
+									contentScale = ContentScale.Fit,
+									modifier = Modifier.size(264.dp)
+								)
+							}
+							// Regular networks: show address QR
+							else -> {
+								val qrImage = remember {
+									if (isPreview) {
+										PreviewData.exampleQRImage
+									} else {
+										runBlocking { encodeToQr(model.qrData, false) }
+									}
+								}
+								Image(
+									bitmap = qrImage.intoImageBitmap(),
+									contentDescription = stringResource(R.string.qr_with_address_to_scan_description),
+									contentScale = ContentScale.Fit,
+									modifier = Modifier.size(264.dp)
+								)
+							}
+						}
+					}
+					Row(
+						Modifier.padding(16.dp),
+						verticalAlignment = Alignment.CenterVertically,
+					) {
+						if (isFvkNetwork && fvkResult != null) {
+							Text(
+								text = "FVK: ${fvkResult.displayKey.take(20)}...",
+								style = SignerTypeface.CaptionM,
+								color = MaterialTheme.colors.textTertiary,
+								modifier = Modifier.weight(1f)
+							)
+						} else {
+							ShowBase58Collapsible(
+								base58 = model.address.cardBase.base58,
+								modifier = Modifier
+									.weight(1f)
+							)
+						}
+						IdentIconWithNetwork(
+							identicon = model.address.cardBase.identIcon,
+							networkLogoName = model.address.network,
+							size = 36.dp,
+							modifier = Modifier.padding(start = 8.dp)
+						)
+					}
+				}
+
+				// Info text for FVK networks
+				if (isFvkNetwork && fvkResult != null) {
+					Text(
+						text = "Scan with Prax/Zafu to import as watch-only wallet",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+						textAlign = TextAlign.Center,
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(horizontal = 24.dp, vertical = 8.dp)
+					)
+				}
+
+				BottomKeyPlate(plateShape, model, isFvkNetwork)
+			}
+		}
+	}
+}
+
+@Composable
+private fun BottomKeyPlate(
+	plateShape: RoundedCornerShape,
+	model: KeyDetailsModel,
+	isFvkNetwork: Boolean = false
+) {
+	Column(
+		modifier = Modifier
+			.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+			.background(MaterialTheme.colors.fill6, plateShape)
+			.padding(horizontal = 16.dp)
+	) {
+		Row(
+			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier
+				.defaultMinSize(minHeight = 48.dp)
+				.padding(vertical = 8.dp)
+		) {
+			Text(
+				text = stringResource(R.string.key_details_public_label_network),
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.textTertiary
+			)
+			Spacer(modifier = Modifier.weight(1f))
+			NetworkLabelWithIcon(
+				model.networkInfo.networkTitle,
+				model.networkInfo.networkLogo,
+			)
+		}
+		SignerDivider(sidePadding = 0.dp)
+		Row(
+			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier
+				.defaultMinSize(minHeight = 48.dp)
+				.padding(vertical = 8.dp)
+		) {
+			Text(
+				text = stringResource(R.string.key_details_public_label_path),
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.textTertiary
+			)
+			Spacer(modifier = Modifier
+				.padding(start = 16.dp)
+				.weight(1f))
+			val path = model.address.cardBase.path
+			Text(
+				text = if (path.isEmpty() && isFvkNetwork) {
+					"Account 0"
+				} else path.ifEmpty {
+					stringResource(R.string.derivation_key_empty_path_placeholder)
+				},
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.primary,
+				textAlign = TextAlign.End
+			)
+		}
+		SignerDivider(sidePadding = 0.dp)
+		Row(
+			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier
+				.defaultMinSize(minHeight = 48.dp)
+				.padding(vertical = 8.dp)
+		) {
+			Text(
+				text = stringResource(R.string.key_details_public_label_keyset),
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.textTertiary
+			)
+			Spacer(modifier = Modifier.weight(1f))
+			Text(
+				text = model.address.cardBase.seedName,
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.primary
+			)
+		}
+	}
+}
+
+
+@Composable
+private fun ExposedKeyAlarm() {
+	val innerShape =
+		RoundedCornerShape(dimensionResource(id = R.dimen.innerFramesCornerRadius))
+	Row(
+		modifier = Modifier
+			.padding(vertical = 8.dp, horizontal = 24.dp)
+			.border(
+				BorderStroke(1.dp, MaterialTheme.colors.fill12),
+				innerShape
+			)
+			.background(MaterialTheme.colors.red500fill12, innerShape)
+
+	) {
+		Text(
+			text = stringResource(R.string.key_details_exposed_notification_label),
+			color = MaterialTheme.colors.primary,
+			style = SignerTypeface.LabelS,
+			modifier = Modifier
+				.weight(1f)
+				.padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
+		)
+		Icon(
+			imageVector = Icons.Outlined.Info,
+			contentDescription = null,
+			tint = MaterialTheme.colors.red500,
+			modifier = Modifier
+				.align(Alignment.CenterVertically)
+				.padding(start = 18.dp, end = 18.dp)
+		)
+	}
+}
+
+
+@Preview(
+	name = "light", group = "general", uiMode = Configuration.UI_MODE_NIGHT_NO,
+	showBackground = true, backgroundColor = 0xFFFFFFFF,
+)
+@Preview(
+	name = "dark", group = "general",
+	uiMode = Configuration.UI_MODE_NIGHT_YES,
+	showBackground = true, backgroundColor = 0xFF000000,
+)
+@Composable
+private fun PreviewKeyDetailsScreenDerived() {
+	val mockModel = KeyDetailsModel.createStubDerived()
+	SignerNewTheme {
+		Box(modifier = Modifier.size(350.dp, 700.dp)) {
+			KeyDetailsPublicKeyScreen(mockModel, {}, {},)
+		}
+	}
+}
+
+@Preview(
+	name = "light", group = "general", uiMode = Configuration.UI_MODE_NIGHT_NO,
+	showBackground = true, backgroundColor = 0xFFFFFFFF,
+)
+@Preview(
+	name = "dark", group = "general",
+	uiMode = Configuration.UI_MODE_NIGHT_YES,
+	showBackground = true, backgroundColor = 0xFF000000,
+)
+@Composable
+private fun PreviewKeyDetailsScreenRoot() {
+	val mockModel = KeyDetailsModel.createStubRoot()
+	SignerNewTheme {
+		Box(modifier = Modifier.size(350.dp, 700.dp)) {
+			KeyDetailsPublicKeyScreen(mockModel, {}, {},)
+		}
+	}
+}

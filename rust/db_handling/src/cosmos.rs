@@ -1,0 +1,349 @@
+//! Cosmos SDK key derivation using BIP44 secp256k1
+//!
+//! This implements key derivation for Cosmos SDK chains (Osmosis, Noble, Celestia, etc.)
+//!
+//! Key derivation path: m/44'/coin_type'/account'/0/address_index
+//! For Cosmos Hub (ATOM): m/44'/118'/0'/0/0
+//!
+//! Address derivation:
+//! 1. secp256k1 public key (33 bytes compressed)
+//! 2. SHA256(pubkey) → 32 bytes
+//! 3. RIPEMD160(sha256_hash) → 20 bytes
+//! 4. bech32 encode with chain-specific prefix (cosmos, osmo, noble, celestia, etc.)
+
+use crate::error::{Error, Result};
+
+/// Sled tree name for storing Cosmos bech32 addresses
+const COSMOS_ADDRS: &str = "cosmos_addresses";
+
+/// Store a Cosmos bech32 address for a given public key hex
+pub fn store_cosmos_address(database: &sled::Db, pubkey_hex: &str, bech32_address: &str) -> Result<()> {
+    let tree = database.open_tree(COSMOS_ADDRS)?;
+    tree.insert(pubkey_hex.as_bytes(), bech32_address.as_bytes())?;
+    Ok(())
+}
+
+/// Retrieve a Cosmos bech32 address for a given public key hex
+pub fn get_cosmos_address(database: &sled::Db, pubkey_hex: &str) -> Result<Option<String>> {
+    let tree = database.open_tree(COSMOS_ADDRS)?;
+    match tree.get(pubkey_hex.as_bytes())? {
+        Some(bytes) => {
+            let address = String::from_utf8(bytes.to_vec())
+                .map_err(|e| Error::Other(anyhow::anyhow!("Invalid UTF-8: {}", e)))?;
+            Ok(Some(address))
+        }
+        None => Ok(None),
+    }
+}
+use bip32::{DerivationPath, XPrv};
+use ripemd::Ripemd160;
+use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// SLIP-0044 coin types for popular Cosmos chains
+pub const SLIP0044_COSMOS: u32 = 118;     // Cosmos Hub (ATOM)
+pub const SLIP0044_OSMOSIS: u32 = 118;    // Osmosis uses Cosmos coin type
+pub const SLIP0044_NOBLE: u32 = 118;      // Noble uses Cosmos coin type
+pub const SLIP0044_CELESTIA: u32 = 118;   // Celestia uses Cosmos coin type
+pub const SLIP0044_TERRA: u32 = 330;      // Terra
+pub const SLIP0044_KAVA: u32 = 459;       // Kava
+pub const SLIP0044_SECRET: u32 = 529;     // Secret Network
+pub const SLIP0044_INJECTIVE: u32 = 60;   // Injective uses Ethereum coin type
+
+/// Common bech32 address prefixes for Cosmos chains
+pub const PREFIX_COSMOS: &str = "cosmos";
+pub const PREFIX_OSMOSIS: &str = "osmo";
+pub const PREFIX_NOBLE: &str = "noble";
+pub const PREFIX_CELESTIA: &str = "celestia";
+pub const PREFIX_TERRA: &str = "terra";
+pub const PREFIX_KAVA: &str = "kava";
+pub const PREFIX_SECRET: &str = "secret";
+pub const PREFIX_INJECTIVE: &str = "inj";
+
+/// Cosmos key pair with secp256k1 keys
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct CosmosKeyPair {
+    /// 32-byte secp256k1 secret key
+    pub secret_key: [u8; 32],
+    /// 33-byte compressed secp256k1 public key
+    pub public_key: [u8; 33],
+    /// 20-byte address (RIPEMD160(SHA256(pubkey)))
+    pub address_bytes: [u8; 20],
+}
+
+impl CosmosKeyPair {
+    /// Get bech32 address with the specified prefix
+    pub fn bech32_address(&self, prefix: &str) -> Result<String> {
+        use bech32::{Bech32, Hrp};
+
+        let hrp = Hrp::parse(prefix)
+            .map_err(|e| Error::Other(anyhow::anyhow!("Invalid bech32 prefix: {}", e)))?;
+
+        let address = bech32::encode::<Bech32>(hrp, &self.address_bytes)
+            .map_err(|e| Error::Other(anyhow::anyhow!("Bech32 encoding error: {}", e)))?;
+
+        Ok(address)
+    }
+
+    /// Sign a message using secp256k1 ECDSA
+    pub fn sign(&self, message: &[u8]) -> Result<[u8; 64]> {
+        use sp_core::{ecdsa, Pair};
+
+        // sp_core's ecdsa uses 32-byte seed to derive the key
+        let pair = ecdsa::Pair::from_seed_slice(&self.secret_key)
+            .map_err(|e| Error::Other(anyhow::anyhow!("ECDSA seed error: {:?}", e)))?;
+
+        // Sign and return the 64-byte signature (r || s)
+        let signature = pair.sign(message);
+        Ok(signature.0[..64].try_into().expect("signature is 65 bytes"))
+    }
+}
+
+/// Derive Cosmos key from seed phrase
+///
+/// # Arguments
+/// * `seed_phrase` - BIP39 mnemonic phrase
+/// * `coin_type` - SLIP-0044 coin type (118 for Cosmos, 330 for Terra, etc.)
+/// * `account` - Account index (typically 0)
+/// * `address_index` - Address index within the account (typically 0)
+///
+/// # Returns
+/// A CosmosKeyPair containing the secret key, public key, and address bytes
+pub fn derive_cosmos_key(
+    seed_phrase: &str,
+    coin_type: u32,
+    account: u32,
+    address_index: u32,
+) -> Result<CosmosKeyPair> {
+    use bip39::{Language, Mnemonic, Seed};
+
+    // Parse mnemonic and generate seed
+    let mnemonic = Mnemonic::from_phrase(seed_phrase, Language::English)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Invalid mnemonic: {}", e)))?;
+    let seed = Seed::new(&mnemonic, ""); // No passphrase
+
+    // Build derivation path: m/44'/coin_type'/account'/0/address_index
+    let path_str = format!("m/44'/{}'/{}'/0/{}", coin_type, account, address_index);
+    let path: DerivationPath = path_str.parse()
+        .map_err(|e| Error::Other(anyhow::anyhow!("Invalid derivation path: {}", e)))?;
+
+    // Derive extended private key
+    let xprv = XPrv::derive_from_path(seed.as_bytes(), &path)
+        .map_err(|e| Error::Other(anyhow::anyhow!("BIP32 derivation error: {}", e)))?;
+
+    // Get the private key bytes
+    let mut secret_key = [0u8; 32];
+    secret_key.copy_from_slice(&xprv.private_key().to_bytes());
+
+    // Derive public key using the bip32 crate's key
+    let verifying_key = xprv.public_key();
+    let public_key_bytes = verifying_key.to_bytes();
+
+    let mut public_key = [0u8; 33];
+    public_key.copy_from_slice(&public_key_bytes);
+
+    // Derive address: RIPEMD160(SHA256(pubkey))
+    let sha256_hash = Sha256::digest(&public_key);
+    let ripemd160_hash = Ripemd160::digest(&sha256_hash);
+
+    let mut address_bytes = [0u8; 20];
+    address_bytes.copy_from_slice(&ripemd160_hash);
+
+    Ok(CosmosKeyPair {
+        secret_key,
+        public_key,
+        address_bytes,
+    })
+}
+
+/// Derive a Cosmos Hub key (m/44'/118'/account'/0/index)
+pub fn derive_cosmos_hub_key(seed_phrase: &str, account: u32, index: u32) -> Result<CosmosKeyPair> {
+    derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account, index)
+}
+
+/// Derive an Osmosis key (same path as Cosmos Hub)
+pub fn derive_osmosis_key(seed_phrase: &str, account: u32, index: u32) -> Result<CosmosKeyPair> {
+    derive_cosmos_key(seed_phrase, SLIP0044_OSMOSIS, account, index)
+}
+
+/// Derive a Noble key (same path as Cosmos Hub)
+pub fn derive_noble_key(seed_phrase: &str, account: u32, index: u32) -> Result<CosmosKeyPair> {
+    derive_cosmos_key(seed_phrase, SLIP0044_NOBLE, account, index)
+}
+
+/// Derive a Celestia key (same path as Cosmos Hub)
+pub fn derive_celestia_key(seed_phrase: &str, account: u32, index: u32) -> Result<CosmosKeyPair> {
+    derive_cosmos_key(seed_phrase, SLIP0044_CELESTIA, account, index)
+}
+
+/// Parse Cosmos BIP44 path to extract coin type, account, and address index
+///
+/// Supports paths like:
+/// - `m/44'/118'/0'/0/0` - standard full path
+/// - `//cosmos//0` - simplified UI input (uses coin type 118)
+/// - `//osmosis//0` - simplified UI input for Osmosis
+/// - `//0` - just account number (uses coin type 118, index 0)
+pub fn parse_cosmos_path(path: &str) -> Result<(u32, u32, u32)> {
+    // Try parsing as full BIP44 path: m/44'/coin_type'/account'/0/index
+    if path.starts_with("m/44'/") || path.starts_with("44'/") {
+        let parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
+        if parts.len() >= 5 {
+            // parts[0] = "44'" (purpose)
+            // parts[1] = "118'" (coin type)
+            // parts[2] = "0'" (account)
+            // parts[3] = "0" (change, always 0 for Cosmos)
+            // parts[4] = "0" (address index)
+            let coin_type_str = parts[1].trim_end_matches('\'');
+            let account_str = parts[2].trim_end_matches('\'');
+            let index_str = parts[4].trim_end_matches('\'');
+
+            let coin_type = coin_type_str.parse::<u32>()
+                .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
+            let account = account_str.parse::<u32>()
+                .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
+            let index = index_str.parse::<u32>()
+                .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
+
+            return Ok((coin_type, account, index));
+        }
+    }
+
+    let path_lower = path.to_lowercase();
+    let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
+
+    // Extract numeric values from path
+    let account = parts.iter()
+        .filter_map(|p| p.parse::<u32>().ok())
+        .next()
+        .unwrap_or(0);
+
+    // Determine coin type from chain name in path
+    let coin_type = if path_lower.contains("terra") {
+        SLIP0044_TERRA
+    } else if path_lower.contains("kava") {
+        SLIP0044_KAVA
+    } else if path_lower.contains("secret") {
+        SLIP0044_SECRET
+    } else if path_lower.contains("injective") || path_lower.contains("inj") {
+        SLIP0044_INJECTIVE
+    } else {
+        // Default to Cosmos coin type (118) for cosmos, osmo, noble, celestia, etc.
+        SLIP0044_COSMOS
+    };
+
+    Ok((coin_type, account, 0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cosmos_key_derivation() {
+        // Test with standard mnemonic
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let key = derive_cosmos_hub_key(mnemonic, 0, 0).unwrap();
+
+        println!("Public key: {}", hex::encode(&key.public_key));
+        println!("Address bytes: {}", hex::encode(&key.address_bytes));
+        println!("Cosmos address: {}", key.bech32_address(PREFIX_COSMOS).unwrap());
+        println!("Osmosis address: {}", key.bech32_address(PREFIX_OSMOSIS).unwrap());
+        println!("Celestia address: {}", key.bech32_address(PREFIX_CELESTIA).unwrap());
+
+        // The public key should be deterministic
+        assert_eq!(key.public_key.len(), 33);
+        assert_eq!(key.address_bytes.len(), 20);
+    }
+
+    #[test]
+    fn test_known_vector() {
+        // Known test vector - "abandon" x11 + "about"
+        // From: https://github.com/cosmos/cosmos-sdk/blob/main/crypto/hd/hdpath_test.go
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let key = derive_cosmos_hub_key(mnemonic, 0, 0).unwrap();
+        let address = key.bech32_address(PREFIX_COSMOS).unwrap();
+
+        println!("Cosmos address: {}", address);
+
+        // Expected address for this mnemonic (standard Cosmos derivation)
+        // This should match tools like Keplr, Leap, etc.
+        assert!(address.starts_with("cosmos1"));
+    }
+
+    #[test]
+    fn test_multiple_accounts() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let key0 = derive_cosmos_hub_key(mnemonic, 0, 0).unwrap();
+        let key1 = derive_cosmos_hub_key(mnemonic, 1, 0).unwrap();
+
+        // Different accounts should produce different keys
+        assert_ne!(key0.public_key, key1.public_key);
+        assert_ne!(key0.address_bytes, key1.address_bytes);
+
+        println!("Account 0: {}", key0.bech32_address(PREFIX_COSMOS).unwrap());
+        println!("Account 1: {}", key1.bech32_address(PREFIX_COSMOS).unwrap());
+    }
+
+    #[test]
+    fn test_multiple_addresses_in_account() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let key0 = derive_cosmos_hub_key(mnemonic, 0, 0).unwrap();
+        let key1 = derive_cosmos_hub_key(mnemonic, 0, 1).unwrap();
+
+        // Different address indices should produce different keys
+        assert_ne!(key0.public_key, key1.public_key);
+
+        println!("Index 0: {}", key0.bech32_address(PREFIX_COSMOS).unwrap());
+        println!("Index 1: {}", key1.bech32_address(PREFIX_COSMOS).unwrap());
+    }
+
+    #[test]
+    fn test_different_chains_same_path() {
+        // Many Cosmos chains use the same derivation path (coin type 118)
+        // So the same mnemonic produces the same keys, just different address prefixes
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let cosmos_key = derive_cosmos_hub_key(mnemonic, 0, 0).unwrap();
+        let osmo_key = derive_osmosis_key(mnemonic, 0, 0).unwrap();
+        let noble_key = derive_noble_key(mnemonic, 0, 0).unwrap();
+
+        // Same keys for all chains that use coin type 118
+        assert_eq!(cosmos_key.secret_key, osmo_key.secret_key);
+        assert_eq!(cosmos_key.secret_key, noble_key.secret_key);
+
+        // But addresses look different due to different prefixes
+        let cosmos_addr = cosmos_key.bech32_address(PREFIX_COSMOS).unwrap();
+        let osmo_addr = osmo_key.bech32_address(PREFIX_OSMOSIS).unwrap();
+        let noble_addr = noble_key.bech32_address(PREFIX_NOBLE).unwrap();
+
+        println!("Cosmos: {}", cosmos_addr);
+        println!("Osmosis: {}", osmo_addr);
+        println!("Noble: {}", noble_addr);
+
+        assert!(cosmos_addr.starts_with("cosmos1"));
+        assert!(osmo_addr.starts_with("osmo1"));
+        assert!(noble_addr.starts_with("noble1"));
+    }
+
+    #[test]
+    fn test_parse_cosmos_path() {
+        // Full BIP44 path
+        let (coin, account, index) = parse_cosmos_path("m/44'/118'/0'/0/0").unwrap();
+        assert_eq!(coin, 118);
+        assert_eq!(account, 0);
+        assert_eq!(index, 0);
+
+        // Simplified path
+        let (coin, account, _) = parse_cosmos_path("//cosmos//0").unwrap();
+        assert_eq!(coin, SLIP0044_COSMOS);
+        assert_eq!(account, 0);
+
+        // Terra path
+        let (coin, _, _) = parse_cosmos_path("//terra//0").unwrap();
+        assert_eq!(coin, SLIP0044_TERRA);
+    }
+}

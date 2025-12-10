@@ -830,6 +830,95 @@ pub struct PenumbraFvkExport {
     pub qr_data: Vec<u8>,
 }
 
+/// String pair for FFI compatibility
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StringPair {
+    pub first: String,
+    pub second: String,
+}
+
+/// Generic Penumbra action parsed via schema
+/// Used for displaying any action type without hardcoding
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraGenericAction {
+    /// Action type name (e.g., "Create Token")
+    pub action_name: String,
+    /// Action description
+    pub description: String,
+    /// Parsed fields as (label, value) pairs
+    pub fields: Vec<StringPair>,
+    /// Whether this action was recognized by the schema
+    pub recognized: bool,
+    /// Protobuf field number (for debugging)
+    pub field_number: u32,
+}
+
+/// Schema update info for display
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraSchemaInfo {
+    pub chain_id: String,
+    pub protocol_version: String,
+    pub action_count: u32,
+    pub schema_version: u32,
+}
+
+// ============================================================================
+// Zcash types
+// ============================================================================
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashTransactionSummary {
+    pub mainnet: bool,
+    pub fee: String,
+    pub spend_count: u64,
+    pub output_count: u64,
+    pub sighash: String,
+    pub anchor: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashOrchardSpend {
+    pub nullifier: String,
+    pub value: String,
+    pub cmx: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashOrchardOutput {
+    pub value: String,
+    pub recipient: String,
+    pub is_change: bool,
+}
+
+/// Zcash Full Viewing Key export data for watch-only wallet import
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashFvkExport {
+    pub account_index: u32,
+    pub label: String,
+    pub mainnet: bool,
+    pub address: String,
+    pub fvk_hex: String,
+    pub qr_data: Vec<u8>,
+}
+
+/// Zcash sign request parsed from QR
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashSignRequest {
+    pub account_index: u32,
+    pub sighash: String,
+    pub alphas: Vec<String>,
+    pub summary: String,
+    /// Network: true = mainnet, false = testnet
+    pub mainnet: bool,
+}
+
+/// Zcash signature response to encode as QR
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashSignatureResponse {
+    pub sighash: String,
+    pub orchard_sigs: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Card {
     AuthorCard { f: MAddressCard },
@@ -874,4 +963,12 @@ pub enum Card {
     PenumbraSwapCard { f: PenumbraSwapAction },
     PenumbraDelegateCard { f: PenumbraDelegateAction },
     PenumbraVoteCard { f: PenumbraVoteAction },
+    /// Generic action card - displays any action parsed via schema
+    PenumbraGenericActionCard { f: PenumbraGenericAction },
+    /// Schema update info card
+    PenumbraSchemaCard { f: PenumbraSchemaInfo },
+    // zcash cards
+    ZcashSummaryCard { f: ZcashTransactionSummary },
+    ZcashOrchardSpendCard { f: ZcashOrchardSpend },
+    ZcashOrchardOutputCard { f: ZcashOrchardOutput },
 }

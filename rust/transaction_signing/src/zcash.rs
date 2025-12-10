@@ -1,0 +1,1093 @@
+//! zcash transaction signing
+//!
+//! implements transparent (secp256k1) and orchard (redpallas) signing for zcash.
+//! based on pczt (partially constructed zcash transaction) format.
+
+use crate::{Error, Result};
+
+#[cfg(feature = "zcash")]
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+// ============================================================================
+// constants
+// ============================================================================
+
+/// zcash bip44 coin type
+pub const ZCASH_COIN_TYPE: u32 = 133;
+
+/// zcash transparent bip44 path template: m/44'/133'/account'/change/index
+pub fn transparent_path(account: u32, change: u32, index: u32) -> String {
+    format!("m/44'/{}'/{}'/{}/{}", ZCASH_COIN_TYPE, account, change, index)
+}
+
+/// zcash orchard zip32 path template: m/32'/133'/account'
+pub fn orchard_path(account: u32) -> String {
+    format!("m/32'/{}'/{}'", ZCASH_COIN_TYPE, account)
+}
+
+// ============================================================================
+// transparent signing (secp256k1)
+// ============================================================================
+
+/// transparent spending key bytes - derived from bip44
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[cfg(feature = "zcash")]
+pub struct TransparentSpendingKey(pub [u8; 32]);
+
+#[cfg(feature = "zcash")]
+impl TransparentSpendingKey {
+    /// create from raw bytes
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// derive from seed phrase using bip44 path
+    pub fn from_seed_phrase(
+        seed_phrase: &str,
+        account: u32,
+        change: u32,
+        index: u32,
+    ) -> Result<Self> {
+        use bip32::{Mnemonic, XPrv};
+
+        // parse mnemonic
+        let mnemonic = Mnemonic::new(seed_phrase, bip32::Language::English)
+            .map_err(|e| Error::ZcashKeyDerivation(format!("invalid mnemonic: {e}")))?;
+
+        // derive seed
+        let seed = mnemonic.to_seed("");
+
+        // derive child key from bip44 path
+        let path = transparent_path(account, change, index);
+        let child_key = XPrv::derive_from_path(&seed, &path.parse().map_err(|e| {
+            Error::ZcashKeyDerivation(format!("invalid derivation path: {e}"))
+        })?)
+        .map_err(|e| Error::ZcashKeyDerivation(format!("key derivation failed: {e}")))?;
+
+        // extract 32-byte private key
+        let mut key_bytes = [0u8; 32];
+        key_bytes.copy_from_slice(&child_key.to_bytes()[..32]);
+
+        Ok(Self(key_bytes))
+    }
+
+    /// get raw bytes
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// sign a transparent input with secp256k1 ECDSA
+///
+/// # arguments
+/// * `sighash` - the 32-byte sighash computed per ZIP-244
+/// * `secret_key` - the 32-byte secret key
+///
+/// # returns
+/// * DER-encoded signature + SIGHASH_ALL byte
+#[cfg(feature = "zcash")]
+pub fn sign_transparent(
+    sighash: &[u8; 32],
+    secret_key: &TransparentSpendingKey,
+) -> Result<Vec<u8>> {
+    use secp256k1::{Message, Secp256k1, SecretKey};
+
+    let secp = Secp256k1::new();
+
+    let sk = SecretKey::from_slice(&secret_key.0)
+        .map_err(|e| Error::ZcashSigning(format!("invalid secret key: {e}")))?;
+
+    let message = Message::from_digest_slice(sighash)
+        .map_err(|e| Error::ZcashSigning(format!("invalid message: {e}")))?;
+
+    let signature = secp.sign_ecdsa(&message, &sk);
+
+    // DER encode + SIGHASH_ALL byte
+    let mut sig = signature.serialize_der().to_vec();
+    sig.push(0x01); // SIGHASH_ALL
+
+    Ok(sig)
+}
+
+/// derive transparent address from spending key
+#[cfg(feature = "zcash")]
+pub fn derive_transparent_address(secret_key: &TransparentSpendingKey, mainnet: bool) -> Result<String> {
+    use ripemd::Ripemd160;
+    use secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use sha2::{Digest, Sha256};
+
+    let secp = Secp256k1::new();
+    let sk = SecretKey::from_slice(&secret_key.0)
+        .map_err(|e| Error::ZcashKeyDerivation(format!("invalid secret key: {e}")))?;
+    let pk = PublicKey::from_secret_key(&secp, &sk);
+
+    // P2PKH: RIPEMD160(SHA256(compressed_pubkey))
+    let compressed = pk.serialize();
+    let sha = Sha256::digest(&compressed);
+    let hash = Ripemd160::digest(&sha);
+
+    // prefix bytes
+    let prefix = if mainnet {
+        [0x1C, 0xB8] // mainnet t1
+    } else {
+        [0x1D, 0x25] // testnet tm
+    };
+
+    let mut payload = Vec::with_capacity(22);
+    payload.extend_from_slice(&prefix);
+    payload.extend_from_slice(&hash);
+
+    Ok(bs58::encode(payload).with_check().into_string())
+}
+
+// ============================================================================
+// orchard signing (redpallas on pallas curve)
+// ============================================================================
+
+/// orchard spending key bytes - derived from zip32
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[cfg(feature = "zcash")]
+pub struct OrchardSpendingKey(pub [u8; 32]);
+
+#[cfg(feature = "zcash")]
+impl OrchardSpendingKey {
+    /// create from raw bytes
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// derive from seed phrase using zip32 path
+    ///
+    /// this implements the orchard key derivation from ZIP-32:
+    /// m_orchard / purpose' / coin_type' / account'
+    pub fn from_seed_phrase(seed_phrase: &str, account: u32) -> Result<Self> {
+        use orchard::keys::SpendingKey;
+        use bip32::Mnemonic;
+        use zip32::AccountId;
+
+        // parse mnemonic
+        let mnemonic = Mnemonic::new(seed_phrase, bip32::Language::English)
+            .map_err(|e| Error::ZcashKeyDerivation(format!("invalid mnemonic: {e}")))?;
+
+        // derive seed
+        let seed = mnemonic.to_seed("");
+        let seed_bytes: &[u8] = seed.as_bytes();
+
+        // convert account to AccountId
+        let account_id = AccountId::try_from(account)
+            .map_err(|_| Error::ZcashKeyDerivation("invalid account index".to_string()))?;
+
+        // use orchard crate's zip32 derivation
+        let sk = SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
+            .map_err(|e| Error::ZcashKeyDerivation(format!("orchard key derivation failed: {e:?}")))?;
+
+        Ok(Self(*sk.to_bytes()))
+    }
+
+    /// get raw bytes
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// convert to orchard SpendingKey
+    #[cfg(feature = "zcash")]
+    pub fn to_spending_key(&self) -> Result<orchard::keys::SpendingKey> {
+        orchard::keys::SpendingKey::from_bytes(self.0)
+            .into_option()
+            .ok_or_else(|| Error::ZcashKeyDerivation("invalid orchard spending key".to_string()))
+    }
+
+    /// get full viewing key bytes (96 bytes)
+    #[cfg(feature = "zcash")]
+    pub fn fvk_bytes(&self) -> [u8; 96] {
+        use orchard::keys::FullViewingKey;
+        let sk = self.to_spending_key().expect("valid spending key");
+        let fvk = FullViewingKey::from(&sk);
+        fvk.to_bytes()
+    }
+
+    /// get receiving address as unified address string
+    #[cfg(feature = "zcash")]
+    pub fn get_address(&self, mainnet: bool) -> String {
+        use orchard::keys::FullViewingKey;
+        use zcash_address::unified::{Address as UnifiedAddress, Receiver, Encoding};
+        use zcash_address::Network;
+
+        let sk = self.to_spending_key().expect("valid spending key");
+        let fvk = FullViewingKey::from(&sk);
+
+        // Get default address (diversifier index 0)
+        let default_address = fvk.address_at(0u32, orchard::keys::Scope::External);
+
+        // Build unified address with just Orchard receiver
+        let orchard_receiver = Receiver::Orchard(default_address.to_raw_address_bytes());
+        let network = if mainnet { Network::Main } else { Network::Test };
+
+        UnifiedAddress::try_from_items(vec![orchard_receiver])
+            .expect("valid receivers")
+            .encode(&network)
+    }
+}
+
+/// sign an orchard action with a randomized key
+///
+/// # arguments
+/// * `sighash` - the 32-byte sighash (txid_digest for orchard)
+/// * `alpha` - the 32-byte randomizer from the action
+/// * `spending_key` - the orchard spending key
+///
+/// # returns
+/// * 64-byte redpallas signature
+#[cfg(feature = "zcash")]
+pub fn sign_orchard_action(
+    sighash: &[u8; 32],
+    alpha: &[u8; 32],
+    spending_key: &OrchardSpendingKey,
+) -> Result<[u8; 64]> {
+    use orchard::keys::SpendAuthorizingKey;
+    use pasta_curves::{group::ff::PrimeField, pallas};
+    use rand_core::OsRng;
+
+    // get spend authorizing key from spending key
+    let sk = spending_key.to_spending_key()?;
+    let ask = SpendAuthorizingKey::from(&sk);
+
+    // convert alpha bytes to pallas scalar using from_repr
+    let alpha_repr: [u8; 32] = *alpha;
+    let alpha_opt = pallas::Scalar::from_repr(alpha_repr);
+    let alpha_scalar = if alpha_opt.is_some().into() {
+        alpha_opt.unwrap()
+    } else {
+        // try from_repr_vartime or use from_bytes_wide for wider input
+        return Err(Error::ZcashSigning("invalid randomizer alpha".to_string()));
+    };
+
+    // randomize the key
+    let rsk = ask.randomize(&alpha_scalar);
+
+    // sign the sighash
+    let sig = rsk.sign(&mut OsRng, sighash);
+
+    Ok(<[u8; 64]>::from(&sig))
+}
+
+/// derive orchard full viewing key from spending key
+#[cfg(feature = "zcash")]
+pub fn derive_orchard_fvk(spending_key: &OrchardSpendingKey) -> Result<OrchardFullViewingKey> {
+    use orchard::keys::FullViewingKey;
+
+    let sk = spending_key.to_spending_key()?;
+    let fvk = FullViewingKey::from(&sk);
+
+    Ok(OrchardFullViewingKey(fvk.to_bytes()))
+}
+
+/// orchard full viewing key (96 bytes)
+#[derive(Clone, Debug)]
+pub struct OrchardFullViewingKey(pub [u8; 96]);
+
+impl OrchardFullViewingKey {
+    /// get raw bytes
+    pub fn as_bytes(&self) -> &[u8; 96] {
+        &self.0
+    }
+
+    /// encode as bech32m with "zviewo" prefix (orchard FVK)
+    #[cfg(feature = "zcash")]
+    pub fn to_bech32m(&self, mainnet: bool) -> Result<String> {
+        use bech32::{Bech32m, Hrp};
+
+        let hrp_str = if mainnet { "zviewo" } else { "zviewtestorchard" };
+        let hrp = Hrp::parse(hrp_str)
+            .map_err(|e| Error::ZcashKeyDerivation(format!("invalid hrp: {e}")))?;
+
+        let encoded = bech32::encode::<Bech32m>(hrp, &self.0)
+            .map_err(|e| Error::ZcashKeyDerivation(format!("bech32 encode error: {e}")))?;
+
+        Ok(encoded)
+    }
+}
+
+// ============================================================================
+// pczt (partially constructed zcash transaction)
+// ============================================================================
+
+/// pczt signer role - what we implement
+#[derive(Debug, Clone)]
+pub struct PcztSignerInput {
+    /// transparent inputs to sign
+    pub transparent_inputs: Vec<TransparentInputToSign>,
+    /// orchard actions to sign
+    pub orchard_actions: Vec<OrchardActionToSign>,
+    /// the transaction sighash
+    pub sighash: [u8; 32],
+}
+
+/// a transparent input that needs signing
+#[derive(Debug, Clone)]
+pub struct TransparentInputToSign {
+    /// derivation path components: (account, change, index)
+    pub derivation: (u32, u32, u32),
+    /// the sighash for this input (may differ per input)
+    pub sighash: [u8; 32],
+}
+
+/// an orchard action that needs signing
+#[derive(Debug, Clone)]
+pub struct OrchardActionToSign {
+    /// account index for key derivation
+    pub account: u32,
+    /// the randomizer (alpha) for this action
+    pub alpha: [u8; 32],
+}
+
+/// signed pczt output
+#[derive(Debug, Clone)]
+pub struct PcztSignerOutput {
+    /// transparent signatures (DER + sighash byte)
+    pub transparent_sigs: Vec<Vec<u8>>,
+    /// orchard signatures (64 bytes each)
+    pub orchard_sigs: Vec<[u8; 64]>,
+}
+
+impl PcztSignerOutput {
+    /// encode for output (simple concatenation format)
+    pub fn encode(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+
+        // transparent sigs
+        output.extend_from_slice(&(self.transparent_sigs.len() as u16).to_le_bytes());
+        for sig in &self.transparent_sigs {
+            output.extend_from_slice(&(sig.len() as u16).to_le_bytes());
+            output.extend_from_slice(sig);
+        }
+
+        // orchard sigs
+        output.extend_from_slice(&(self.orchard_sigs.len() as u16).to_le_bytes());
+        for sig in &self.orchard_sigs {
+            output.extend_from_slice(sig);
+        }
+
+        output
+    }
+}
+
+/// sign a pczt
+///
+/// this is the main entry point for signing a zcash transaction
+#[cfg(feature = "zcash")]
+pub fn sign_pczt(
+    input: &PcztSignerInput,
+    seed_phrase: &str,
+) -> Result<PcztSignerOutput> {
+    let mut output = PcztSignerOutput {
+        transparent_sigs: Vec::new(),
+        orchard_sigs: Vec::new(),
+    };
+
+    // sign transparent inputs
+    for t_input in &input.transparent_inputs {
+        let (account, change, index) = t_input.derivation;
+        let sk = TransparentSpendingKey::from_seed_phrase(seed_phrase, account, change, index)?;
+        let sig = sign_transparent(&t_input.sighash, &sk)?;
+        output.transparent_sigs.push(sig);
+    }
+
+    // sign orchard actions
+    for o_action in &input.orchard_actions {
+        let sk = OrchardSpendingKey::from_seed_phrase(seed_phrase, o_action.account)?;
+        let sig = sign_orchard_action(&input.sighash, &o_action.alpha, &sk)?;
+        output.orchard_sigs.push(sig);
+    }
+
+    Ok(output)
+}
+
+// ============================================================================
+// zcash authorization data (for QR output)
+// ============================================================================
+
+/// zcash authorization data - all signatures for a transaction
+#[derive(Debug, Clone)]
+pub struct ZcashAuthorizationData {
+    /// the sighash that was signed
+    pub sighash: [u8; 32],
+    /// transparent signatures
+    pub transparent_sigs: Vec<Vec<u8>>,
+    /// orchard signatures
+    pub orchard_sigs: Vec<[u8; 64]>,
+}
+
+impl ZcashAuthorizationData {
+    /// create from pczt signer output
+    pub fn from_pczt_output(sighash: [u8; 32], output: PcztSignerOutput) -> Self {
+        Self {
+            sighash,
+            transparent_sigs: output.transparent_sigs,
+            orchard_sigs: output.orchard_sigs,
+        }
+    }
+
+    /// encode for QR output
+    ///
+    /// format:
+    /// - sighash: 32 bytes
+    /// - transparent_count: 2 bytes (le)
+    /// - for each: sig_len (2 bytes le) + sig bytes
+    /// - orchard_count: 2 bytes (le)
+    /// - orchard_sigs: 64 bytes each
+    pub fn encode(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+
+        // sighash
+        output.extend_from_slice(&self.sighash);
+
+        // transparent sigs
+        output.extend_from_slice(&(self.transparent_sigs.len() as u16).to_le_bytes());
+        for sig in &self.transparent_sigs {
+            output.extend_from_slice(&(sig.len() as u16).to_le_bytes());
+            output.extend_from_slice(sig);
+        }
+
+        // orchard sigs
+        output.extend_from_slice(&(self.orchard_sigs.len() as u16).to_le_bytes());
+        for sig in &self.orchard_sigs {
+            output.extend_from_slice(sig);
+        }
+
+        output
+    }
+
+    /// decode from bytes
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        if data.len() < 36 {
+            return Err(Error::ZcashParsing("data too short".to_string()));
+        }
+
+        let mut offset = 0;
+
+        // sighash
+        let sighash: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+        offset += 32;
+
+        // transparent sigs
+        let t_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+        offset += 2;
+
+        let mut transparent_sigs = Vec::with_capacity(t_count);
+        for _ in 0..t_count {
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("transparent sig length truncated".to_string()));
+            }
+            let sig_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+
+            if offset + sig_len > data.len() {
+                return Err(Error::ZcashParsing("transparent sig truncated".to_string()));
+            }
+            transparent_sigs.push(data[offset..offset + sig_len].to_vec());
+            offset += sig_len;
+        }
+
+        // orchard sigs
+        if offset + 2 > data.len() {
+            return Err(Error::ZcashParsing("orchard count truncated".to_string()));
+        }
+        let o_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+        offset += 2;
+
+        let mut orchard_sigs = Vec::with_capacity(o_count);
+        for _ in 0..o_count {
+            if offset + 64 > data.len() {
+                return Err(Error::ZcashParsing("orchard sig truncated".to_string()));
+            }
+            let sig: [u8; 64] = data[offset..offset + 64].try_into().unwrap();
+            orchard_sigs.push(sig);
+            offset += 64;
+        }
+
+        Ok(Self {
+            sighash,
+            transparent_sigs,
+            orchard_sigs,
+        })
+    }
+}
+
+// ============================================================================
+// QR code type constants (must match zafu-wasm)
+// ============================================================================
+
+/// QR code type for Zcash FVK export
+pub const QR_TYPE_ZCASH_FVK_EXPORT: u8 = 0x01;
+/// QR code type for Zcash sign request
+pub const QR_TYPE_ZCASH_SIGN_REQUEST: u8 = 0x02;
+/// QR code type for Zcash signatures response
+pub const QR_TYPE_ZCASH_SIGNATURES: u8 = 0x03;
+
+// ============================================================================
+// sign request parsing (from online wallet)
+// ============================================================================
+
+/// Parsed sign request from online wallet QR code
+#[derive(Debug, Clone)]
+pub struct ZcashSignRequest {
+    /// Account index for key derivation
+    pub account_index: u32,
+    /// The transaction sighash (32 bytes)
+    pub sighash: [u8; 32],
+    /// Orchard action randomizers (alpha values)
+    pub orchard_alphas: Vec<[u8; 32]>,
+    /// Human-readable summary for display
+    pub summary: String,
+    /// Network: true = mainnet, false = testnet
+    /// SECURITY: This should be verified by the user before signing
+    pub mainnet: bool,
+}
+
+impl ZcashSignRequest {
+    /// Parse from QR hex string
+    pub fn from_qr_hex(hex_str: &str) -> Result<Self> {
+        let data = hex::decode(hex_str)
+            .map_err(|e| Error::ZcashParsing(format!("hex decode error: {e}")))?;
+        Self::from_qr_bytes(&data)
+    }
+
+    /// Parse from QR bytes
+    ///
+    /// Format v2 (with network flag):
+    /// [0x53][0x04][0x02]           - prelude
+    /// [flags: 1 byte]              - bit 0: mainnet
+    /// [account_index: 4 bytes LE]
+    /// [sighash: 32 bytes]
+    /// [action_count: 2 bytes LE]
+    /// [alphas: 32 bytes each]
+    /// [summary_len: 2 bytes LE]
+    /// [summary: summary_len bytes]
+    pub fn from_qr_bytes(data: &[u8]) -> Result<Self> {
+        // Validate prelude: [0x53][0x04][0x02]
+        if data.len() < 42 {  // minimum: 3 + 1 + 4 + 32 + 2 = 42
+            return Err(Error::ZcashParsing("QR data too short".to_string()));
+        }
+        if data[0] != 0x53 || data[1] != 0x04 || data[2] != QR_TYPE_ZCASH_SIGN_REQUEST {
+            return Err(Error::ZcashParsing("invalid QR prelude for Zcash sign request".to_string()));
+        }
+
+        let mut offset = 3;
+
+        // Parse flags (v2 format) or detect v1 format
+        // In v1, the next 4 bytes are account_index (typically 0)
+        // In v2, the next byte is flags
+        let mainnet: bool;
+        let first_byte = data[offset];
+
+        // v2 detection: if first byte looks like a flags byte (0x00 or 0x01)
+        // and the next 4 bytes don't look like a small account index
+        if first_byte <= 0x01 {
+            // likely v2 format with flags
+            mainnet = (first_byte & 0x01) != 0;
+            offset += 1;
+        } else {
+            // v1 format (no flags), assume mainnet with warning
+            mainnet = true; // default assumption, but show warning in UI
+        }
+
+        // Account index
+        let account_index = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+        offset += 4;
+
+        // Sighash (32 bytes)
+        let sighash: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+        offset += 32;
+
+        // Action count
+        let action_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+        offset += 2;
+
+        // Each action's alpha (32 bytes each)
+        let mut orchard_alphas = Vec::with_capacity(action_count);
+        for _ in 0..action_count {
+            if offset + 32 > data.len() {
+                return Err(Error::ZcashParsing("alpha truncated".to_string()));
+            }
+            let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+            orchard_alphas.push(alpha);
+            offset += 32;
+        }
+
+        // Summary (length-prefixed string)
+        let summary = if offset + 2 <= data.len() {
+            let summary_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+            if offset + summary_len <= data.len() {
+                String::from_utf8_lossy(&data[offset..offset + summary_len]).to_string()
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        Ok(Self {
+            account_index,
+            sighash,
+            orchard_alphas,
+            summary,
+            mainnet,
+        })
+    }
+
+    /// Sign this request and produce a signature response
+    #[cfg(feature = "zcash")]
+    pub fn sign(&self, seed_phrase: &str) -> Result<ZcashSignatureResponse> {
+        let mut orchard_sigs = Vec::with_capacity(self.orchard_alphas.len());
+
+        // Derive spending key and sign each action
+        let sk = OrchardSpendingKey::from_seed_phrase(seed_phrase, self.account_index)?;
+
+        for alpha in &self.orchard_alphas {
+            let sig = sign_orchard_action(&self.sighash, alpha, &sk)?;
+            orchard_sigs.push(sig);
+        }
+
+        Ok(ZcashSignatureResponse {
+            sighash: self.sighash,
+            transparent_sigs: vec![],  // No transparent inputs for now
+            orchard_sigs,
+        })
+    }
+}
+
+/// Signature response to send back to online wallet
+#[derive(Debug, Clone)]
+pub struct ZcashSignatureResponse {
+    /// The sighash that was signed
+    pub sighash: [u8; 32],
+    /// Transparent signatures (DER + sighash byte)
+    pub transparent_sigs: Vec<Vec<u8>>,
+    /// Orchard signatures (64 bytes each)
+    pub orchard_sigs: Vec<[u8; 64]>,
+}
+
+impl ZcashSignatureResponse {
+    /// Encode as QR hex string
+    pub fn to_qr_hex(&self) -> String {
+        hex::encode(self.to_qr_bytes())
+    }
+
+    /// Encode as QR bytes
+    pub fn to_qr_bytes(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+
+        // Prelude: [0x53][0x04][0x03] - Substrate compat, Zcash, Signatures
+        output.push(0x53);
+        output.push(0x04);
+        output.push(QR_TYPE_ZCASH_SIGNATURES);
+
+        // Sighash (32 bytes)
+        output.extend_from_slice(&self.sighash);
+
+        // Transparent signatures
+        output.extend_from_slice(&(self.transparent_sigs.len() as u16).to_le_bytes());
+        for sig in &self.transparent_sigs {
+            output.extend_from_slice(&(sig.len() as u16).to_le_bytes());
+            output.extend_from_slice(sig);
+        }
+
+        // Orchard signatures
+        output.extend_from_slice(&(self.orchard_sigs.len() as u16).to_le_bytes());
+        for sig in &self.orchard_sigs {
+            output.extend_from_slice(sig);
+        }
+
+        output
+    }
+}
+
+// ============================================================================
+// fvk export
+// ============================================================================
+
+/// zcash FVK export data for QR code
+#[derive(Debug, Clone)]
+pub struct ZcashFvkExportData {
+    /// account index
+    pub account_index: u32,
+    /// optional label
+    pub label: Option<String>,
+    /// orchard FVK bytes (96 bytes)
+    pub orchard_fvk: Option<[u8; 96]>,
+    /// transparent xpub (for watch-only)
+    pub transparent_xpub: Option<Vec<u8>>,
+    /// network: true = mainnet, false = testnet
+    pub mainnet: bool,
+}
+
+impl ZcashFvkExportData {
+    /// encode for QR code
+    ///
+    /// format:
+    /// ```text
+    /// [0x53][0x04][0x01]           - prelude (substrate compat, zcash, fvk export)
+    /// [flags: 1 byte]              - bit 0: mainnet, bit 1: has orchard, bit 2: has transparent
+    /// [account_index: 4 bytes LE]
+    /// [label_len: 1 byte]
+    /// [label: label_len bytes]
+    /// [orchard_fvk: 96 bytes]      - if has orchard
+    /// [transparent_xpub_len: 1]    - if has transparent
+    /// [transparent_xpub: n bytes]  - if has transparent
+    /// ```
+    pub fn encode_qr(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+
+        // prelude
+        output.push(0x53); // substrate compat
+        output.push(0x04); // zcash
+        output.push(QR_TYPE_ZCASH_FVK_EXPORT);
+
+        // flags
+        let mut flags = 0u8;
+        if self.mainnet {
+            flags |= 0x01;
+        }
+        if self.orchard_fvk.is_some() {
+            flags |= 0x02;
+        }
+        if self.transparent_xpub.is_some() {
+            flags |= 0x04;
+        }
+        output.push(flags);
+
+        // account index
+        output.extend_from_slice(&self.account_index.to_le_bytes());
+
+        // label
+        match &self.label {
+            Some(label) => {
+                let label_bytes = label.as_bytes();
+                output.push(label_bytes.len() as u8);
+                output.extend_from_slice(label_bytes);
+            }
+            None => {
+                output.push(0);
+            }
+        }
+
+        // orchard fvk
+        if let Some(fvk) = &self.orchard_fvk {
+            output.extend_from_slice(fvk);
+        }
+
+        // transparent xpub
+        if let Some(xpub) = &self.transparent_xpub {
+            output.push(xpub.len() as u8);
+            output.extend_from_slice(xpub);
+        }
+
+        output
+    }
+
+    /// decode from QR bytes
+    pub fn decode_qr(data: &[u8]) -> Result<Self> {
+        if data.len() < 9 {
+            return Err(Error::ZcashParsing("QR data too short".to_string()));
+        }
+
+        // validate prelude
+        if data[0] != 0x53 || data[1] != 0x04 || data[2] != QR_TYPE_ZCASH_FVK_EXPORT {
+            return Err(Error::ZcashParsing("invalid QR prelude for Zcash FVK export".to_string()));
+        }
+
+        let mut offset = 3;
+
+        // flags
+        let flags = data[offset];
+        offset += 1;
+        let mainnet = flags & 0x01 != 0;
+        let has_orchard = flags & 0x02 != 0;
+        let has_transparent = flags & 0x04 != 0;
+
+        // account index
+        let account_index = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+        offset += 4;
+
+        // label
+        let label_len = data[offset] as usize;
+        offset += 1;
+        let label = if label_len > 0 {
+            if offset + label_len > data.len() {
+                return Err(Error::ZcashParsing("label extends beyond data".to_string()));
+            }
+            let label_bytes = &data[offset..offset + label_len];
+            offset += label_len;
+            Some(String::from_utf8_lossy(label_bytes).to_string())
+        } else {
+            None
+        };
+
+        // orchard fvk
+        let orchard_fvk = if has_orchard {
+            if offset + 96 > data.len() {
+                return Err(Error::ZcashParsing("orchard FVK truncated".to_string()));
+            }
+            let fvk: [u8; 96] = data[offset..offset + 96].try_into().unwrap();
+            offset += 96;
+            Some(fvk)
+        } else {
+            None
+        };
+
+        // transparent xpub
+        let transparent_xpub = if has_transparent {
+            if offset >= data.len() {
+                return Err(Error::ZcashParsing("transparent xpub length missing".to_string()));
+            }
+            let xpub_len = data[offset] as usize;
+            offset += 1;
+            if offset + xpub_len > data.len() {
+                return Err(Error::ZcashParsing("transparent xpub truncated".to_string()));
+            }
+            let xpub = data[offset..offset + xpub_len].to_vec();
+            Some(xpub)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            account_index,
+            label,
+            orchard_fvk,
+            transparent_xpub,
+            mainnet,
+        })
+    }
+
+    /// encode as hex string
+    pub fn encode_qr_hex(&self) -> String {
+        hex::encode(self.encode_qr())
+    }
+
+    /// decode from hex string
+    pub fn decode_qr_hex(hex_str: &str) -> Result<Self> {
+        let data = hex::decode(hex_str)
+            .map_err(|e| Error::ZcashParsing(format!("hex decode error: {e}")))?;
+        Self::decode_qr(&data)
+    }
+}
+
+#[cfg(all(test, feature = "zcash"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_transparent_path() {
+        assert_eq!(transparent_path(0, 0, 0), "m/44'/133'/0'/0/0");
+        assert_eq!(transparent_path(1, 1, 5), "m/44'/133'/1'/1/5");
+    }
+
+    #[test]
+    fn test_orchard_path() {
+        assert_eq!(orchard_path(0), "m/32'/133'/0'");
+        assert_eq!(orchard_path(5), "m/32'/133'/5'");
+    }
+
+    #[test]
+    fn test_authorization_data_encode_decode() {
+        let auth_data = ZcashAuthorizationData {
+            sighash: [1u8; 32],
+            transparent_sigs: vec![vec![2u8; 72], vec![3u8; 71]],
+            orchard_sigs: vec![[4u8; 64], [5u8; 64]],
+        };
+
+        let encoded = auth_data.encode();
+        let decoded = ZcashAuthorizationData::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.sighash, auth_data.sighash);
+        assert_eq!(decoded.transparent_sigs.len(), 2);
+        assert_eq!(decoded.orchard_sigs.len(), 2);
+        assert_eq!(decoded.transparent_sigs[0], vec![2u8; 72]);
+        assert_eq!(decoded.orchard_sigs[0], [4u8; 64]);
+    }
+
+    #[test]
+    fn test_fvk_export_encode_decode() {
+        let export = ZcashFvkExportData {
+            account_index: 0,
+            label: Some("Test Wallet".to_string()),
+            orchard_fvk: Some([42u8; 96]),
+            transparent_xpub: None,
+            mainnet: true,
+        };
+
+        let encoded = export.encode_qr();
+
+        // verify prelude
+        assert_eq!(encoded[0], 0x53);
+        assert_eq!(encoded[1], 0x04);
+        assert_eq!(encoded[2], QR_TYPE_ZCASH_FVK_EXPORT);
+
+        let decoded = ZcashFvkExportData::decode_qr(&encoded).unwrap();
+        assert_eq!(decoded.account_index, 0);
+        assert_eq!(decoded.label, Some("Test Wallet".to_string()));
+        assert_eq!(decoded.orchard_fvk, Some([42u8; 96]));
+        assert!(decoded.mainnet);
+    }
+
+    #[test]
+    fn test_fvk_export_no_label() {
+        let export = ZcashFvkExportData {
+            account_index: 5,
+            label: None,
+            orchard_fvk: Some([0u8; 96]),
+            transparent_xpub: Some(vec![1, 2, 3, 4]),
+            mainnet: false,
+        };
+
+        let encoded = export.encode_qr();
+        let decoded = ZcashFvkExportData::decode_qr(&encoded).unwrap();
+
+        assert_eq!(decoded.account_index, 5);
+        assert_eq!(decoded.label, None);
+        assert!(decoded.orchard_fvk.is_some());
+        assert_eq!(decoded.transparent_xpub, Some(vec![1, 2, 3, 4]));
+        assert!(!decoded.mainnet);
+    }
+
+    #[test]
+    fn test_sign_request_parse_v2() {
+        // Build a sign request manually (v2 format with flags)
+        let mut data = Vec::new();
+
+        // Prelude
+        data.push(0x53);
+        data.push(0x04);
+        data.push(QR_TYPE_ZCASH_SIGN_REQUEST);
+
+        // Flags: mainnet = true
+        data.push(0x01);
+
+        // Account index
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        // Sighash
+        let sighash = [0x42u8; 32];
+        data.extend_from_slice(&sighash);
+
+        // Action count
+        data.extend_from_slice(&2u16.to_le_bytes());
+
+        // Alpha values
+        let alpha1 = [0x11u8; 32];
+        let alpha2 = [0x22u8; 32];
+        data.extend_from_slice(&alpha1);
+        data.extend_from_slice(&alpha2);
+
+        // Summary
+        let summary = "Send 1.5 ZEC to t1...";
+        data.extend_from_slice(&(summary.len() as u16).to_le_bytes());
+        data.extend_from_slice(summary.as_bytes());
+
+        // Parse
+        let request = ZcashSignRequest::from_qr_bytes(&data).unwrap();
+
+        assert_eq!(request.account_index, 0);
+        assert_eq!(request.sighash, sighash);
+        assert_eq!(request.orchard_alphas.len(), 2);
+        assert_eq!(request.orchard_alphas[0], alpha1);
+        assert_eq!(request.orchard_alphas[1], alpha2);
+        assert_eq!(request.summary, summary);
+        assert!(request.mainnet);
+    }
+
+    #[test]
+    fn test_sign_request_parse_testnet() {
+        // Build a sign request for testnet
+        let mut data = Vec::new();
+
+        // Prelude
+        data.push(0x53);
+        data.push(0x04);
+        data.push(QR_TYPE_ZCASH_SIGN_REQUEST);
+
+        // Flags: mainnet = false (testnet)
+        data.push(0x00);
+
+        // Account index
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        // Sighash
+        let sighash = [0x42u8; 32];
+        data.extend_from_slice(&sighash);
+
+        // Action count
+        data.extend_from_slice(&1u16.to_le_bytes());
+
+        // Alpha value
+        data.extend_from_slice(&[0x11u8; 32]);
+
+        // Summary
+        let summary = "Test tx";
+        data.extend_from_slice(&(summary.len() as u16).to_le_bytes());
+        data.extend_from_slice(summary.as_bytes());
+
+        // Parse
+        let request = ZcashSignRequest::from_qr_bytes(&data).unwrap();
+
+        assert!(!request.mainnet); // testnet
+        assert_eq!(request.orchard_alphas.len(), 1);
+    }
+
+    #[test]
+    fn test_signature_response_format() {
+        // Create a signature response
+        let response = ZcashSignatureResponse {
+            sighash: [0x42u8; 32],
+            transparent_sigs: vec![],
+            orchard_sigs: vec![[0xABu8; 64], [0xCDu8; 64]],
+        };
+
+        let encoded = response.to_qr_bytes();
+
+        // Verify prelude
+        assert_eq!(encoded[0], 0x53);
+        assert_eq!(encoded[1], 0x04);
+        assert_eq!(encoded[2], QR_TYPE_ZCASH_SIGNATURES);
+
+        // Verify sighash
+        assert_eq!(&encoded[3..35], &[0x42u8; 32]);
+
+        // Verify transparent count = 0
+        assert_eq!(u16::from_le_bytes(encoded[35..37].try_into().unwrap()), 0);
+
+        // Verify orchard count = 2
+        assert_eq!(u16::from_le_bytes(encoded[37..39].try_into().unwrap()), 2);
+
+        // Verify orchard sigs
+        assert_eq!(&encoded[39..103], &[0xABu8; 64]);
+        assert_eq!(&encoded[103..167], &[0xCDu8; 64]);
+    }
+
+    #[test]
+    fn test_sign_request_roundtrip() {
+        // Build sign request (v2 format with flags)
+        let mut data = Vec::new();
+        data.push(0x53);
+        data.push(0x04);
+        data.push(QR_TYPE_ZCASH_SIGN_REQUEST);
+        data.push(0x01); // flags: mainnet
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&[0x42u8; 32]); // sighash
+        data.extend_from_slice(&1u16.to_le_bytes()); // 1 action
+        data.extend_from_slice(&[0x11u8; 32]); // alpha
+        let summary = "Test";
+        data.extend_from_slice(&(summary.len() as u16).to_le_bytes());
+        data.extend_from_slice(summary.as_bytes());
+
+        let hex_str = hex::encode(&data);
+        let request = ZcashSignRequest::from_qr_hex(&hex_str).unwrap();
+
+        assert_eq!(request.account_index, 0);
+        assert_eq!(request.orchard_alphas.len(), 1);
+        assert!(request.mainnet);
+    }
+}

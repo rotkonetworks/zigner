@@ -65,7 +65,9 @@ enum NetworkSpecsKeyContent {
     Ecdsa(H256),
     Ethereum(H256),
     Penumbra(H256),
+    Zcash(H256),
     LedgerEd25519(H256),
+    Cosmos(H256),
 }
 
 impl NetworkSpecsKey {
@@ -78,7 +80,9 @@ impl NetworkSpecsKey {
             Encryption::Ecdsa => NetworkSpecsKeyContent::Ecdsa(*genesis_hash),
             Encryption::Ethereum => NetworkSpecsKeyContent::Ethereum(*genesis_hash),
             Encryption::Penumbra => NetworkSpecsKeyContent::Penumbra(*genesis_hash),
+            Encryption::Zcash => NetworkSpecsKeyContent::Zcash(*genesis_hash),
             Encryption::LedgerEd25519 => NetworkSpecsKeyContent::LedgerEd25519(*genesis_hash),
+            Encryption::Cosmos => NetworkSpecsKeyContent::Cosmos(*genesis_hash),
         };
         Self(network_key_content.encode())
     }
@@ -108,7 +112,9 @@ impl NetworkSpecsKey {
             NetworkSpecsKeyContent::Ecdsa(b) => Ok((b, Encryption::Ecdsa)),
             NetworkSpecsKeyContent::Ethereum(b) => Ok((b, Encryption::Ethereum)),
             NetworkSpecsKeyContent::Penumbra(b) => Ok((b, Encryption::Penumbra)),
+            NetworkSpecsKeyContent::Zcash(b) => Ok((b, Encryption::Zcash)),
             NetworkSpecsKeyContent::LedgerEd25519(b) => Ok((b, Encryption::LedgerEd25519)),
+            NetworkSpecsKeyContent::Cosmos(b) => Ok((b, Encryption::Cosmos)),
         }
     }
 

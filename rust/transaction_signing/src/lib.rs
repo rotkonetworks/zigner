@@ -30,6 +30,26 @@ pub use penumbra::{
     SpendKeyBytes as PenumbraSpendKeyBytes, PENUMBRA_BIP44_PATH, PENUMBRA_COIN_TYPE,
 };
 
+// zcash signing module
+#[cfg(feature = "zcash")]
+pub mod zcash;
+#[cfg(feature = "zcash")]
+pub use zcash::{
+    sign_transparent as zcash_sign_transparent,
+    sign_orchard_action as zcash_sign_orchard,
+    sign_pczt as zcash_sign_pczt,
+    derive_transparent_address as zcash_derive_transparent_address,
+    derive_orchard_fvk as zcash_derive_orchard_fvk,
+    TransparentSpendingKey as ZcashTransparentKey,
+    OrchardSpendingKey as ZcashOrchardKey,
+    OrchardFullViewingKey as ZcashOrchardFvk,
+    ZcashAuthorizationData, ZcashFvkExportData,
+    ZcashSignRequest, ZcashSignatureResponse,
+    PcztSignerInput, PcztSignerOutput,
+    ZCASH_COIN_TYPE,
+    QR_TYPE_ZCASH_FVK_EXPORT, QR_TYPE_ZCASH_SIGN_REQUEST, QR_TYPE_ZCASH_SIGNATURES,
+};
+
 pub use sign_transaction::{create_signature, SignatureAndChecksum, SignatureType};
 
 pub fn handle_stub(database: &sled::Db, checksum: u32) -> Result<()> {

@@ -1,0 +1,47 @@
+package net.rotko.zigner
+
+import android.graphics.Color
+import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.core.view.WindowCompat
+import androidx.navigation.compose.rememberNavController
+import net.rotko.zigner.dependencygraph.ServiceLocator
+import net.rotko.zigner.domain.addVaultLogger
+import net.rotko.zigner.ui.rootnavigation.RootNavigationGraph
+import net.rotko.zigner.ui.theme.SignerNewTheme
+
+@ExperimentalMaterialApi
+@ExperimentalAnimationApi
+class MainActivity : AppCompatActivity() {
+
+	override fun onCreate(savedInstanceState: Bundle?) {
+		super.onCreate(savedInstanceState)
+		ServiceLocator.initActivityDependencies(this)
+
+		//remove automatic insets so bottom sheet can dimm status bar, other views will add their paddings if needed.
+		WindowCompat.setDecorFitsSystemWindows(window, false)
+		window.statusBarColor = Color.TRANSPARENT;
+
+		setContent {
+			SignerNewTheme {
+				RootNavigationGraph(
+					navController = rememberNavController().apply {
+						addVaultLogger(
+							"Root Nav graph controller"
+						)
+					})
+			}
+		}
+	}
+
+	override fun onDestroy() {
+		ServiceLocator.deinitActivityDependencies()
+		super.onDestroy()
+	}
+}
+
+
+

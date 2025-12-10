@@ -1,0 +1,22 @@
+package net.rotko.zigner.alerts
+
+import androidx.compose.runtime.Composable
+import net.rotko.zigner.components.AlertComponent
+
+/**
+ * Unified alert that is called by Android
+ * (navigation has no idea about it).
+ *
+ */
+@Composable
+fun AndroidCalledConfirm(
+	show: Boolean,
+	header: String = "Are you sure?",
+	text: String? = null, //null is preferred for UX
+	back: () -> Unit,
+	forward: () -> Unit,
+	backText: String = "Cancel",
+	forwardText: String = "Confirm"
+) {
+	AlertComponent(show, header, text, back, forward, backText, forwardText)
+}

@@ -85,8 +85,13 @@ pub enum Encryption {
     Ecdsa,
     Ethereum,
     Penumbra,
+    /// Zcash - uses ZIP-32 key derivation for shielded transactions
+    Zcash,
     /// Ledger Ed25519 - uses SLIP-10/BIP32-Ed25519 derivation instead of substrate derivation
     LedgerEd25519,
+    /// Cosmos SDK chains - uses BIP44 secp256k1 with bech32 addresses
+    /// Path: m/44'/118'/account'/0/0 (or chain-specific coin type)
+    Cosmos,
 }
 
 impl Encryption {
@@ -100,7 +105,9 @@ impl Encryption {
             Encryption::Ecdsa => String::from("ecdsa"),
             Encryption::Ethereum => String::from("ethereum"),
             Encryption::Penumbra => String::from("penumbra"),
+            Encryption::Zcash => String::from("zcash"),
             Encryption::LedgerEd25519 => String::from("ledger_ed25519"),
+            Encryption::Cosmos => String::from("cosmos"),
         }
     }
 
@@ -112,7 +119,9 @@ impl Encryption {
         match self {
             Encryption::Ethereum => IdenticonStyle::Blockies,
             Encryption::Penumbra => IdenticonStyle::Dots, // using dots for now
+            Encryption::Zcash => IdenticonStyle::Dots, // using dots for now
             Encryption::LedgerEd25519 => IdenticonStyle::Dots,
+            Encryption::Cosmos => IdenticonStyle::Dots, // could use blockies since same curve as ETH
             _ => IdenticonStyle::Dots,
         }
     }
@@ -128,7 +137,9 @@ impl TryFrom<String> for Encryption {
             "ecdsa" => Ok(Encryption::Ecdsa),
             "ethereum" => Ok(Encryption::Ethereum),
             "penumbra" => Ok(Encryption::Penumbra),
+            "zcash" => Ok(Encryption::Zcash),
             "ledger_ed25519" => Ok(Encryption::LedgerEd25519),
+            "cosmos" => Ok(Encryption::Cosmos),
             _ => Err(Error::UnknownEncryption(value)),
         }
     }

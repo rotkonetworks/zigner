@@ -395,10 +395,20 @@ pub enum Error {
     #[error("Penumbra encryption not supported for substrate-style key derivation")]
     PenumbraNotSubstrate,
 
+    /// Zcash keys use ZIP-32 derivation (m/32'/133'/account')
+    /// and cannot be derived using substrate-style paths
+    #[error("Zcash encryption not supported for substrate-style key derivation")]
+    ZcashNotSubstrate,
+
     /// Ledger Ed25519 keys use SLIP-10/BIP32-Ed25519 derivation (m/44'/354'/account'/0'/0')
     /// and cannot be derived using substrate-style paths
     #[error("Ledger Ed25519 encryption not supported for substrate-style key derivation")]
     LedgerNotSubstrate,
+
+    /// Cosmos keys use BIP44 secp256k1 derivation (m/44'/118'/account'/0/0)
+    /// and cannot be derived using substrate-style paths
+    #[error("Cosmos encryption not supported for substrate-style key derivation")]
+    CosmosNotSubstrate,
 }
 
 /// DB handling result.

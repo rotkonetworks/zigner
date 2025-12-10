@@ -489,6 +489,39 @@ fn parse_ledger_path(path: &str) -> Result<(u32, u32)> {
     Ok((slip0044, account))
 }
 
+/// Derive Cosmos MultiSigner and bech32 address from seed phrase and path
+/// Path format: m/44'/118'/account'/0/index (BIP44 style)
+/// or //cosmos//account_number for simplified UI input
+#[cfg(all(feature = "active", feature = "cosmos"))]
+fn cosmos_derive_multisigner_and_address(
+    seed_phrase: &str,
+    path: &str,
+    network_specs: Option<&NetworkSpecs>,
+) -> Result<(MultiSigner, String)> {
+    use crate::cosmos;
+
+    // Parse the path to extract coin type, account, and address index
+    let (coin_type, account, address_index) = cosmos::parse_cosmos_path(path)?;
+
+    // Derive the key
+    let key_pair = cosmos::derive_cosmos_key(seed_phrase, coin_type, account, address_index)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Cosmos key derivation failed: {}", e)))?;
+
+    // Get bech32 prefix from network specs, or use "cosmos" as default
+    let prefix = network_specs
+        .and_then(|ns| ns.path_id.split("//").nth(1))
+        .unwrap_or("cosmos");
+
+    // Generate bech32 address
+    let bech32_address = key_pair.bech32_address(prefix)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Bech32 encoding failed: {}", e)))?;
+
+    // Store as Ecdsa since Cosmos uses secp256k1
+    let multisigner = MultiSigner::Ecdsa(ecdsa::Public::from_raw(key_pair.public_key));
+
+    Ok((multisigner, bech32_address))
+}
+
 /// Get public key from seed phrase and derivation path
 fn full_address_to_multisigner(
     mut full_address: String,
@@ -514,10 +547,20 @@ fn full_address_to_multisigner(
             // this function is for substrate key derivation, penumbra keys are handled separately
             Err(Error::PenumbraNotSubstrate)
         }
+        Encryption::Zcash => {
+            // zcash uses ZIP-32 derivation (m/32'/133'/account'), not substrate-style paths
+            // this function is for substrate key derivation, zcash keys are handled separately
+            Err(Error::ZcashNotSubstrate)
+        }
         Encryption::LedgerEd25519 => {
             // Ledger uses SLIP-10/BIP32-Ed25519 derivation (m/44'/354'/account'/0'/0')
             // not substrate-style paths - handled separately in create_address
             Err(Error::LedgerNotSubstrate)
+        }
+        Encryption::Cosmos => {
+            // Cosmos uses BIP44 secp256k1 derivation (m/44'/118'/account'/0/0)
+            // not substrate-style paths - handled separately in create_address
+            Err(Error::CosmosNotSubstrate)
         }
     };
     full_address.zeroize();
@@ -1050,6 +1093,20 @@ pub(crate) fn create_address(
         #[cfg(not(feature = "ledger"))]
         {
             return Err(Error::LedgerNotSubstrate);
+        }
+    } else if encryption == Encryption::Cosmos {
+        // Cosmos uses BIP44 secp256k1 derivation
+        #[cfg(feature = "cosmos")]
+        {
+            let (multisigner, bech32_address) = cosmos_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
+            // Store the bech32 address for later retrieval
+            let pubkey_hex = hex::encode(multisigner_to_public(&multisigner));
+            crate::cosmos::store_cosmos_address(database, &pubkey_hex, &bech32_address)?;
+            multisigner
+        }
+        #[cfg(not(feature = "cosmos"))]
+        {
+            return Err(Error::CosmosNotSubstrate);
         }
     } else {
         // create fixed-length string to avoid reallocations

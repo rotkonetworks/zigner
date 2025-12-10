@@ -1,0 +1,90 @@
+package net.rotko.zigner.screens.keydetails.exportprivatekey
+
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import net.rotko.zigner.R
+import net.rotko.zigner.components.base.PrimaryButtonWide
+import net.rotko.zigner.components.base.SecondaryButtonWide
+import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.ui.theme.SignerNewTheme
+import net.rotko.zigner.ui.theme.SignerTypeface
+import net.rotko.zigner.ui.theme.textSecondary
+
+@Composable
+fun ConfirmExportPrivateKeyMenu(
+	onClose: Callback,
+	onExportPrivate: Callback,
+) {
+	val sidePadding = 24.dp
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(start = sidePadding, end = sidePadding),
+		horizontalAlignment = Alignment.CenterHorizontally,
+	) {
+		Icon(
+			painterResource(R.drawable.private_key_64),
+			null,
+			Modifier.padding(vertical = 32.dp),
+			tint = MaterialTheme.colors.primary,
+		)
+		Text(
+			text = stringResource(R.string.export_private_key_confirm_title),
+			color = MaterialTheme.colors.primary,
+			style = SignerTypeface.TitleL,
+		)
+		Text(
+			modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),
+			text = stringResource(R.string.export_private_key_confirm_text),
+			color = MaterialTheme.colors.textSecondary,
+			style = SignerTypeface.BodyL,
+			textAlign = TextAlign.Center,
+		)
+
+		PrimaryButtonWide(
+			label = stringResource(R.string.export_private_key_confirm_title),
+			onClicked = onExportPrivate,
+		)
+
+		Spacer(modifier = Modifier.padding(bottom = 8.dp))
+
+		SecondaryButtonWide(
+			label = stringResource(R.string.generic_cancel),
+			onClicked = onClose,
+		)
+		Spacer(modifier = Modifier.padding(bottom = 24.dp))
+	}
+}
+
+
+@Preview(
+	name = "light", group = "themes", uiMode = Configuration.UI_MODE_NIGHT_NO,
+	showBackground = true, backgroundColor = 0xFFFFFFFF,
+)
+@Preview(
+	name = "dark", group = "themes",
+	uiMode = Configuration.UI_MODE_NIGHT_YES,
+	showBackground = true, backgroundColor = 0xFF000000,
+)
+@Composable
+private fun PreviewConfirmExportPrivateKeyMenu() {
+	SignerNewTheme {
+		ConfirmExportPrivateKeyMenu(
+			{}, {}
+		)
+	}
+}

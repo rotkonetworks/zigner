@@ -56,7 +56,9 @@ enum Encryption {
     "Ecdsa",
     "Ethereum",
     "Penumbra",
+    "Zcash",
     "LedgerEd25519",
+    "Cosmos",
 };
 
 [Enum]
@@ -725,6 +727,26 @@ namespace signer {
     // Penumbra FVK export - generate viewing key QR for Prax import
     [Throws=ErrorDisplayed]
     PenumbraFvkExport export_penumbra_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
+
+    // ========================================================================
+    // Zcash cold signing functions
+    // ========================================================================
+
+    // Zcash FVK export - generate viewing key QR for Zafu/Prax import
+    [Throws=ErrorDisplayed]
+    ZcashFvkExport export_zcash_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label, boolean mainnet);
+
+    // Parse Zcash sign request from QR hex data
+    [Throws=ErrorDisplayed]
+    ZcashSignRequest parse_zcash_sign_request([ByRef] string qr_hex);
+
+    // Sign Zcash transaction and return signature response
+    [Throws=ErrorDisplayed]
+    ZcashSignatureResponse sign_zcash_transaction([ByRef] string seed_phrase, ZcashSignRequest request);
+
+    // Encode Zcash signature response as QR hex
+    [Throws=ErrorDisplayed]
+    sequence<u8> encode_zcash_signature_qr(ZcashSignatureResponse response);
 };
 
 dictionary MKeysNew {
@@ -979,6 +1001,82 @@ dictionary PenumbraFvkExport {
     sequence<u8> qr_data;
 };
 
+// Penumbra generic action (for unrecognized action types)
+dictionary PenumbraGenericAction {
+    string action_name;
+    string description;
+    sequence<StringPair> fields;
+    boolean recognized;
+    u32 field_number;
+};
+
+// String pair for generic action fields
+dictionary StringPair {
+    string first;
+    string second;
+};
+
+// Penumbra schema info
+dictionary PenumbraSchemaInfo {
+    string chain_id;
+    string protocol_version;
+    u32 action_count;
+    u32 schema_version;
+};
+
+// ============================================================================
+// Zcash cold signing types
+// ============================================================================
+
+// Zcash transaction summary
+dictionary ZcashTransactionSummary {
+    boolean mainnet;
+    string fee;
+    u64 spend_count;
+    u64 output_count;
+    string sighash;
+    string anchor;
+};
+
+// Zcash Orchard spend action
+dictionary ZcashOrchardSpend {
+    string nullifier;
+    string value;
+    string cmx;
+};
+
+// Zcash Orchard output action
+dictionary ZcashOrchardOutput {
+    string value;
+    string recipient;
+    boolean is_change;
+};
+
+// Zcash FVK export for watch-only wallet import
+dictionary ZcashFvkExport {
+    u32 account_index;
+    string label;
+    boolean mainnet;
+    string address;
+    string fvk_hex;
+    sequence<u8> qr_data;
+};
+
+// Zcash sign request parsed from QR
+dictionary ZcashSignRequest {
+    u32 account_index;
+    string sighash;
+    sequence<string> alphas;
+    string summary;
+    boolean mainnet;
+};
+
+// Zcash signature response to encode as QR
+dictionary ZcashSignatureResponse {
+    string sighash;
+    sequence<string> orchard_sigs;
+};
+
 [Enum]
 interface Card {
     AuthorCard(MAddressCard f);
@@ -1022,4 +1120,9 @@ interface Card {
     PenumbraSwapCard(PenumbraSwapAction f);
     PenumbraDelegateCard(PenumbraDelegateAction f);
     PenumbraVoteCard(PenumbraVoteAction f);
+    PenumbraGenericActionCard(PenumbraGenericAction f);
+    PenumbraSchemaCard(PenumbraSchemaInfo f);
+    ZcashSummaryCard(ZcashTransactionSummary f);
+    ZcashOrchardSpendCard(ZcashOrchardSpend f);
+    ZcashOrchardOutputCard(ZcashOrchardOutput f);
 };

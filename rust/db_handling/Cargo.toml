@@ -19,6 +19,7 @@ sled = "0.34.6"
 sp-core = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, features = ["full_crypto"], optional = true}
 sp-runtime = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, optional = true}
 thiserror = "1.0.57"
+serde_json = "1.0"
 time = {version = "0.3.36", features = ["formatting", "macros"]}
 tiny-bip39 = {version = "1.0.0", default-features = false, optional = true}
 zeroize = { version = "1.7.0", optional = true, features = ["std"] }
@@ -36,16 +37,21 @@ aes = { version = "0.8.4", default-features = false, optional = true }
 hmac = { version = "0.12", optional = true }
 sha2 = { version = "0.10", optional = true }
 
+# Cosmos SDK chains (BIP44 secp256k1)
+bip32 = { version = "0.5", default-features = false, features = ["secp256k1", "alloc"], optional = true }
+ripemd = { version = "0.1", optional = true }
+
 [dev-dependencies]
 pretty_assertions = { version = "1.4" }
 tempfile = { version = "3.10" }
 
 [features]
 default = []
-active = ["defaults/active", "definitions/active", "tiny-bip39", "sp-core", "sp-runtime", "zeroize", "penumbra", "ledger"]
+active = ["defaults/active", "definitions/active", "tiny-bip39", "sp-core", "sp-runtime", "zeroize", "penumbra", "ledger", "cosmos"]
 test = []
 penumbra = ["decaf377", "decaf377-rdsa", "poseidon377", "f4jumble", "bech32", "blake2b_simd", "aes", "tiny-bip39", "zeroize"]
 ledger = ["hmac", "sha2", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
+cosmos = ["bip32", "bech32", "sha2", "ripemd", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
 
 [lib]
 name = "db_handling"

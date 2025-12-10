@@ -50,6 +50,9 @@ pub mod penumbra;
 #[cfg(feature = "ledger")]
 pub mod ledger_ed25519;
 
+#[cfg(feature = "cosmos")]
+pub mod cosmos;
+
 pub use error::{Error, Result};
 
 #[cfg(test)]

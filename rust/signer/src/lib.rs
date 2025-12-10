@@ -33,6 +33,7 @@ use navigator::Error as NavigatorError;
 use sled::Db;
 use std::{
     collections::HashMap,
+    convert::TryInto,
     fmt::Display,
     str::FromStr,
     sync::{Arc, RwLock},
@@ -714,6 +715,163 @@ fn export_penumbra_fvk(
         })?,
         qr_data: export_data.encode_qr(),
     })
+}
+
+// ============================================================================
+// Zcash cold signing functions
+// ============================================================================
+
+/// Export Zcash Orchard full viewing key for import into watch-only wallet (e.g., Zafu/Prax)
+fn export_zcash_fvk(
+    seed_phrase: &str,
+    account_index: u32,
+    label: &str,
+    mainnet: bool,
+) -> Result<ZcashFvkExport, ErrorDisplayed> {
+    use transaction_signing::zcash::{OrchardSpendingKey, QR_TYPE_ZCASH_FVK_EXPORT};
+
+    // Derive Orchard spending key from seed phrase
+    let osk = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to derive Orchard key: {e}"),
+        })?;
+
+    // Get FVK bytes (96 bytes)
+    let fvk_bytes = osk.fvk_bytes();
+
+    // Get receiving address
+    let address = osk.get_address(mainnet);
+
+    // Build QR data: [0x53][0x04][type][account_index:4][mainnet:1][label_len:2][label][fvk:96]
+    let label_bytes = label.as_bytes();
+    let label_len = label_bytes.len().min(255) as u8;
+
+    let mut qr_data = Vec::with_capacity(3 + 4 + 1 + 2 + label_bytes.len() + 96);
+    qr_data.push(0x53); // 'S' for Signer
+    qr_data.push(0x04); // Zcash network ID
+    qr_data.push(QR_TYPE_ZCASH_FVK_EXPORT);
+    qr_data.extend_from_slice(&account_index.to_le_bytes());
+    qr_data.push(if mainnet { 1 } else { 0 });
+    qr_data.push(label_len);
+    qr_data.push(0); // padding for alignment
+    qr_data.extend_from_slice(&label_bytes[..label_len as usize]);
+    qr_data.extend_from_slice(&fvk_bytes);
+
+    Ok(ZcashFvkExport {
+        account_index,
+        label: label.to_string(),
+        mainnet,
+        address,
+        fvk_hex: hex::encode(&fvk_bytes),
+        qr_data,
+    })
+}
+
+/// Parse Zcash sign request from QR hex data
+fn parse_zcash_sign_request(qr_hex: &str) -> Result<ZcashSignRequest, ErrorDisplayed> {
+    use transaction_signing::zcash::ZcashSignRequest as RustSignRequest;
+
+    let request = RustSignRequest::from_qr_hex(qr_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse sign request: {e}"),
+    })?;
+
+    Ok(ZcashSignRequest {
+        account_index: request.account_index,
+        sighash: hex::encode(&request.sighash),
+        alphas: request.orchard_alphas.iter().map(hex::encode).collect(),
+        summary: request.summary,
+        mainnet: request.mainnet,
+    })
+}
+
+/// Sign Zcash transaction and return signature response
+fn sign_zcash_transaction(
+    seed_phrase: &str,
+    request: ZcashSignRequest,
+) -> Result<ZcashSignatureResponse, ErrorDisplayed> {
+    use transaction_signing::zcash::ZcashSignRequest as RustSignRequest;
+
+    // Convert back to Rust type
+    let sighash: [u8; 32] = hex::decode(&request.sighash)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Invalid sighash hex: {e}"),
+        })?
+        .try_into()
+        .map_err(|_| ErrorDisplayed::Str {
+            s: "Sighash must be 32 bytes".to_string(),
+        })?;
+
+    let orchard_alphas: Vec<[u8; 32]> = request
+        .alphas
+        .iter()
+        .map(|a| {
+            hex::decode(a)
+                .map_err(|e| ErrorDisplayed::Str {
+                    s: format!("Invalid alpha hex: {e}"),
+                })?
+                .try_into()
+                .map_err(|_| ErrorDisplayed::Str {
+                    s: "Alpha must be 32 bytes".to_string(),
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let rust_request = RustSignRequest {
+        account_index: request.account_index,
+        sighash,
+        orchard_alphas,
+        summary: request.summary,
+        mainnet: request.mainnet,
+    };
+
+    // Sign the transaction
+    let response = rust_request
+        .sign(seed_phrase)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Signing failed: {e}"),
+        })?;
+
+    Ok(ZcashSignatureResponse {
+        sighash: hex::encode(&response.sighash),
+        orchard_sigs: response.orchard_sigs.iter().map(hex::encode).collect(),
+    })
+}
+
+/// Encode Zcash signature response as QR bytes
+fn encode_zcash_signature_qr(response: ZcashSignatureResponse) -> Result<Vec<u8>, ErrorDisplayed> {
+    use transaction_signing::zcash::ZcashSignatureResponse as RustResponse;
+
+    let sighash: [u8; 32] = hex::decode(&response.sighash)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Invalid sighash hex: {e}"),
+        })?
+        .try_into()
+        .map_err(|_| ErrorDisplayed::Str {
+            s: "Sighash must be 32 bytes".to_string(),
+        })?;
+
+    let orchard_sigs: Vec<[u8; 64]> = response
+        .orchard_sigs
+        .iter()
+        .map(|s| {
+            hex::decode(s)
+                .map_err(|e| ErrorDisplayed::Str {
+                    s: format!("Invalid signature hex: {e}"),
+                })?
+                .try_into()
+                .map_err(|_| ErrorDisplayed::Str {
+                    s: "Signature must be 64 bytes".to_string(),
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let rust_response = RustResponse {
+        sighash,
+        transparent_sigs: vec![], // No transparent for now
+        orchard_sigs,
+    };
+
+    Ok(rust_response.to_qr_bytes())
 }
 
 /// Must be called once to initialize logging from Rust in development mode.

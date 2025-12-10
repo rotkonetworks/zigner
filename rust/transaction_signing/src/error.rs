@@ -49,4 +49,16 @@ pub enum Error {
     /// Penumbra effect hash error
     #[error("Penumbra effect hash error: {0}")]
     PenumbraEffectHash(String),
+
+    /// Zcash key derivation error
+    #[error("Zcash key derivation error: {0}")]
+    ZcashKeyDerivation(String),
+
+    /// Zcash signing error
+    #[error("Zcash signing error: {0}")]
+    ZcashSigning(String),
+
+    /// Zcash parsing error
+    #[error("Zcash parsing error: {0}")]
+    ZcashParsing(String),
 }

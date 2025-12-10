@@ -13,8 +13,12 @@ pub mod keys;
 #[cfg(feature = "penumbra")]
 pub mod prf;
 
+pub mod schema;
+
 #[cfg(feature = "penumbra")]
 pub use keys::*;
+
+pub use schema::*;
 
 use constants::PENUMBRA_ADDRS;
 use crate::error::Result;

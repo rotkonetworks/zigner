@@ -147,6 +147,15 @@ pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSi
                 .map_err(|_| Error::WrongPublicKeyLength)?;
             Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
         }
+        Encryption::Zcash => {
+            // Zcash uses ZIP-32 key derivation. For MultiSigner storage, we use Ed25519
+            // since the spending key is 32 bytes. The actual signing uses Zcash-specific implementation.
+            let into_pubkey: [u8; 32] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
+        }
         Encryption::LedgerEd25519 => {
             // Ledger Ed25519 uses SLIP-10/BIP32-Ed25519 derivation, but the resulting
             // public key is still a standard Ed25519 key
@@ -155,6 +164,15 @@ pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSi
                 .try_into()
                 .map_err(|_| Error::WrongPublicKeyLength)?;
             Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
+        }
+        Encryption::Cosmos => {
+            // Cosmos uses secp256k1 (same as Ethereum/Ecdsa) with BIP44 derivation
+            // Public key is 33 bytes compressed
+            let into_pubkey: [u8; 33] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ecdsa(ecdsa::Public::from_raw(into_pubkey)))
         }
     }
 }
@@ -315,10 +333,27 @@ pub fn base58_or_eth_pubkey_to_multisigner(
             let pubkey = ed25519::Public::from_ss58check(base58_or_eth)?;
             Ok(MultiSigner::Ed25519(pubkey))
         }
+        Encryption::Zcash => {
+            // zcash uses bech32m encoding for shielded addresses, not ss58
+            // this function is mainly for substrate chains
+            // for now, treat as ed25519 placeholder
+            let pubkey = ed25519::Public::from_ss58check(base58_or_eth)?;
+            Ok(MultiSigner::Ed25519(pubkey))
+        }
         Encryption::LedgerEd25519 => {
             // Ledger Ed25519 uses standard SS58 encoding for addresses
             let pubkey = ed25519::Public::from_ss58check(base58_or_eth)?;
             Ok(MultiSigner::Ed25519(pubkey))
+        }
+        Encryption::Cosmos => {
+            // Cosmos uses bech32 encoding for addresses, not ss58
+            // For now, treat as hex public key like Ethereum
+            let raw_key = unhex(base58_or_eth)?
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+
+            let pubkey = ecdsa::Public::from_raw(raw_key);
+            Ok(MultiSigner::Ecdsa(pubkey))
         }
     }
 }
