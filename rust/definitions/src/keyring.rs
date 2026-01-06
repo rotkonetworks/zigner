@@ -68,6 +68,9 @@ enum NetworkSpecsKeyContent {
     Zcash(H256),
     LedgerEd25519(H256),
     Cosmos(H256),
+    Bitcoin(H256),
+    Nostr(H256),
+    AtProtocol(H256),
 }
 
 impl NetworkSpecsKey {
@@ -83,6 +86,9 @@ impl NetworkSpecsKey {
             Encryption::Zcash => NetworkSpecsKeyContent::Zcash(*genesis_hash),
             Encryption::LedgerEd25519 => NetworkSpecsKeyContent::LedgerEd25519(*genesis_hash),
             Encryption::Cosmos => NetworkSpecsKeyContent::Cosmos(*genesis_hash),
+            Encryption::Bitcoin => NetworkSpecsKeyContent::Bitcoin(*genesis_hash),
+            Encryption::Nostr => NetworkSpecsKeyContent::Nostr(*genesis_hash),
+            Encryption::AtProtocol => NetworkSpecsKeyContent::AtProtocol(*genesis_hash),
         };
         Self(network_key_content.encode())
     }
@@ -115,6 +121,9 @@ impl NetworkSpecsKey {
             NetworkSpecsKeyContent::Zcash(b) => Ok((b, Encryption::Zcash)),
             NetworkSpecsKeyContent::LedgerEd25519(b) => Ok((b, Encryption::LedgerEd25519)),
             NetworkSpecsKeyContent::Cosmos(b) => Ok((b, Encryption::Cosmos)),
+            NetworkSpecsKeyContent::Bitcoin(b) => Ok((b, Encryption::Bitcoin)),
+            NetworkSpecsKeyContent::Nostr(b) => Ok((b, Encryption::Nostr)),
+            NetworkSpecsKeyContent::AtProtocol(b) => Ok((b, Encryption::AtProtocol)),
         }
     }
 

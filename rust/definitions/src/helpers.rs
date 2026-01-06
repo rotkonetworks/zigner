@@ -174,6 +174,32 @@ pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSi
                 .map_err(|_| Error::WrongPublicKeyLength)?;
             Ok(MultiSigner::Ecdsa(ecdsa::Public::from_raw(into_pubkey)))
         }
+        Encryption::Bitcoin => {
+            // Bitcoin uses secp256k1 with BIP-84/86 derivation
+            // Public key is 33 bytes compressed for legacy/segwit
+            let into_pubkey: [u8; 33] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ecdsa(ecdsa::Public::from_raw(into_pubkey)))
+        }
+        Encryption::Nostr => {
+            // Nostr uses BIP-340 Schnorr with 32-byte x-only pubkeys
+            // Store as Ed25519 since both are 32 bytes
+            let into_pubkey: [u8; 32] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(into_pubkey)))
+        }
+        Encryption::AtProtocol => {
+            // AT Protocol uses secp256k1 with 33-byte compressed pubkeys
+            let into_pubkey: [u8; 33] = public
+                .to_vec()
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+            Ok(MultiSigner::Ecdsa(ecdsa::Public::from_raw(into_pubkey)))
+        }
     }
 }
 
@@ -348,6 +374,36 @@ pub fn base58_or_eth_pubkey_to_multisigner(
         Encryption::Cosmos => {
             // Cosmos uses bech32 encoding for addresses, not ss58
             // For now, treat as hex public key like Ethereum
+            let raw_key = unhex(base58_or_eth)?
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+
+            let pubkey = ecdsa::Public::from_raw(raw_key);
+            Ok(MultiSigner::Ecdsa(pubkey))
+        }
+        Encryption::Bitcoin => {
+            // Bitcoin uses base58check for legacy, bech32/bech32m for segwit/taproot
+            // For now, treat as hex public key
+            let raw_key = unhex(base58_or_eth)?
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+
+            let pubkey = ecdsa::Public::from_raw(raw_key);
+            Ok(MultiSigner::Ecdsa(pubkey))
+        }
+        Encryption::Nostr => {
+            // Nostr uses bech32 npub/nsec encoding
+            // For now, treat as hex public key (32-byte x-only)
+            let raw_key: [u8; 32] = unhex(base58_or_eth)?
+                .try_into()
+                .map_err(|_| Error::WrongPublicKeyLength)?;
+
+            let pubkey = ed25519::Public::from_raw(raw_key);
+            Ok(MultiSigner::Ed25519(pubkey))
+        }
+        Encryption::AtProtocol => {
+            // AT Protocol uses did:plc identifiers
+            // For now, treat as hex public key (33-byte compressed secp256k1)
             let raw_key = unhex(base58_or_eth)?
                 .try_into()
                 .map_err(|_| Error::WrongPublicKeyLength)?;

@@ -31,6 +31,11 @@ class CameraViewModel() : ViewModel() {
 	val pendingTransactionPayloads: StateFlow<Set<String>> =
 		_pendingTransactionPayloads.asStateFlow()
 
+	// Zcash sign request payload (detected by 530402 prefix)
+	private val _zcashSignRequestPayload = MutableStateFlow<String?>(null)
+	val zcashSignRequestPayload: StateFlow<String?> =
+		_zcashSignRequestPayload.asStateFlow()
+
 	private val _dynamicDerivationPayload =
 		MutableStateFlow<String?>(null)
 	val dynamicDerivationPayload: StateFlow<String?> =
@@ -115,6 +120,14 @@ class CameraViewModel() : ViewModel() {
 
 	private fun decode(completePayload: List<String>) {
 		try {
+			// Check for Zcash sign request first (prefix 530402)
+			val firstPayload = completePayload.firstOrNull() ?: return
+			if (isZcashSignRequest(firstPayload)) {
+				resetScanValues()
+				_zcashSignRequestPayload.value = firstPayload
+				return
+			}
+
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
@@ -157,6 +170,13 @@ class CameraViewModel() : ViewModel() {
 		}
 	}
 
+	/**
+	 * Check if hex payload is a Zcash sign request (prefix 530402)
+	 */
+	private fun isZcashSignRequest(hexPayload: String): Boolean {
+		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
+	}
+
 	private fun addPendingTransaction(payload: String) {
 		_pendingTransactionPayloads.value += payload
 	}
@@ -175,6 +195,11 @@ class CameraViewModel() : ViewModel() {
 		_bananaSplitPayload.value = null
 		_dynamicDerivationPayload.value = null
 		_dynamicDerivationTransactionPayload.value = null
+		_zcashSignRequestPayload.value = null
 		resetScanValues()
+	}
+
+	fun resetZcashSignRequest() {
+		_zcashSignRequestPayload.value = null
 	}
 }

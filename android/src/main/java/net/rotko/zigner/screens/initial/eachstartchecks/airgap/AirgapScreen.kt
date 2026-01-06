@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.PrimaryButtonWide
+import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
@@ -40,6 +41,7 @@ import net.rotko.zigner.ui.theme.*
 fun AirgapScreen(
 	isInitialOnboarding: Boolean,
 	onProceed: Callback,
+	onEnableOnlineMode: Callback? = null,
 ) {
 	val viewModel = viewModel<AirGapViewModel>()
 	val state = viewModel.state.collectAsStateWithLifecycle()
@@ -57,6 +59,7 @@ fun AirgapScreen(
 			viewModel.onConfirmedAirgap()
 			onProceed()
 		},
+		onEnableOnlineMode = onEnableOnlineMode,
 	)
 }
 
@@ -65,6 +68,7 @@ private fun AirgapScreen(
 	state: AirGapScreenState,
 	isInitialOnboarding: Boolean,
 	onCta: Callback,
+	onEnableOnlineMode: Callback? = null,
 ) {
 	Column() {
 		Column(
@@ -116,13 +120,24 @@ private fun AirgapScreen(
 				}
 			}
 		}
-		PrimaryButtonWide(
-			label = if (isInitialOnboarding) stringResource(R.string.button_next)
-			else stringResource(R.string.generic_done),
-			modifier = Modifier.padding(24.dp),
-			isEnabled = state.isReadyToProceed(),
-			onClicked = onCta,
-		)
+		Column(
+			modifier = Modifier.padding(horizontal = 24.dp)
+		) {
+			PrimaryButtonWide(
+				label = if (isInitialOnboarding) stringResource(R.string.button_next)
+				else stringResource(R.string.generic_done),
+				modifier = Modifier.padding(bottom = 8.dp),
+				isEnabled = state.isReadyToProceed(),
+				onClicked = onCta,
+			)
+			if (onEnableOnlineMode != null) {
+				SecondaryButtonWide(
+					label = "Use Online Mode Instead",
+					modifier = Modifier.padding(bottom = 24.dp),
+					onClicked = onEnableOnlineMode,
+				)
+			}
+		}
 	}
 }
 

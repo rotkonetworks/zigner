@@ -20,6 +20,7 @@ class PreferencesRepository(private val context: Context) {
 	private val networksFilterKey = stringSetPreferencesKey("network_filter")
 	private val lastSelectedKeySet = stringPreferencesKey("last_selected_seed_name")
 	private val onlineModeEnabledKey = booleanPreferencesKey("online_mode_enabled")
+	private val onlineModeWasEverEnabledKey = booleanPreferencesKey("online_mode_was_ever_enabled")
 
 	val networksFilter = context.dataStore.data
 		.map { preferences ->
@@ -64,11 +65,33 @@ class PreferencesRepository(private val context: Context) {
 	}
 
 	/**
-	 * Set online mode enabled/disabled
+	 * Set online mode enabled/disabled.
+	 * When enabling online mode, also sets the permanent "was ever enabled" flag.
 	 */
 	suspend fun setOnlineModeEnabled(enabled: Boolean) {
 		context.dataStore.edit { settings ->
 			settings[onlineModeEnabledKey] = enabled
+			if (enabled) {
+				// Permanent flag - once online mode is enabled, this is set forever
+				settings[onlineModeWasEverEnabledKey] = true
+			}
 		}
+	}
+
+	/**
+	 * Flow for observing if online mode was ever enabled.
+	 * This is a permanent flag that can never be reset (except by factory reset).
+	 * Used to warn users that the wallet has been used in online mode at some point.
+	 */
+	val onlineModeWasEverEnabled: Flow<Boolean> = context.dataStore.data
+		.map { preferences ->
+			preferences[onlineModeWasEverEnabledKey] ?: false
+		}
+
+	/**
+	 * Get if online mode was ever enabled synchronously
+	 */
+	suspend fun wasOnlineModeEverEnabled(): Boolean {
+		return context.dataStore.data.first()[onlineModeWasEverEnabledKey] ?: false
 	}
 }

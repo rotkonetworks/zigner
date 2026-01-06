@@ -821,13 +821,52 @@ pub struct PenumbraTransactionSummary {
 }
 
 /// Penumbra Full Viewing Key export data for watch-only wallet import
+///
+/// Provides multiple formats for compatibility:
+/// - `fvk_bech32m`: Native Penumbra bech32m format ("penumbrafullviewingkey1...")
+/// - `wallet_id_bech32m`: Wallet identifier ("penumbrawalletid1...")
+/// - `qr_data`: Binary format for Zafu wallet
+/// - `ur_string`: UR-encoded string for hardware wallet QR compatibility
+///
+/// ## UR (Uniform Resource) Format for Penumbra
+///
+/// We define these UR types for Penumbra (proposed, not yet standardized):
+///
+/// | UR Type                    | CBOR Tag | Description                    |
+/// |----------------------------|----------|--------------------------------|
+/// | penumbra-accounts          | 49301    | Container for accounts         |
+/// | penumbra-full-viewing-key  | 49302    | Single FVK with metadata       |
+///
+/// ## CBOR Structure for penumbra-accounts
+///
+/// ```text
+/// PenumbraAccounts = {
+///   1: bytes,                ; wallet_id (32 bytes, identifies the wallet)
+///   2: [+ #49302(FVK)]       ; accounts array, each tagged with 49302
+/// }
+///
+/// PenumbraFullViewingKey (#49302) = {
+///   1: tstr,                 ; fvk - bech32m encoded full viewing key
+///   2: uint,                 ; index - account index (0, 1, 2, ...)
+///   ? 3: tstr                ; name - optional account label
+/// }
+/// ```
+///
+/// Reference: https://github.com/BlockchainCommons/Research (UR spec)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PenumbraFvkExport {
     pub account_index: u32,
     pub label: String,
+    /// Bech32m encoded FVK ("penumbrafullviewingkey1...")
     pub fvk_bech32m: String,
+    /// Bech32m encoded wallet ID ("penumbrawalletid1...")
     pub wallet_id_bech32m: String,
+    /// Binary QR data for Zafu wallet
     pub qr_data: Vec<u8>,
+    /// UR-encoded string for hardware wallet QR compatibility
+    /// Format: "ur:penumbra-accounts/<bytewords>"
+    /// Uses CBOR tag 49301 (penumbra-accounts) containing tag 49302 (penumbra-full-viewing-key)
+    pub ur_string: String,
 }
 
 /// String pair for FFI compatibility
@@ -891,14 +930,40 @@ pub struct ZcashOrchardOutput {
 }
 
 /// Zcash Full Viewing Key export data for watch-only wallet import
+///
+/// Provides multiple formats for maximum compatibility:
+/// - `ufvk`: ZIP-316 Unified Full Viewing Key string ("uview1..." or "uviewtest1...")
+/// - `qr_data`: Binary format for Zafu wallet
+/// - `ur_string`: UR-encoded string for Zashi/Keystone hardware wallet QR compatibility
+///
+/// ## UR (Uniform Resource) Format
+///
+/// UR is a standard by Blockchain Commons for encoding data in QR codes.
+/// The `ur_string` uses the Keystone SDK's `zcash-accounts` registry type:
+///
+/// | UR Type       | CBOR Tag | Description                       |
+/// |---------------|----------|-----------------------------------|
+/// | zcash-accounts| 49201    | Container for multiple accounts   |
+/// | zcash-ufvk    | 49203    | Single unified full viewing key   |
+///
+/// Reference: https://github.com/KeystoneHQ/keystone-sdk-rust
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashFvkExport {
     pub account_index: u32,
     pub label: String,
     pub mainnet: bool,
+    /// Unified address for receiving funds (orchard only)
     pub address: String,
+    /// Raw FVK bytes as hex (96 bytes orchard FVK)
     pub fvk_hex: String,
+    /// Unified Full Viewing Key string (ZIP-316 format: "uview1..." or "uviewtest1...")
+    pub ufvk: String,
+    /// Binary QR data for Zafu wallet
     pub qr_data: Vec<u8>,
+    /// UR-encoded string for Zashi/Keystone QR compatibility
+    /// Format: "ur:zcash-accounts/<bytewords>"
+    /// Uses CBOR tag 49201 (zcash-accounts) containing tag 49203 (zcash-unified-full-viewing-key)
+    pub ur_string: String,
 }
 
 /// Zcash sign request parsed from QR

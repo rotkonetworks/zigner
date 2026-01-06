@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.captionBarPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -18,12 +20,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
+import kotlinx.coroutines.launch
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.isDbCreatedAndOnboardingPassed
 import net.rotko.zigner.screens.initial.eachstartchecks.airgap.AirgapScreen
 import net.rotko.zigner.screens.initial.eachstartchecks.rootcheck.RootExposedScreen
 import net.rotko.zigner.screens.initial.eachstartchecks.screenlock.SetScreenLockScreen
+import net.rotko.zigner.screens.settings.general.ConfirmOnlineModeBottomSheet
+import net.rotko.zigner.ui.BottomSheetWrapperRoot
 import net.rotko.zigner.ui.rootnavigation.MainGraphRoutes
 
 
@@ -80,9 +85,35 @@ fun NavGraphBuilder.enableEachStartAppFlow(globalNavController: NavHostControlle
 					SetScreenLockScreen()
 				}
 				EachStartSubgraphScreenSteps.AIR_GAP -> {
-					AirgapScreen(isInitialOnboarding = true) {
-						//go to next screen
-						goToNextFlow()
+					val showOnlineModeConfirm = remember { mutableStateOf(false) }
+					val coroutineScope = rememberCoroutineScope()
+
+					AirgapScreen(
+						isInitialOnboarding = true,
+						onProceed = {
+							//go to next screen
+							goToNextFlow()
+						},
+						onEnableOnlineMode = {
+							showOnlineModeConfirm.value = true
+						}
+					)
+
+					if (showOnlineModeConfirm.value) {
+						BottomSheetWrapperRoot(
+							onClosedAction = { showOnlineModeConfirm.value = false }
+						) {
+							ConfirmOnlineModeBottomSheet(
+								onCancel = { showOnlineModeConfirm.value = false },
+								onConfirm = {
+									coroutineScope.launch {
+										viewModel.enableOnlineMode()
+										showOnlineModeConfirm.value = false
+										goToNextFlow()
+									}
+								}
+							)
+						}
 					}
 				}
 			}

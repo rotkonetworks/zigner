@@ -25,23 +25,13 @@ class Authentication {
 	}
 
 	/**
-	 * Due to BiometricPrompt.java:553 [setAllowedAuthenticators()] description we can't always require only
-	 * Device credentials as have to allow biometric on older android versions
-	 *
-	 * BiometricManager.Authenticators.DEVICE_CREDENTIAL should be used above 31
+	 * Allow biometric (fingerprint/face) with PIN/password fallback.
+	 * BIOMETRIC_STRONG requires hardware-backed biometrics.
+	 * DEVICE_CREDENTIAL allows PIN/password/pattern as fallback.
 	 */
 	private fun getRequiredAuthMethods(): Int {
-		return when (android.os.Build.VERSION.SDK_INT) {
-			in 30..Int.MAX_VALUE -> {
-				BiometricManager.Authenticators.DEVICE_CREDENTIAL
-			}
-			28, 29 -> {
-				BiometricManager.Authenticators.DEVICE_CREDENTIAL or BiometricManager.Authenticators.BIOMETRIC_WEAK
-			}
-			else -> {
-				BiometricManager.Authenticators.DEVICE_CREDENTIAL or BiometricManager.Authenticators.BIOMETRIC_STRONG
-			}
-		}
+		return BiometricManager.Authenticators.BIOMETRIC_STRONG or
+			BiometricManager.Authenticators.DEVICE_CREDENTIAL
 	}
 
 	private lateinit var biometricPrompt: BiometricPrompt

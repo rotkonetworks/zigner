@@ -18,6 +18,7 @@ import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.addVaultLogger
 import net.rotko.zigner.screens.error.handleErrorAppState
 import net.rotko.zigner.screens.initial.UnlockAppAuthScreen
+import net.rotko.zigner.screens.initial.UnlockingScreen
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
 import kotlinx.coroutines.launch
 
@@ -29,40 +30,52 @@ fun NavGraphBuilder.mainSignerAppFlow(globalNavController: NavHostController) {
 		val authenticated =
 			mainFlowViewModel.authenticated.collectAsStateWithLifecycle()
 
+		val isUnlocking =
+			mainFlowViewModel.isUnlocking.collectAsStateWithLifecycle()
+
+		val unlockStatus =
+			mainFlowViewModel.unlockStatus.collectAsStateWithLifecycle()
+
 		val unlockedNavController =
 			rememberNavController().apply { addVaultLogger() }
 
 		val networkState =
 			mainFlowViewModel.networkState.collectAsStateWithLifecycle()
 
-		if (authenticated.value) {
-			// Structure to contain all app
-			Box(
-				modifier = Modifier
-					.navigationBarsPadding()
-					.captionBarPadding(),
-			) {
-				CoreUnlockedNavSubgraph(unlockedNavController)
-			}
+		when {
+			authenticated.value -> {
+				// Structure to contain all app
+				Box(
+					modifier = Modifier
+						.navigationBarsPadding()
+						.captionBarPadding(),
+				) {
+					CoreUnlockedNavSubgraph(unlockedNavController)
+				}
 
-			//check for network and navigate to blocker screen if needed
-			when (networkState.value) {
-				NetworkState.Active -> {
-					if (unlockedNavController.currentDestination
-							?.route != CoreUnlockedNavSubgraph.airgapBreached
-					) {
-						unlockedNavController.navigate(CoreUnlockedNavSubgraph.airgapBreached)
+				//check for network and navigate to blocker screen if needed
+				when (networkState.value) {
+					NetworkState.Active -> {
+						if (unlockedNavController.currentDestination
+								?.route != CoreUnlockedNavSubgraph.airgapBreached
+						) {
+							unlockedNavController.navigate(CoreUnlockedNavSubgraph.airgapBreached)
+						}
 					}
+					else -> {}
 				}
-				else -> {}
 			}
-		} else {
-			UnlockAppAuthScreen(onUnlockClicked = {
-				mainFlowViewModel.viewModelScope.launch {
-					mainFlowViewModel.onUnlockClicked()
-						.handleErrorAppState(globalNavController)
-				}
-			})
+			isUnlocking.value -> {
+				UnlockingScreen(status = unlockStatus.value)
+			}
+			else -> {
+				UnlockAppAuthScreen(onUnlockClicked = {
+					mainFlowViewModel.viewModelScope.launch {
+						mainFlowViewModel.onUnlockClicked()
+							.handleErrorAppState(globalNavController)
+					}
+				})
+			}
 		}
 	}
 }

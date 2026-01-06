@@ -24,6 +24,7 @@ import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.submitErrorState
 import net.rotko.zigner.screens.error.handleErrorAppState
 import net.rotko.zigner.screens.initial.WaitingScreen
+import net.rotko.zigner.screens.keysetdetails.backup.BackupMethodSelectBottomSheet
 import net.rotko.zigner.screens.keysetdetails.backup.KeySetBackupFullOverlayBottomSheet
 import net.rotko.zigner.screens.keysetdetails.backup.toSeedBackupModel
 import net.rotko.zigner.screens.keysetdetails.empty.NoKeySetEmptyWelcomeScreen
@@ -151,19 +152,9 @@ fun KeySetDetailsScreenSubgraph(
 								menuNavController.popBackStack()
 								menuNavController.navigate(KeySetDetailsMenuSubgraph.export)
 							},
-							onBackupManualClicked = {
-								menuNavController.navigate(KeySetDetailsMenuSubgraph.backup) {
+							onBackupSeedClicked = {
+								menuNavController.navigate(KeySetDetailsMenuSubgraph.backup_method_select) {
 									popUpTo(KeySetDetailsMenuSubgraph.empty)
-								}
-							},
-							onBackupBsClicked = {
-								menuNavController.popBackStack()
-								seedName.value?.let { seedName ->
-									coreNavController.navigate(
-										CoreUnlockedNavSubgraph.CreateBananaSplit.destination(
-											seedName
-										)
-									)
 								}
 							},
 							onCancel = {
@@ -179,6 +170,26 @@ fun KeySetDetailsScreenSubgraph(
 									popUpTo(KeySetDetailsMenuSubgraph.empty)
 								}
 							}
+						)
+					}
+				}
+				composable(KeySetDetailsMenuSubgraph.backup_method_select) {
+					BottomSheetWrapperRoot(onClosedAction = closeAction) {
+						BackupMethodSelectBottomSheet(
+							onManualBackup = {
+								menuNavController.navigate(KeySetDetailsMenuSubgraph.backup) {
+									popUpTo(KeySetDetailsMenuSubgraph.empty)
+								}
+							},
+							onBananaSplit = {
+								menuNavController.popBackStack()
+								seedName.value?.let { name ->
+									coreNavController.navigate(
+										CoreUnlockedNavSubgraph.CreateBananaSplit.destination(name)
+									)
+								}
+							},
+							onCancel = closeAction
 						)
 					}
 				}
@@ -254,34 +265,16 @@ fun KeySetDetailsScreenSubgraph(
 					}
 				}
 				composable(KeySetDetailsMenuSubgraph.export) {
-					val selected = rememberSaveable { mutableStateOf(setOf<String>()) }
-					val isResultState = rememberSaveable { mutableStateOf(false) }
+					// Auto-select all keys and go directly to export result
+					// This simplifies the backup flow - no wallet selection needed
+					val allKeys = state.filteredModel.keysAndNetwork.map { it.key.addressKey }.toSet()
 
-					if (!isResultState.value) {
-						BottomSheetWrapperRoot(onClosedAction = closeAction) {
-							KeySetDetailsMultiselectBottomSheet(
-								model = state.filteredModel,
-								selected = selected,
-								onClose = closeAction,
-								onExportSelected = {
-									isResultState.value = true
-								},
-								onExportAll = {
-									selected.value =
-										state.filteredModel.keysAndNetwork.map { it.key.addressKey }
-											.toSet()
-									isResultState.value = true
-								},
-							)
-						}
-					} else {
-						BottomSheetWrapperRoot(onClosedAction = closeAction) {
-							KeySetDetailsExportResultBottomSheet(
-								model = state.filteredModel,
-								selectedKeys = selected.value,
-								onClose = closeAction,
-							)
-						}
+					BottomSheetWrapperRoot(onClosedAction = closeAction) {
+						KeySetDetailsExportResultBottomSheet(
+							model = state.filteredModel,
+							selectedKeys = allKeys,
+							onClose = closeAction,
+						)
 					}
 				}
 				composable(KeySetDetailsMenuSubgraph.exposed_shield_alert) {
@@ -299,6 +292,7 @@ private object KeySetDetailsMenuSubgraph {
 	const val keys_menu = "keys_menu"
 	const val keys_menu_delete_confirm = "keys_menu_delete_confirm"
 	const val network_filter = "keys_network_filters"
+	const val backup_method_select = "backup_method_select"
 	const val backup = "keyset_details_backup"
 	const val export = "export_multiselect"
 	const val exposed_shield_alert = "keys_exposed_shield_alert"

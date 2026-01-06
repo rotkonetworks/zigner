@@ -99,20 +99,26 @@ class ResetUseCase {
 	 * This returns the app into starting state;
 	 * Do not forget to reset navigation UI state!
 	 */
-	fun totalRefresh(): OperationResult<Unit, ErrorStateDestinationState> {
+	fun totalRefresh(
+		onStatusUpdate: ((String) -> Unit)? = null
+	): OperationResult<Unit, ErrorStateDestinationState> {
 		if (!seedStorage.isInitialized()) {
+			onStatusUpdate?.invoke("Initializing secure keystore (TEE)...")
 			val result = seedStorage.init(appContext)
 			if (result is OperationResult.Err) {
 				return result
 			}
+			onStatusUpdate?.invoke("Initializing encrypted storage...")
 			val result2 = clearCryptedStorage.init(appContext)
 			if (result2 is OperationResult.Err) {
 				return result2
 			}
 		}
 		if (!appContext.isDbCreatedAndOnboardingPassed()) {
+			onStatusUpdate?.invoke("Setting up database...")
 			initAssetsAndTotalRefresh()
 		} else {
+			onStatusUpdate?.invoke("Loading keysets...")
 			totalRefreshDbExist()
 		}
 		return OperationResult.Ok(Unit)

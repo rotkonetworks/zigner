@@ -90,7 +90,7 @@ use crate::{
 };
 use crate::{Error, Result};
 
-/// Get display address for a multisigner - checks for stored Penumbra address first
+/// Get display address for a multisigner - checks for stored addresses first
 #[cfg(feature = "active")]
 fn get_display_address(
     database: &sled::Db,
@@ -102,6 +102,14 @@ fn get_display_address(
     if encryption == Encryption::Penumbra {
         let ak_hex = hex::encode(multisigner_to_public(multisigner));
         if let Ok(Some(address)) = crate::penumbra::get_penumbra_address(database, &ak_hex) {
+            return address;
+        }
+    }
+    // For Zcash, try to get the stored unified address
+    #[cfg(feature = "zcash")]
+    if encryption == Encryption::Zcash {
+        let pubkey_hex = hex::encode(multisigner_to_public(multisigner));
+        if let Ok(Some(address)) = crate::zcash::get_zcash_address(database, &pubkey_hex) {
             return address;
         }
     }
@@ -522,6 +530,31 @@ fn cosmos_derive_multisigner_and_address(
     Ok((multisigner, bech32_address))
 }
 
+/// Derive Zcash MultiSigner and unified address from seed phrase and path
+/// Path format: m/32'/133'/account' (ZIP-32 style for Orchard)
+/// or //zcash//account_number for simplified UI input
+#[cfg(all(feature = "active", feature = "zcash"))]
+fn zcash_derive_multisigner_and_address(
+    seed_phrase: &str,
+    path: &str,
+    network_specs: Option<&NetworkSpecs>,
+) -> Result<(MultiSigner, String)> {
+    use crate::zcash;
+
+    // Determine if mainnet based on network specs (default to mainnet)
+    let mainnet = network_specs
+        .map(|ns| !ns.name.to_lowercase().contains("test"))
+        .unwrap_or(true);
+
+    // Derive Zcash keys
+    let (pubkey, unified_address) = zcash::derive_zcash_keys(seed_phrase, path, mainnet)?;
+
+    // Store as Ed25519 since both are 32-byte keys
+    let multisigner = MultiSigner::Ed25519(ed25519::Public::from_raw(pubkey));
+
+    Ok((multisigner, unified_address))
+}
+
 /// Get public key from seed phrase and derivation path
 fn full_address_to_multisigner(
     mut full_address: String,
@@ -561,6 +594,21 @@ fn full_address_to_multisigner(
             // Cosmos uses BIP44 secp256k1 derivation (m/44'/118'/account'/0/0)
             // not substrate-style paths - handled separately in create_address
             Err(Error::CosmosNotSubstrate)
+        }
+        Encryption::Bitcoin => {
+            // Bitcoin uses BIP-84/86 derivation (m/84'/0'/account'/change/index)
+            // not substrate-style paths - handled separately in create_address
+            Err(Error::BitcoinNotSubstrate)
+        }
+        Encryption::Nostr => {
+            // Nostr uses NIP-06 derivation (m/44'/1237'/account'/0/0)
+            // not substrate-style paths - handled separately in create_address
+            Err(Error::NostrNotSubstrate)
+        }
+        Encryption::AtProtocol => {
+            // AT Protocol uses BIP-44 secp256k1 derivation (m/44'/29'/account'/0/0)
+            // not substrate-style paths - handled separately in create_address
+            Err(Error::AtProtoNotSubstrate)
         }
     };
     full_address.zeroize();
@@ -741,6 +789,20 @@ pub fn dynamic_derivations_response(
     let mut derivations = vec![];
     for derivation_request in &seed_request.dynamic_derivations {
         let path = derivation_request.derivation_path.as_str();
+
+        // Skip non-substrate encryption types - they use their own derivation schemes
+        match derivation_request.encryption {
+            Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos => {
+                // These encryption types don't support dynamic derivations via substrate paths
+                // Return an error for these - they should use their specific derivation endpoints
+                return Err(Error::Other(anyhow::anyhow!(
+                    "Dynamic derivations not supported for {:?} encryption. Use specific key derivation for this chain.",
+                    derivation_request.encryption
+                )));
+            }
+            _ => {}
+        }
+
         // create fixed-length string to avoid reallocations
         let mut full_address = String::with_capacity(seed_phrase.len() + path.len());
         full_address.push_str(seed_phrase);
@@ -837,6 +899,16 @@ pub fn inject_derivations_has_pwd(
             } else {
                 continue;
             };
+
+            // Skip non-substrate encryption types - they don't support substrate-style password derivation
+            // Penumbra, Zcash, LedgerEd25519, and Cosmos use their own derivation schemes
+            match derived_key.encryption {
+                Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos => {
+                    derived_key.has_pwd = Some(false);
+                    continue;
+                }
+                _ => {}
+            }
 
             // create fixed-length string to avoid reallocation
             let mut full_address = String::with_capacity(seed_phrase.len() + path.len());
@@ -1107,6 +1179,20 @@ pub(crate) fn create_address(
         #[cfg(not(feature = "cosmos"))]
         {
             return Err(Error::CosmosNotSubstrate);
+        }
+    } else if encryption == Encryption::Zcash {
+        // Zcash uses ZIP-32 Orchard derivation
+        #[cfg(feature = "zcash")]
+        {
+            let (multisigner, unified_address) = zcash_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
+            // Store the unified address for later retrieval
+            let pubkey_hex = hex::encode(multisigner_to_public(&multisigner));
+            crate::zcash::store_zcash_address(database, &pubkey_hex, &unified_address)?;
+            multisigner
+        }
+        #[cfg(not(feature = "zcash"))]
+        {
+            return Err(Error::ZcashNotSubstrate);
         }
     } else {
         // create fixed-length string to avoid reallocations

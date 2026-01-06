@@ -37,6 +37,7 @@ fun ScanScreen(
 	onBananaSplit: (List<String>) -> Unit,
 	onDynamicDerivations: suspend (String) -> Unit,
 	onDynamicDerivationsTransactions: suspend (List<String>) -> Unit,
+	onZcashSignRequest: (String) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
 
@@ -49,6 +50,8 @@ fun ScanScreen(
 	val currentOnDynamicDerivationsTransactions by rememberUpdatedState(
 		onDynamicDerivationsTransactions
 	)
+	val currentOnZcashSignRequest by rememberUpdatedState(onZcashSignRequest)
+
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
 		viewModel.resetPendingTransactions()
@@ -87,6 +90,17 @@ fun ScanScreen(
 				.filter { it.isNotEmpty() }
 				.collect { qrData ->
 					currentOnDynamicDerivationsTransactions(qrData)
+				}
+		}
+
+		// Zcash sign request handler
+		launch {
+			viewModel.zcashSignRequestPayload
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { qrData ->
+					currentOnZcashSignRequest(qrData)
+					viewModel.resetZcashSignRequest()
 				}
 		}
 	}
@@ -218,7 +232,7 @@ private fun CameraViewWithPermission(viewModel: CameraViewModel) {
 private fun PreviewScanScreen() {
 	SignerNewTheme {
 		Box(modifier = Modifier.size(350.dp, 550.dp)) {
-			ScanScreen({}, { _ -> }, { _ -> }, { _ -> }, { _ -> })
+			ScanScreen({}, { _ -> }, { _ -> }, { _ -> }, { _ -> }, { _ -> })
 		}
 	}
 }

@@ -36,6 +36,10 @@ pub mod penumbra;
 #[cfg(feature = "penumbra")]
 use penumbra::process_penumbra_transaction;
 
+// zcash support
+pub mod zcash;
+use zcash::process_zcash_sign_request;
+
 // penumbra schema support (always available)
 pub mod penumbra_protobuf;
 pub mod penumbra_schema_parser;
@@ -71,6 +75,16 @@ fn handle_scanner_input(database: &sled::Db, payload: &str) -> Result<Transactio
 
     if &data_hex[..2] != "53" {
         return Err(Error::NotSubstrate(data_hex[..2].to_string()));
+    }
+
+    // check for zcash transactions first (crypto type 0x04)
+    // format: [0x53][crypto_type][tx_type]
+    // zcash uses crypto_type=0x04, tx_type=0x02 for sign requests
+    if &data_hex[2..4] == "04" {
+        return match &data_hex[4..6] {
+            "02" => process_zcash_sign_request(database, data_hex),
+            _ => Err(Error::PayloadNotSupported(format!("zcash tx type {}", &data_hex[4..6]))),
+        };
     }
 
     match &data_hex[4..6] {

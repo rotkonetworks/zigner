@@ -59,6 +59,9 @@ enum Encryption {
     "Zcash",
     "LedgerEd25519",
     "Cosmos",
+    "Bitcoin",
+    "Nostr",
+    "AtProtocol",
 };
 
 [Enum]
@@ -747,6 +750,34 @@ namespace signer {
     // Encode Zcash signature response as QR hex
     [Throws=ErrorDisplayed]
     sequence<u8> encode_zcash_signature_qr(ZcashSignatureResponse response);
+
+    // Generate a test Zcash sign request QR (for development/testing only)
+    string generate_test_zcash_sign_request(u32 account_index, u32 action_count, boolean mainnet, [ByRef] string summary);
+
+    // ========================================================================
+    // PCZT/UR functions for Zashi hardware wallet compatibility
+    // ========================================================================
+
+    // Decode UR-encoded PCZT from QR scan(s)
+    // ur_parts: vector of scanned QR strings (for animated QR, pass all parts)
+    [Throws=ErrorDisplayed]
+    sequence<u8> decode_ur_zcash_pczt(sequence<string> ur_parts);
+
+    // Sign a PCZT with the spending key derived from seed phrase
+    // Returns the signed PCZT bytes
+    [Throws=ErrorDisplayed]
+    sequence<u8> sign_zcash_pczt([ByRef] string seed_phrase, u32 account_index, sequence<u8> pczt_bytes);
+
+    // Encode signed PCZT as UR string(s) for QR display
+    // max_fragment_len: max bytes per QR (0 = no limit, single QR)
+    // Returns vector of UR strings (animated QR parts)
+    [Throws=ErrorDisplayed]
+    sequence<string> encode_signed_pczt_ur(sequence<u8> pczt_bytes, u32 max_fragment_len);
+
+    // High-level: sign PCZT from UR QR and return signed UR QR parts
+    // This is the main entry point for Zashi compatibility
+    [Throws=ErrorDisplayed]
+    sequence<string> sign_zcash_pczt_ur([ByRef] string seed_phrase, u32 account_index, sequence<string> ur_parts, u32 max_fragment_len);
 };
 
 dictionary MKeysNew {
@@ -993,12 +1024,16 @@ dictionary PenumbraTransactionSummary {
 };
 
 // Penumbra FVK export for watch-only wallet import
+// Includes UR-encoded string for hardware wallet QR compatibility
+// UR type: penumbra-accounts (CBOR tag 49301)
+// Inner type: penumbra-full-viewing-key (CBOR tag 49302)
 dictionary PenumbraFvkExport {
     u32 account_index;
     string label;
     string fvk_bech32m;
     string wallet_id_bech32m;
     sequence<u8> qr_data;
+    string ur_string;
 };
 
 // Penumbra generic action (for unrecognized action types)
@@ -1059,7 +1094,9 @@ dictionary ZcashFvkExport {
     boolean mainnet;
     string address;
     string fvk_hex;
+    string ufvk;
     sequence<u8> qr_data;
+    string ur_string;
 };
 
 // Zcash sign request parsed from QR

@@ -97,6 +97,8 @@ private fun getResourceIdForNetwork(networkName: String) =
 		// too big or links to text png inside. Added as png
 		"composable" -> R.drawable.network_composable
 		"mangata-parachain" -> R.drawable.network_mangata_parachain
+		"penumbra" -> R.drawable.network_penumbra
+		"zcash" -> R.drawable.network_zcash
 		//svgs below
 		"acala" -> R.drawable.network_acala
 		"acala_testnet" -> R.drawable.network_acala_testnet

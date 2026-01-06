@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -55,8 +57,11 @@ internal fun SettingsScreenGeneralView(
 	onGeneralVerifier: Callback,
 	onExposedClicked: Callback,
 	onOnlineModeToggle: Callback,
+	onZcashTestQr: Callback = {},
 	isStrongBoxProtected: Boolean,
 	isOnlineModeEnabled: Boolean,
+	wasOnlineModeEverEnabled: Boolean,
+	securitySummary: String,
 	appVersion: String,
 	networkState: State<NetworkState?>,
 ) {
@@ -93,9 +98,18 @@ internal fun SettingsScreenGeneralView(
 				)
 				SettingsToggleElement(
 					name = "Online Mode",
-					description = "Allow use with WiFi/Bluetooth enabled",
+					description = if (wasOnlineModeEverEnabled && !isOnlineModeEnabled) {
+						"Previously used in online mode"
+					} else {
+						"Allow use with WiFi/Bluetooth enabled"
+					},
 					isChecked = isOnlineModeEnabled,
+					showWarning = wasOnlineModeEverEnabled && !isOnlineModeEnabled,
 					onClick = onOnlineModeToggle,
+				)
+				SettingsElement(
+					name = "Zcash Test QR",
+					onClick = onZcashTestQr,
 				)
 				SettingsElement(
 					name = stringResource(R.string.settings_wipe_data),
@@ -104,9 +118,7 @@ internal fun SettingsScreenGeneralView(
 					onClick = onWipeData
 				)
 				Text(
-					text = stringResource(
-						R.string.settings_hardware_key, isStrongBoxProtected.toString()
-					),
+					text = "Security: $securitySummary",
 					style = SignerTypeface.BodyM,
 					color = MaterialTheme.colors.textSecondary,
 					modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
@@ -117,6 +129,15 @@ internal fun SettingsScreenGeneralView(
 					color = MaterialTheme.colors.textSecondary,
 					modifier = Modifier.padding(horizontal = 24.dp)
 				)
+				Spacer(modifier = Modifier.height(16.dp))
+				Image(
+					painter = painterResource(id = R.drawable.rotko_logo),
+					contentDescription = "Rotko Networks",
+					modifier = Modifier
+						.padding(horizontal = 24.dp)
+						.height(40.dp)
+				)
+				Spacer(modifier = Modifier.height(24.dp))
 			}
 			ExposedIcon(
 				networkState = networkState,
@@ -165,6 +186,7 @@ internal fun SettingsToggleElement(
 	name: String,
 	description: String,
 	isChecked: Boolean,
+	showWarning: Boolean = false,
 	onClick: Callback,
 ) {
 	Row(
@@ -186,7 +208,7 @@ internal fun SettingsToggleElement(
 			Text(
 				text = description,
 				style = SignerTypeface.CaptionM,
-				color = MaterialTheme.colors.textSecondary,
+				color = if (showWarning) MaterialTheme.colors.red400 else MaterialTheme.colors.textSecondary,
 			)
 		}
 		Spacer(modifier = Modifier.width(8.dp))
@@ -226,8 +248,11 @@ private fun PreviewSettingsScreen() {
 			onGeneralVerifier = {},
 			onExposedClicked = {},
 			onOnlineModeToggle = {},
+			onZcashTestQr = {},
 			isStrongBoxProtected = false,
 			isOnlineModeEnabled = false,
+			wasOnlineModeEverEnabled = true,
+			securitySummary = "StrongBox + MTE",
 			appVersion = "0.6.1",
 			networkState = state,
 		)

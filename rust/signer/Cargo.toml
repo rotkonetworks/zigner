@@ -11,6 +11,17 @@ hex = "0.4.3"
 uniffi = { version = "0.22.0" }
 lazy_static = "1.4.0"
 sled = "0.34"
+# UR (Uniform Resource) encoding for Keystone/Zashi compatibility
+# see: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md
+ur = "0.4"
+# SHA-256 for seed fingerprint
+sha2 = "0.10"
+# PCZT (Partially Created Zcash Transaction) for Zashi hardware wallet signing
+# Note: requires transparent feature due to bug in pczt crate where signer role references transparent types
+pczt = { git = "https://github.com/zcash/librustzcash", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
+zcash_transparent = { git = "https://github.com/zcash/librustzcash", package = "zcash_transparent", features = ["transparent-inputs"] }
+# Orchard crate for SpendAuthorizingKey type - use same version as pczt
+orchard = "0.12"
 
 sp-runtime = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false }
 sp-core = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, features = ["full_crypto"] }

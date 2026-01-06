@@ -92,6 +92,17 @@ pub enum Encryption {
     /// Cosmos SDK chains - uses BIP44 secp256k1 with bech32 addresses
     /// Path: m/44'/118'/account'/0/0 (or chain-specific coin type)
     Cosmos,
+    /// Bitcoin - uses BIP-84 (native segwit) or BIP-86 (taproot)
+    /// Path: m/84'/0'/account'/change/index or m/86'/0'/account'/change/index
+    /// Schnorr signatures (BIP-340) for taproot, ECDSA for legacy/segwit
+    Bitcoin,
+    /// Nostr - uses NIP-06 key derivation with Schnorr signatures
+    /// Path: m/44'/1237'/account'/0/0
+    Nostr,
+    /// AT Protocol (Bluesky) - uses secp256k1 with did:plc identifiers
+    /// Path: m/44'/29'/account'/0/0 (using coin type 29 for AT Protocol)
+    /// ECDSA signatures for repo commits and identity operations
+    AtProtocol,
 }
 
 impl Encryption {
@@ -108,6 +119,9 @@ impl Encryption {
             Encryption::Zcash => String::from("zcash"),
             Encryption::LedgerEd25519 => String::from("ledger_ed25519"),
             Encryption::Cosmos => String::from("cosmos"),
+            Encryption::Bitcoin => String::from("bitcoin"),
+            Encryption::Nostr => String::from("nostr"),
+            Encryption::AtProtocol => String::from("atproto"),
         }
     }
 
@@ -122,6 +136,9 @@ impl Encryption {
             Encryption::Zcash => IdenticonStyle::Dots, // using dots for now
             Encryption::LedgerEd25519 => IdenticonStyle::Dots,
             Encryption::Cosmos => IdenticonStyle::Dots, // could use blockies since same curve as ETH
+            Encryption::Bitcoin => IdenticonStyle::Dots, // Bitcoin addresses
+            Encryption::Nostr => IdenticonStyle::Dots, // Nostr npub
+            Encryption::AtProtocol => IdenticonStyle::Dots, // AT Protocol did:plc
             _ => IdenticonStyle::Dots,
         }
     }
@@ -140,6 +157,9 @@ impl TryFrom<String> for Encryption {
             "zcash" => Ok(Encryption::Zcash),
             "ledger_ed25519" => Ok(Encryption::LedgerEd25519),
             "cosmos" => Ok(Encryption::Cosmos),
+            "bitcoin" => Ok(Encryption::Bitcoin),
+            "nostr" => Ok(Encryption::Nostr),
+            "atproto" | "atprotocol" | "bluesky" => Ok(Encryption::AtProtocol),
             _ => Err(Error::UnknownEncryption(value)),
         }
     }

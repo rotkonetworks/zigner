@@ -89,6 +89,8 @@ fun KeyDetailsPublicKeyScreen(
 	onRequestFvk: Callback = {},
 ) {
 	val isFvkNetwork = isFvkNetwork(model.networkInfo.networkLogo)
+	// Toggle between FVK (for wallet import) and Address (for receiving)
+	var showFvk by remember { mutableStateOf(true) }
 
 	// Auto-request FVK for Penumbra/Zcash on first load
 	LaunchedEffect(isFvkNetwork) {
@@ -142,14 +144,14 @@ fun KeyDetailsPublicKeyScreen(
 						val isPreview = LocalInspectionMode.current
 
 						when {
-							// FVK networks: show FVK QR (or loading)
-							isFvkNetwork && fvkLoading -> {
+							// FVK networks: show FVK QR or Address QR based on toggle
+							isFvkNetwork && showFvk && fvkLoading -> {
 								CircularProgressIndicator(
 									color = MaterialTheme.colors.pink500,
 									modifier = Modifier.size(48.dp)
 								)
 							}
-							isFvkNetwork && fvkResult != null -> {
+							isFvkNetwork && showFvk && fvkResult != null -> {
 								val fvkQrImage = remember(fvkResult) {
 									fvkResult.qrPng.intoImageBitmap()
 								}
@@ -160,7 +162,7 @@ fun KeyDetailsPublicKeyScreen(
 									modifier = Modifier.size(264.dp)
 								)
 							}
-							// Regular networks: show address QR
+							// Address QR (for receiving funds) - all networks including FVK networks
 							else -> {
 								val qrImage = remember {
 									if (isPreview) {
@@ -182,7 +184,7 @@ fun KeyDetailsPublicKeyScreen(
 						Modifier.padding(16.dp),
 						verticalAlignment = Alignment.CenterVertically,
 					) {
-						if (isFvkNetwork && fvkResult != null) {
+						if (isFvkNetwork && showFvk && fvkResult != null) {
 							Text(
 								text = "FVK: ${fvkResult.displayKey.take(20)}...",
 								style = SignerTypeface.CaptionM,
@@ -205,16 +207,53 @@ fun KeyDetailsPublicKeyScreen(
 					}
 				}
 
-				// Info text for FVK networks
-				if (isFvkNetwork && fvkResult != null) {
+				// Toggle buttons for FVK networks (FVK vs Address)
+				if (isFvkNetwork) {
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(horizontal = 24.dp, vertical = 8.dp),
+						horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+					) {
+						val selectedBg = MaterialTheme.colors.pink500
+						val unselectedBg = MaterialTheme.colors.fill12
+
+						// FVK button
+						Text(
+							text = "FVK",
+							style = SignerTypeface.LabelM,
+							color = if (showFvk) Color.White else MaterialTheme.colors.primary,
+							modifier = Modifier
+								.clip(RoundedCornerShape(8.dp, 0.dp, 0.dp, 8.dp))
+								.background(if (showFvk) selectedBg else unselectedBg)
+								.clickable { showFvk = true }
+								.padding(horizontal = 24.dp, vertical = 10.dp)
+						)
+						// Address button
+						Text(
+							text = "Receive",
+							style = SignerTypeface.LabelM,
+							color = if (!showFvk) Color.White else MaterialTheme.colors.primary,
+							modifier = Modifier
+								.clip(RoundedCornerShape(0.dp, 8.dp, 8.dp, 0.dp))
+								.background(if (!showFvk) selectedBg else unselectedBg)
+								.clickable { showFvk = false }
+								.padding(horizontal = 24.dp, vertical = 10.dp)
+						)
+					}
+					// Info text
 					Text(
-						text = "Scan with Prax/Zafu to import as watch-only wallet",
+						text = if (showFvk) {
+							"Scan with Zafu to import as watch-only wallet"
+						} else {
+							"Scan to send funds to this cold wallet"
+						},
 						style = SignerTypeface.CaptionM,
 						color = MaterialTheme.colors.textTertiary,
 						textAlign = TextAlign.Center,
 						modifier = Modifier
 							.fillMaxWidth()
-							.padding(horizontal = 24.dp, vertical = 8.dp)
+							.padding(horizontal = 24.dp, vertical = 4.dp)
 					)
 				}
 

@@ -1,12 +1,17 @@
 package net.rotko.zigner.screens.settings.general
 
 import android.content.Context
+import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import net.rotko.zigner.R
 import net.rotko.zigner.dependencygraph.ServiceLocator
+import net.rotko.zigner.domain.AuthResult
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.backend.OperationResult
+import net.rotko.zigner.domain.security.MemoryProtection
 import net.rotko.zigner.domain.usecases.ResetUseCase
 import net.rotko.zigner.screens.error.ErrorStateDestinationState
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,8 +24,35 @@ class SettingsGeneralViewModel: ViewModel() {
 
 	private val resetUseCase: ResetUseCase = ResetUseCase()
 	private val preferencesRepository = ServiceLocator.preferencesRepository
+	private val authentication = ServiceLocator.authentication
+	private val activity: FragmentActivity
+		get() = ServiceLocator.activityScope!!.activity
 
 	val isStrongBoxProtected: Boolean = ServiceLocator.seedStorage.isStrongBoxProtected
+
+	/**
+	 * Get human-readable security summary for settings display.
+	 * Shows what hardware features are available, not warnings.
+	 */
+	fun getSecuritySummary(context: Context): String {
+		val parts = mutableListOf<String>()
+
+		// Key storage
+		if (isStrongBoxProtected) {
+			parts.add("StrongBox")
+		} else {
+			parts.add("TEE")
+		}
+
+		// MTE
+		val mteStatus = MemoryProtection.getMteStatus()
+		if (mteStatus.mode != MemoryProtection.MteMode.OFF &&
+			mteStatus.mode != MemoryProtection.MteMode.UNKNOWN) {
+			parts.add("MTE")
+		}
+
+		return parts.joinToString(" + ")
+	}
 
 	fun getAppVersion(context: Context): String {
 		return context.packageManager.getPackageInfo(
@@ -40,11 +72,65 @@ class SettingsGeneralViewModel: ViewModel() {
 		preferencesRepository.onlineModeEnabled
 			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-	fun setOnlineModeEnabled(enabled: Boolean) {
-		viewModelScope.launch {
-			preferencesRepository.setOnlineModeEnabled(enabled)
+	/**
+	 * Enable online mode with authentication.
+	 * This is a security-sensitive operation that:
+	 * 1. Requires biometric/password authentication
+	 * 2. Permanently marks the wallet as having been used in online mode
+	 * 3. Records the event in history
+	 */
+	suspend fun enableOnlineModeWithAuth(onSuccess: Callback): OperationResult<Unit, ErrorStateDestinationState> {
+		return when (authentication.authenticate(activity)) {
+			AuthResult.AuthError,
+			AuthResult.AuthFailed,
+			AuthResult.AuthUnavailable -> {
+				Toast.makeText(
+					activity.baseContext,
+					activity.baseContext.getString(R.string.auth_failed_message),
+					Toast.LENGTH_SHORT
+				).show()
+				OperationResult.Ok(Unit)
+			}
+			AuthResult.AuthSuccess -> {
+				preferencesRepository.setOnlineModeEnabled(true)
+				// Log to history that online mode was enabled
+				ServiceLocator.uniffiInteractor.historyDeviceWasOnline()
+				onSuccess()
+				OperationResult.Ok(Unit)
+			}
 		}
 	}
+
+	/**
+	 * Disable online mode with authentication.
+	 * Requires authentication to prevent unauthorized changes.
+	 */
+	suspend fun disableOnlineModeWithAuth(onSuccess: Callback): OperationResult<Unit, ErrorStateDestinationState> {
+		return when (authentication.authenticate(activity)) {
+			AuthResult.AuthError,
+			AuthResult.AuthFailed,
+			AuthResult.AuthUnavailable -> {
+				Toast.makeText(
+					activity.baseContext,
+					activity.baseContext.getString(R.string.auth_failed_message),
+					Toast.LENGTH_SHORT
+				).show()
+				OperationResult.Ok(Unit)
+			}
+			AuthResult.AuthSuccess -> {
+				preferencesRepository.setOnlineModeEnabled(false)
+				onSuccess()
+				OperationResult.Ok(Unit)
+			}
+		}
+	}
+
+	/**
+	 * Check if online mode was ever enabled (permanent flag).
+	 */
+	val onlineModeWasEverEnabled: StateFlow<Boolean> =
+		preferencesRepository.onlineModeWasEverEnabled
+			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
 	/**
 	 * Auth user and wipe the Vault to initial state

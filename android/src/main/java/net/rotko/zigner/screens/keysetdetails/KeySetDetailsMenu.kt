@@ -47,8 +47,7 @@ fun KeySetDeleteConfirmBottomSheet(
 fun KeyDetailsMenuGeneral(
 	networkState: State<NetworkState?>,
 	onSelectKeysClicked: Callback,
-	onBackupBsClicked: Callback,
-	onBackupManualClicked: Callback,
+	onBackupSeedClicked: Callback,
 	onDeleteClicked: Callback,
 	exposeConfirmAction: Callback,//also called shield
 	onCancel: Callback,
@@ -67,22 +66,11 @@ fun KeyDetailsMenuGeneral(
 		)
 
 		MenuItemForBottomSheet(
-			vector = Icons.Outlined.QrCode,
-			label = stringResource(R.string.key_set_menu_option_backup_bs),
-			onclick = {
-				if (networkState.value == NetworkState.None)
-					onBackupBsClicked()
-				else
-					exposeConfirmAction()
-			}
-		)
-
-		MenuItemForBottomSheet(
 			iconId = R.drawable.ic_settings_backup_restore_28,
-			label = stringResource(R.string.key_set_menu_option_backup_manual),
+			label = stringResource(R.string.key_set_menu_option_backup_seed),
 			onclick = {
 				if (networkState.value == NetworkState.None)
-					onBackupManualClicked()
+					onBackupSeedClicked()
 				else
 					exposeConfirmAction()
 			}
@@ -118,7 +106,7 @@ private fun PreviewKeyDetailsMenu() {
 	SignerNewTheme {
 		val state = remember { mutableStateOf(NetworkState.None) }
 		KeyDetailsMenuGeneral(
-			state, {}, {}, {}, {}, {}, {},
+			state, {}, {}, {}, {}, {},
 		)
 	}
 }

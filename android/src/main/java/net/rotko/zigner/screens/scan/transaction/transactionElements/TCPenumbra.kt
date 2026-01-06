@@ -341,6 +341,128 @@ fun TCPenumbraVote(vote: PenumbraVoteAction) {
     }
 }
 
+/**
+ * Penumbra Generic Action Card
+ * For schema-parsed actions that aren't specifically recognized
+ */
+@Composable
+fun TCPenumbraGenericAction(action: PenumbraGenericAction) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colors.fill6)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = action.actionName,
+                style = SignerTypeface.LabelM,
+                color = if (action.recognized) MaterialTheme.colors.Crypto400 else MaterialTheme.colors.textTertiary
+            )
+            if (!action.recognized) {
+                Text(
+                    text = "(#${action.fieldNumber})",
+                    style = SignerTypeface.CaptionM,
+                    color = MaterialTheme.colors.textTertiary
+                )
+            }
+        }
+
+        if (action.description.isNotEmpty()) {
+            Text(
+                text = action.description,
+                style = SignerTypeface.CaptionM,
+                color = MaterialTheme.colors.textSecondary
+            )
+        }
+
+        action.fields.forEach { field ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "${field.first}:",
+                    style = SignerTypeface.BodyL,
+                    color = MaterialTheme.colors.textTertiary
+                )
+                Text(
+                    text = field.second,
+                    style = SignerTypeface.BodyL,
+                    color = MaterialTheme.colors.primary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Penumbra Schema Info Card
+ * Shows protocol version and action counts
+ */
+@Composable
+fun TCPenumbraSchema(schema: PenumbraSchemaInfo) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colors.fill6)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "Protocol Schema",
+            style = SignerTypeface.LabelM,
+            color = MaterialTheme.colors.textTertiary
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Chain:",
+                style = SignerTypeface.BodyL,
+                color = MaterialTheme.colors.textTertiary
+            )
+            Text(
+                text = schema.chainId,
+                style = SignerTypeface.BodyL,
+                color = MaterialTheme.colors.primary
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Version:",
+                style = SignerTypeface.BodyL,
+                color = MaterialTheme.colors.textTertiary
+            )
+            Text(
+                text = schema.protocolVersion,
+                style = SignerTypeface.BodyL,
+                color = MaterialTheme.colors.primary
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Actions:",
+                style = SignerTypeface.BodyL,
+                color = MaterialTheme.colors.textTertiary
+            )
+            Text(
+                text = "${schema.actionCount} types (schema v${schema.schemaVersion})",
+                style = SignerTypeface.BodyL,
+                color = MaterialTheme.colors.primary
+            )
+        }
+    }
+}
+
 
 @Preview(
     name = "light", group = "themes", uiMode = Configuration.UI_MODE_NIGHT_NO,

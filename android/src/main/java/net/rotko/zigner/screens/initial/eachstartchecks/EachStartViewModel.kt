@@ -13,6 +13,8 @@ class EachStartViewModel : ViewModel() {
 
 	private val networkExposedStateKeeper =
 		ServiceLocator.networkExposedStateKeeper
+	private val preferencesRepository =
+		ServiceLocator.preferencesRepository
 
 	fun isAuthPossible(context: Context): Boolean = Authentication.canAuthenticate(context)
 
@@ -22,4 +24,11 @@ class EachStartViewModel : ViewModel() {
 
 	val networkState: StateFlow<NetworkState> = networkExposedStateKeeper.airGapModeState
 
+	/**
+	 * Enable online mode to bypass airgap requirements.
+	 * This is called when user chooses to use online mode from the airgap screen.
+	 */
+	suspend fun enableOnlineMode() {
+		preferencesRepository.setOnlineModeEnabled(true)
+	}
 }

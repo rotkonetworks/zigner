@@ -147,20 +147,26 @@ class KeyDetailsScreenViewModel : ViewModel() {
 					when {
 						networkLogo.lowercase().contains("zcash") -> {
 							val export = exportZcashFvk(seedResult.result, accountIndex, label, mainnet)
-							val qrPng = encodeToQr(export.qrData, false)
+							// Use UR-encoded string for Zashi/Keystone compatibility
+							// The ur_string is "ur:zcash-accounts/..." which can be encoded directly as text QR
+							val urBytes = export.urString.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+							val urQrPng = encodeToQr(urBytes, false)
 							FvkExportResult(
-								displayKey = export.fvkHex,
-								qrPng = qrPng.toList(),
+								displayKey = export.ufvk,  // Show UFVK instead of raw hex
+								qrPng = urQrPng.toList(),
 								label = export.label,
 								networkType = "zcash"
 							)
 						}
 						networkLogo.lowercase().contains("penumbra") -> {
 							val export = exportPenumbraFvk(seedResult.result, accountIndex, label)
-							val qrPng = encodeToQr(export.qrData, false)
+							// Use UR-encoded string for hardware wallet QR compatibility
+							// Format: "ur:penumbra-accounts/..." (CBOR tag 49301)
+							val urBytes = export.urString.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+							val urQrPng = encodeToQr(urBytes, false)
 							FvkExportResult(
 								displayKey = export.fvkBech32m,
-								qrPng = qrPng.toList(),
+								qrPng = urQrPng.toList(),
 								label = export.label,
 								networkType = "penumbra"
 							)

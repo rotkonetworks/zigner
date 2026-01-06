@@ -598,6 +598,10 @@ pub enum Error {
     /// Penumbra transaction parsing error
     #[error("Penumbra parsing error: {0}")]
     PenumbraParseError(String),
+
+    /// Zcash transaction parsing error
+    #[error("Zcash parsing error: {0}")]
+    ZcashParseError(String),
 }
 
 fn display_parsing_errors(network_name: &str, errors: &[(u32, parser::Error)]) -> String {

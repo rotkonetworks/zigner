@@ -116,8 +116,8 @@ pub fn make_message(make: Make) -> Result<()> {
                 .concat();
                 (complete_message, format!("{name_stub}_Alice-ecdsa"))
             }
-            Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos => {
-                // penumbra uses decaf377-rdsa, zcash uses ZIP-32, ledger/cosmos use different flow
+            Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos | Encryption::Bitcoin | Encryption::Nostr | Encryption::AtProtocol => {
+                // penumbra uses decaf377-rdsa, zcash uses ZIP-32, ledger/cosmos/bitcoin/nostr/atproto use different flow
                 return Err(Error::NotSupported);
             }
         },

@@ -409,6 +409,21 @@ pub enum Error {
     /// and cannot be derived using substrate-style paths
     #[error("Cosmos encryption not supported for substrate-style key derivation")]
     CosmosNotSubstrate,
+
+    /// Bitcoin keys use BIP-84/86 derivation (m/84'/0'/account'/change/index)
+    /// and cannot be derived using substrate-style paths
+    #[error("Bitcoin encryption not supported for substrate-style key derivation")]
+    BitcoinNotSubstrate,
+
+    /// Nostr keys use NIP-06 derivation (m/44'/1237'/account'/0/0)
+    /// and cannot be derived using substrate-style paths
+    #[error("Nostr encryption not supported for substrate-style key derivation")]
+    NostrNotSubstrate,
+
+    /// AT Protocol keys use BIP-44 secp256k1 derivation (m/44'/29'/account'/0/0)
+    /// and cannot be derived using substrate-style paths
+    #[error("AT Protocol encryption not supported for substrate-style key derivation")]
+    AtProtoNotSubstrate,
 }
 
 /// DB handling result.

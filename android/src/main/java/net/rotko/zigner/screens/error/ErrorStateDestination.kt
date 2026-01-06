@@ -52,9 +52,12 @@ fun NavGraphBuilder.errorStateDestination(
 		BackHandler {
 			//disable back navigation on this screen
 		}
-		AirgapScreen(isInitialOnboarding = false) {
-			navController.popBackStack()
-		}
+		AirgapScreen(
+			isInitialOnboarding = false,
+			onProceed = {
+				navController.popBackStack()
+			}
+		)
 	}
 }
 

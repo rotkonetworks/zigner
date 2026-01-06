@@ -53,6 +53,18 @@ pub mod ledger_ed25519;
 #[cfg(feature = "cosmos")]
 pub mod cosmos;
 
+#[cfg(feature = "zcash")]
+pub mod zcash;
+
+#[cfg(feature = "bitcoin_keys")]
+pub mod bitcoin;
+
+#[cfg(feature = "nostr_keys")]
+pub mod nostr;
+
+#[cfg(feature = "atproto")]
+pub mod atproto;
+
 pub use error::{Error, Result};
 
 #[cfg(test)]

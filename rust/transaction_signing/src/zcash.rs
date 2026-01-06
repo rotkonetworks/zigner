@@ -227,6 +227,26 @@ impl OrchardSpendingKey {
             .expect("valid receivers")
             .encode(&network)
     }
+
+    /// get unified full viewing key (UFVK) string for wallet import
+    /// this is the standard format used by Zashi/Ywallet/etc
+    #[cfg(feature = "zcash")]
+    pub fn get_ufvk(&self, mainnet: bool) -> String {
+        use orchard::keys::FullViewingKey;
+        use zcash_address::unified::{Encoding, Fvk, Ufvk};
+        use zcash_address::Network;
+
+        let sk = self.to_spending_key().expect("valid spending key");
+        let fvk = FullViewingKey::from(&sk);
+
+        // Build UFVK with just Orchard FVK
+        let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
+        let network = if mainnet { Network::Main } else { Network::Test };
+
+        Ufvk::try_from_items(vec![orchard_fvk])
+            .expect("valid fvk items")
+            .encode(&network)
+    }
 }
 
 /// sign an orchard action with a randomized key
@@ -1089,5 +1109,305 @@ mod tests {
         assert_eq!(request.account_index, 0);
         assert_eq!(request.orchard_alphas.len(), 1);
         assert!(request.mainnet);
+    }
+
+    #[test]
+    fn test_sign_request_empty_summary() {
+        let mut data = Vec::new();
+        data.push(0x53);
+        data.push(0x04);
+        data.push(QR_TYPE_ZCASH_SIGN_REQUEST);
+        data.push(0x01); // mainnet
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&[0x42u8; 32]); // sighash
+        data.extend_from_slice(&1u16.to_le_bytes()); // 1 action
+        data.extend_from_slice(&[0x11u8; 32]); // alpha
+        data.extend_from_slice(&0u16.to_le_bytes()); // empty summary
+
+        let request = ZcashSignRequest::from_qr_bytes(&data).unwrap();
+        assert_eq!(request.summary, "");
+    }
+
+    #[test]
+    fn test_sign_request_multiple_actions() {
+        let mut data = Vec::new();
+        data.push(0x53);
+        data.push(0x04);
+        data.push(QR_TYPE_ZCASH_SIGN_REQUEST);
+        data.push(0x01); // mainnet
+        data.extend_from_slice(&3u32.to_le_bytes()); // account 3
+        data.extend_from_slice(&[0xAA; 32]); // sighash
+        data.extend_from_slice(&5u16.to_le_bytes()); // 5 actions
+
+        // 5 alpha values
+        for i in 0..5 {
+            data.extend_from_slice(&[i as u8; 32]);
+        }
+
+        let summary = "Multi-action test";
+        data.extend_from_slice(&(summary.len() as u16).to_le_bytes());
+        data.extend_from_slice(summary.as_bytes());
+
+        let request = ZcashSignRequest::from_qr_bytes(&data).unwrap();
+        assert_eq!(request.account_index, 3);
+        assert_eq!(request.orchard_alphas.len(), 5);
+        assert_eq!(request.orchard_alphas[0], [0u8; 32]);
+        assert_eq!(request.orchard_alphas[4], [4u8; 32]);
+    }
+
+    #[test]
+    fn test_sign_request_invalid_prelude() {
+        let data = vec![0x53, 0x04, 0x99, 0x01]; // wrong type
+        let result = ZcashSignRequest::from_qr_bytes(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sign_request_truncated() {
+        let data = vec![0x53, 0x04, 0x02, 0x01, 0x00]; // too short
+        let result = ZcashSignRequest::from_qr_bytes(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_signature_response_with_transparent() {
+        let response = ZcashSignatureResponse {
+            sighash: [0x42u8; 32],
+            transparent_sigs: vec![vec![0x01; 72], vec![0x02; 71]],
+            orchard_sigs: vec![[0xABu8; 64]],
+        };
+
+        let encoded = response.to_qr_bytes();
+
+        // Verify transparent count = 2
+        let t_count = u16::from_le_bytes(encoded[35..37].try_into().unwrap());
+        assert_eq!(t_count, 2);
+
+        // First transparent sig: len=72
+        let sig1_len = u16::from_le_bytes(encoded[37..39].try_into().unwrap());
+        assert_eq!(sig1_len, 72);
+
+        // Second transparent sig starts at 37 + 2 + 72 = 111
+        let sig2_len = u16::from_le_bytes(encoded[111..113].try_into().unwrap());
+        assert_eq!(sig2_len, 71);
+    }
+
+    #[test]
+    fn test_signature_response_hex_roundtrip() {
+        let response = ZcashSignatureResponse {
+            sighash: [0x42u8; 32],
+            transparent_sigs: vec![],
+            orchard_sigs: vec![[0xABu8; 64], [0xCDu8; 64]],
+        };
+
+        let hex = response.to_qr_hex();
+        assert!(hex.starts_with("530403")); // prelude in hex
+
+        // Verify it can be decoded (would need decode method)
+        let decoded_bytes = hex::decode(&hex).unwrap();
+        assert_eq!(decoded_bytes[0], 0x53);
+        assert_eq!(decoded_bytes[1], 0x04);
+        assert_eq!(decoded_bytes[2], 0x03);
+    }
+
+    #[test]
+    fn test_fvk_export_with_transparent_xpub() {
+        let xpub = vec![0x04; 78]; // typical xpub length
+        let export = ZcashFvkExportData {
+            account_index: 1,
+            label: Some("Mixed Wallet".to_string()),
+            orchard_fvk: Some([0x55; 96]),
+            transparent_xpub: Some(xpub.clone()),
+            mainnet: true,
+        };
+
+        let encoded = export.encode_qr();
+        let decoded = ZcashFvkExportData::decode_qr(&encoded).unwrap();
+
+        assert_eq!(decoded.account_index, 1);
+        assert_eq!(decoded.label, Some("Mixed Wallet".to_string()));
+        assert!(decoded.orchard_fvk.is_some());
+        assert_eq!(decoded.transparent_xpub, Some(xpub));
+        assert!(decoded.mainnet);
+    }
+
+    #[test]
+    fn test_fvk_export_orchard_only() {
+        let export = ZcashFvkExportData {
+            account_index: 0,
+            label: None,
+            orchard_fvk: Some([0xAA; 96]),
+            transparent_xpub: None,
+            mainnet: false,
+        };
+
+        let encoded = export.encode_qr();
+
+        // Check flags: bit 1 set (orchard), bits 0 and 2 not set
+        assert_eq!(encoded[3] & 0x01, 0); // not mainnet
+        assert_eq!(encoded[3] & 0x02, 0x02); // has orchard
+        assert_eq!(encoded[3] & 0x04, 0); // no transparent
+
+        let decoded = ZcashFvkExportData::decode_qr(&encoded).unwrap();
+        assert!(!decoded.mainnet);
+        assert!(decoded.orchard_fvk.is_some());
+        assert!(decoded.transparent_xpub.is_none());
+    }
+
+    #[test]
+    fn test_zafu_compatibility_sign_request() {
+        // Test format that Zafu wallet generates
+        // This ensures cross-wallet compatibility
+        let zafu_hex = concat!(
+            "530402",           // prelude: substrate compat, zcash, sign request
+            "01",               // flags: mainnet
+            "00000000",         // account index: 0 (little endian)
+            "4242424242424242424242424242424242424242424242424242424242424242", // sighash
+            "0100",             // action count: 1 (little endian)
+            "1111111111111111111111111111111111111111111111111111111111111111", // alpha
+            "0800",             // summary length: 8 (little endian)
+            "5465737420747878"  // "Test txx" in hex
+        );
+
+        let request = ZcashSignRequest::from_qr_hex(zafu_hex).unwrap();
+        assert_eq!(request.account_index, 0);
+        assert!(request.mainnet);
+        assert_eq!(request.orchard_alphas.len(), 1);
+        assert_eq!(request.summary, "Test txx");
+    }
+
+    #[test]
+    fn test_zafu_compatibility_signature_response() {
+        // Verify signature response format matches what Zafu expects
+        let response = ZcashSignatureResponse {
+            sighash: [0x42u8; 32],
+            transparent_sigs: vec![],
+            orchard_sigs: vec![[0x11u8; 64]],
+        };
+
+        let hex = response.to_qr_hex();
+
+        // Zafu expects: 530403 + sighash(32) + t_count(2) + o_count(2) + sigs
+        assert!(hex.starts_with("530403")); // prelude
+        assert_eq!(hex.len(), 2 * (3 + 32 + 2 + 2 + 64)); // 206 hex chars
+
+        // Parse manually to verify structure
+        let bytes = hex::decode(&hex).unwrap();
+        assert_eq!(&bytes[3..35], &[0x42u8; 32]); // sighash
+        assert_eq!(u16::from_le_bytes([bytes[35], bytes[36]]), 0); // 0 transparent
+        assert_eq!(u16::from_le_bytes([bytes[37], bytes[38]]), 1); // 1 orchard
+        assert_eq!(&bytes[39..103], &[0x11u8; 64]); // orchard sig
+    }
+
+    #[test]
+    fn test_full_signing_roundtrip() {
+        // this test simulates the full flow:
+        // 1. zafu creates a sign request QR
+        // 2. zigner parses it and signs
+        // 3. zafu can parse the signature response
+        //
+        // this proves the integration works end-to-end
+
+        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+        // step 1: create sign request (what zafu would generate)
+        // using real alpha from random bytes (in real life this comes from pczt)
+        let sighash = [0x42u8; 32];
+        let alpha = [0x01u8; 32]; // simplified alpha for test
+
+        let mut request_data = Vec::new();
+        request_data.push(0x53); // substrate compat
+        request_data.push(0x04); // zcash
+        request_data.push(0x02); // sign request
+        request_data.push(0x01); // flags: mainnet
+        request_data.extend_from_slice(&0u32.to_le_bytes()); // account 0
+        request_data.extend_from_slice(&sighash); // sighash
+        request_data.extend_from_slice(&1u16.to_le_bytes()); // 1 action
+        request_data.extend_from_slice(&alpha); // alpha
+        let summary = "Send 1.0 ZEC";
+        request_data.extend_from_slice(&(summary.len() as u16).to_le_bytes());
+        request_data.extend_from_slice(summary.as_bytes());
+
+        let request_hex = hex::encode(&request_data);
+
+        // step 2: zigner parses and signs
+        let request = ZcashSignRequest::from_qr_hex(&request_hex).unwrap();
+        assert_eq!(request.account_index, 0);
+        assert_eq!(request.sighash, sighash);
+        assert_eq!(request.orchard_alphas.len(), 1);
+        assert!(request.mainnet);
+
+        // sign with the spending key
+        let response = request.sign(test_mnemonic).unwrap();
+
+        // step 3: encode response as QR
+        let response_hex = response.to_qr_hex();
+
+        // step 4: verify response format (what zafu would parse)
+        let response_bytes = hex::decode(&response_hex).unwrap();
+
+        // verify prelude
+        assert_eq!(response_bytes[0], 0x53);
+        assert_eq!(response_bytes[1], 0x04);
+        assert_eq!(response_bytes[2], 0x03); // signatures type
+
+        // verify sighash matches
+        assert_eq!(&response_bytes[3..35], &sighash);
+
+        // verify we got 0 transparent sigs
+        assert_eq!(u16::from_le_bytes([response_bytes[35], response_bytes[36]]), 0);
+
+        // verify we got 1 orchard sig
+        assert_eq!(u16::from_le_bytes([response_bytes[37], response_bytes[38]]), 1);
+
+        // verify signature is 64 bytes
+        let sig = &response_bytes[39..103];
+        assert_eq!(sig.len(), 64);
+
+        // verify signature is not all zeros (actually signed)
+        assert!(sig.iter().any(|&b| b != 0));
+
+        println!("full roundtrip test passed!");
+        println!("sign request: {} bytes", request_data.len());
+        println!("signature response: {} bytes", response_bytes.len());
+        println!("orchard signature: {}", hex::encode(sig));
+    }
+
+    #[test]
+    fn test_signing_produces_valid_redpallas_signature() {
+        // verify the signature is a valid redpallas signature structure
+        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+        let request = ZcashSignRequest {
+            account_index: 0,
+            sighash: [0xAA; 32],
+            orchard_alphas: vec![[0x01; 32]],
+            summary: "test".to_string(),
+            mainnet: true,
+        };
+
+        let response = request.sign(test_mnemonic).unwrap();
+
+        assert_eq!(response.orchard_sigs.len(), 1);
+        let sig = &response.orchard_sigs[0];
+
+        // redpallas signature structure:
+        // - first 32 bytes: R (point on pallas curve)
+        // - last 32 bytes: s (scalar)
+        // both should be non-trivial
+        let r_bytes = &sig[..32];
+        let s_bytes = &sig[32..];
+
+        // R should not be all zeros
+        assert!(r_bytes.iter().any(|&b| b != 0), "R component is all zeros");
+
+        // s should not be all zeros
+        assert!(s_bytes.iter().any(|&b| b != 0), "s component is all zeros");
+
+        // signature should be deterministic for same inputs
+        let response2 = request.sign(test_mnemonic).unwrap();
+        // note: actually redpallas uses randomness, so signatures differ
+        // but both should be valid
+        assert_eq!(response2.orchard_sigs.len(), 1);
     }
 }

@@ -18,13 +18,19 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeader
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.qrcode.AnimatedQrKeysInfo
 import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
+import net.rotko.zigner.components.security.OperatingModeIndicator
+import net.rotko.zigner.components.security.SecurityWarningBanner
+import net.rotko.zigner.dependencygraph.ServiceLocator
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.UnifiiStubs
 import net.rotko.zigner.domain.getData
 import net.rotko.zigner.domain.submitErrorState
@@ -84,8 +90,15 @@ internal fun TransactionsScreenFull(
 	onApprove: Callback,
 	onImportKeys: Callback,
 ) {
+	// Mode state from NetworkExposedStateKeeper
+	val networkStateKeeper = ServiceLocator.networkExposedStateKeeper
+	val isOnlineMode = networkStateKeeper.onlineModeEnabled.collectAsState()
+	val airgapState = networkStateKeeper.airGapModeState.collectAsState()
+	val isAirgapBreached = airgapState.value == NetworkState.Active
+
 	// otherwise rust state machine will stuck in transaction state and won't allow navigation to default NAVBAR action when user leaves camera.
 	BackHandler(onBack = onBack)
+
 	Column(
 		modifier
 			.background(MaterialTheme.colors.backgroundPrimary)
@@ -97,6 +110,28 @@ internal fun TransactionsScreenFull(
 			),
 			onBack = onBack
 		)
+
+		// Just show operating mode - clean and minimal
+		Row(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(horizontal = 16.dp, vertical = 8.dp),
+			horizontalArrangement = Arrangement.Start
+		) {
+			OperatingModeIndicator(
+				isOnlineMode = isOnlineMode.value,
+				isAirgapBreached = isAirgapBreached
+			)
+		}
+
+		// Only warn about actionable issues - airgap breach
+		if (!isOnlineMode.value && isAirgapBreached) {
+			SecurityWarningBanner(
+				message = "Network detected! Turn on airplane mode.",
+				modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+			)
+		}
+
 		Column(
 			Modifier
 				.verticalScroll(rememberScrollState())

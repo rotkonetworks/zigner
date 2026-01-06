@@ -86,6 +86,10 @@ pub const ADDRTREE: &[u8] = b"addresses";
 /// Key: hex-encoded ak (spend verification key), Value: bech32m address string
 pub const PENUMBRA_ADDRS: &[u8] = b"penumbra_addresses";
 
+/// Tree name for the tree storing Zcash unified addresses
+/// Key: hex-encoded FVK prefix (32 bytes), Value: unified address string
+pub const ZCASH_ADDRESS_TREE: &[u8] = b"zcash_addresses";
+
 /// Tree name for the tree storing database settings
 ///
 /// In cold database, the settings tree contains general verifier, types

@@ -22,6 +22,10 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![allow(clippy::let_unit_value)]
 
+// These crates are used by pczt but need to be declared here
+// to satisfy the unused_crate_dependencies lint
+use zcash_transparent as _;
+
 mod ffi_types;
 
 use crate::ffi_types::*;
@@ -666,11 +670,38 @@ fn sign_network_spec_with_key(
     .map_err(|e| e.into())
 }
 
-/// Export Penumbra full viewing key for import into watch-only wallet (e.g., Prax)
+/// Export Penumbra Full Viewing Key for import into watch-only wallet (e.g., Prax)
 ///
-/// Derives the FVK from the seed phrase and returns it in multiple formats:
-/// - bech32m encoded strings for display
-/// - QR-encoded binary for scanning
+/// Returns both:
+/// - FVK bech32m string (native Penumbra format) for direct import
+/// - UR-encoded string (penumbra-accounts format) for hardware wallet QR compatibility
+///
+/// ## UR (Uniform Resource) Format for Penumbra
+///
+/// We define these UR types (proposed by Zigner, following Blockchain Commons pattern):
+///
+/// | UR Type                    | CBOR Tag | Description                    |
+/// |----------------------------|----------|--------------------------------|
+/// | penumbra-accounts          | 49301    | Container for accounts         |
+/// | penumbra-full-viewing-key  | 49302    | Single FVK with metadata       |
+///
+/// These tags are in the "first-come-first-served" range (32768+), no registration needed.
+/// Adjacent to Keystone's Zcash tags (49201-49204) for consistency.
+///
+/// ## CBOR Structure for penumbra-accounts
+///
+/// ```text
+/// PenumbraAccounts = {
+///   1: bytes,                ; wallet_id (32 bytes)
+///   2: [+ #49302(FVK)]       ; accounts array
+/// }
+///
+/// PenumbraFullViewingKey (#49302) = {
+///   1: tstr,                 ; fvk - bech32m encoded ("penumbrafullviewingkey1...")
+///   2: uint,                 ; index - account index
+///   ? 3: tstr                ; name - optional label
+/// }
+/// ```
 fn export_penumbra_fvk(
     seed_phrase: &str,
     account_index: u32,
@@ -704,16 +735,106 @@ fn export_penumbra_fvk(
         s: format!("Failed to compute wallet ID: {e}"),
     })?;
 
+    let fvk_bech32m = fvk.to_bech32m().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to encode FVK: {e}"),
+    })?;
+    let wallet_id_bech32m = wallet_id.to_bech32m().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to encode wallet ID: {e}"),
+    })?;
+
+    // ========================================================================
+    // Build UR-encoded "penumbra-accounts" for hardware wallet QR compatibility
+    //
+    // CBOR tag 49301 = penumbra-accounts
+    // CBOR tag 49302 = penumbra-full-viewing-key
+    // Tag 49301 in hex = 0xC095, encoded as: 0xd9 0xc0 0x95
+    // Tag 49302 in hex = 0xC096, encoded as: 0xd9 0xc0 0x96
+    // ========================================================================
+    let ur_string = {
+        let mut cbor_data = Vec::new();
+
+        // PenumbraAccounts: map with 2 entries
+        // CBOR: 0xa2 = map(2)
+        cbor_data.push(0xa2);
+
+        // Key 1: wallet_id (32 bytes)
+        // CBOR: 0x01 = uint(1), 0x58 0x20 = bytes(32)
+        cbor_data.push(0x01);
+        cbor_data.push(0x58); // bytes with 1-byte length
+        cbor_data.push(0x20); // 32 bytes
+        cbor_data.extend_from_slice(&wallet_id.to_bytes());
+
+        // Key 2: accounts array
+        // CBOR: 0x02 = uint(2), 0x81 = array(1)
+        cbor_data.push(0x02);
+        cbor_data.push(0x81); // array(1) - single account
+
+        // Tagged PenumbraFullViewingKey (tag 49302 = 0xC096)
+        // Tag encoding: 0xd9 means "tag with 2-byte value follows"
+        // 49302 = 0xC096 -> high byte 0xC0, low byte 0x96
+        cbor_data.push(0xd9);
+        cbor_data.push(0xc0); // high byte: 49302 >> 8 = 192 = 0xc0
+        cbor_data.push(0x96); // low byte: 49302 & 0xff = 150 = 0x96
+
+        // PenumbraFullViewingKey: map with 2 or 3 entries
+        let has_name = !label.is_empty();
+        if has_name {
+            cbor_data.push(0xa3); // map(3)
+        } else {
+            cbor_data.push(0xa2); // map(2)
+        }
+
+        // Key 1: fvk (text string - bech32m encoded)
+        cbor_data.push(0x01); // key = 1
+        let fvk_bytes = fvk_bech32m.as_bytes();
+        if fvk_bytes.len() < 24 {
+            cbor_data.push(0x60 + fvk_bytes.len() as u8);
+        } else if fvk_bytes.len() < 256 {
+            cbor_data.push(0x78); // text with 1-byte length
+            cbor_data.push(fvk_bytes.len() as u8);
+        } else {
+            cbor_data.push(0x79); // text with 2-byte length (big-endian)
+            cbor_data.extend_from_slice(&(fvk_bytes.len() as u16).to_be_bytes());
+        }
+        cbor_data.extend_from_slice(fvk_bytes);
+
+        // Key 2: index (unsigned int)
+        cbor_data.push(0x02); // key = 2
+        if account_index < 24 {
+            cbor_data.push(account_index as u8);
+        } else if account_index < 256 {
+            cbor_data.push(0x18);
+            cbor_data.push(account_index as u8);
+        } else {
+            cbor_data.push(0x19);
+            cbor_data.extend_from_slice(&(account_index as u16).to_be_bytes());
+        }
+
+        // Key 3: name (optional text string)
+        if has_name {
+            cbor_data.push(0x03); // key = 3
+            let label_bytes = label.as_bytes();
+            if label_bytes.len() < 24 {
+                cbor_data.push(0x60 + label_bytes.len() as u8);
+            } else {
+                cbor_data.push(0x78);
+                cbor_data.push(label_bytes.len() as u8);
+            }
+            cbor_data.extend_from_slice(label_bytes);
+        }
+
+        // Encode CBOR as UR string
+        // Result format: "ur:penumbra-accounts/..."
+        ur::ur::encode(&cbor_data, &ur::Type::Custom("penumbra-accounts"))
+    };
+
     Ok(PenumbraFvkExport {
         account_index,
         label: label_opt.unwrap_or_default(),
-        fvk_bech32m: fvk.to_bech32m().map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to encode FVK: {e}"),
-        })?,
-        wallet_id_bech32m: wallet_id.to_bech32m().map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to encode wallet ID: {e}"),
-        })?,
+        fvk_bech32m,
+        wallet_id_bech32m,
         qr_data: export_data.encode_qr(),
+        ur_string,
     })
 }
 
@@ -722,6 +843,60 @@ fn export_penumbra_fvk(
 // ============================================================================
 
 /// Export Zcash Orchard full viewing key for import into watch-only wallet (e.g., Zafu/Prax)
+///
+/// Returns both:
+/// - UFVK string (unified full viewing key) for direct import
+/// - UR-encoded string (zcash-accounts format) for Zashi/Keystone QR compatibility
+///
+/// ## UR (Uniform Resource) Protocol
+///
+/// UR is a protocol by Blockchain Commons for encoding binary data in QR codes.
+/// Format: `ur:<type>/<bytewords-encoded-cbor>`
+///
+/// Reference: https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-005-ur.md
+///
+/// ## Keystone SDK Registry Types for Zcash
+///
+/// The Keystone SDK defines these UR types for Zcash (see keystone-sdk-rust):
+///
+/// | Type Name                       | CBOR Tag | Description                    |
+/// |---------------------------------|----------|--------------------------------|
+/// | zcash-accounts                  | 49201    | Collection of accounts/UFVKs   |
+/// | zcash-full-viewing-key          | 49202    | Single FVK (deprecated)        |
+/// | zcash-unified-full-viewing-key  | 49203    | UFVK with metadata             |
+/// | zcash-pczt                      | 49204    | Partially Created Zcash Tx     |
+///
+/// ## CBOR Structure for zcash-accounts
+///
+/// ```text
+/// ZcashAccounts = {
+///   1: bytes,              ; seed_fingerprint (16 bytes, identifies the seed)
+///   2: [+ #49203(UFVK)]    ; accounts array, each tagged with 49203
+/// }
+///
+/// ZcashUnifiedFullViewingKey (#49203) = {
+///   1: tstr,               ; ufvk - the unified full viewing key string
+///   2: uint,               ; index - account index (0, 1, 2, ...)
+///   ? 3: tstr              ; name - optional account label
+/// }
+/// ```
+///
+/// ## CBOR Encoding Reference
+///
+/// CBOR major types (high 3 bits of first byte):
+/// - 0x00-0x17: unsigned int 0-23 (value in low 5 bits)
+/// - 0x18: unsigned int, 1 byte follows
+/// - 0x19: unsigned int, 2 bytes follow (big-endian)
+/// - 0x40-0x57: bytes, length 0-23 in low 5 bits
+/// - 0x58: bytes, 1-byte length follows
+/// - 0x60-0x77: text string, length 0-23 in low 5 bits
+/// - 0x78: text string, 1-byte length follows
+/// - 0x79: text string, 2-byte length follows
+/// - 0x80-0x97: array, length 0-23 in low 5 bits
+/// - 0xa0-0xb7: map, length 0-23 in low 5 bits (pairs count)
+/// - 0xd8: tag, 1-byte tag number follows
+/// - 0xd9: tag, 2-byte tag number follows (big-endian)
+///
 fn export_zcash_fvk(
     seed_phrase: &str,
     account_index: u32,
@@ -730,19 +905,116 @@ fn export_zcash_fvk(
 ) -> Result<ZcashFvkExport, ErrorDisplayed> {
     use transaction_signing::zcash::{OrchardSpendingKey, QR_TYPE_ZCASH_FVK_EXPORT};
 
-    // Derive Orchard spending key from seed phrase
+    // Derive Orchard spending key from seed phrase using ZIP-32 derivation
     let osk = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index)
         .map_err(|e| ErrorDisplayed::Str {
             s: format!("Failed to derive Orchard key: {e}"),
         })?;
 
-    // Get FVK bytes (96 bytes)
+    // Get FVK bytes (96 bytes raw orchard full viewing key)
     let fvk_bytes = osk.fvk_bytes();
 
-    // Get receiving address
+    // Get receiving address (unified address with orchard receiver)
     let address = osk.get_address(mainnet);
 
-    // Build QR data: [0x53][0x04][type][account_index:4][mainnet:1][label_len:2][label][fvk:96]
+    // Get UFVK string (standard Zcash unified full viewing key format per ZIP-316)
+    // Format: "uview1..." for mainnet, "uviewtest1..." for testnet
+    let ufvk = osk.get_ufvk(mainnet);
+
+    // Generate seed fingerprint: first 16 bytes of SHA256(seed_phrase)
+    // This allows Zashi to match accounts to the same seed without revealing the seed
+    let seed_fingerprint = {
+        use sha2::{Sha256, Digest};
+        let hash = Sha256::digest(seed_phrase.as_bytes());
+        hash[..16].to_vec()
+    };
+
+    // ========================================================================
+    // Build UR-encoded "zcash-accounts" for Zashi/Keystone QR code compatibility
+    //
+    // The UR string format is: ur:zcash-accounts/<bytewords-encoded-cbor>
+    // where the CBOR payload matches the Keystone SDK zcash_accounts.rs structure
+    // ========================================================================
+    let ur_string = {
+        let mut cbor_data = Vec::new();
+
+        // ZcashAccounts: map with 2 entries
+        // CBOR: 0xa2 = map(2)
+        cbor_data.push(0xa2);
+
+        // Key 1: seed_fingerprint (bytes)
+        // CBOR: 0x01 = uint(1), 0x50 = bytes(16)
+        cbor_data.push(0x01);
+        cbor_data.push(0x50); // bytes(16) - 0x40 + 16 = 0x50
+        cbor_data.extend_from_slice(&seed_fingerprint);
+
+        // Key 2: accounts array
+        // CBOR: 0x02 = uint(2), 0x81 = array(1)
+        cbor_data.push(0x02);
+        cbor_data.push(0x81); // array(1) - single account
+
+        // Each account is tagged with CBOR tag 49203 (ZCASH_UNIFIED_FULL_VIEWING_KEY)
+        // Tag 49203 = 0xC033 in hex, encoded as: 0xd9 0xc0 0x33
+        // 0xd9 means "tag with 2-byte value follows"
+        cbor_data.push(0xd9);
+        cbor_data.push(0xc0); // high byte: 49203 >> 8 = 192 = 0xc0
+        cbor_data.push(0x33); // low byte: 49203 & 0xff = 51 = 0x33
+
+        // ZcashUnifiedFullViewingKey: map with 2 or 3 entries
+        let has_name = !label.is_empty();
+        if has_name {
+            cbor_data.push(0xa3); // map(3)
+        } else {
+            cbor_data.push(0xa2); // map(2)
+        }
+
+        // Key 1: ufvk (text string)
+        // CBOR text string encoding: 0x60-0x77 for len 0-23, 0x78+len for len<256, 0x79+2bytes for len<65536
+        cbor_data.push(0x01); // key = 1
+        let ufvk_bytes = ufvk.as_bytes();
+        if ufvk_bytes.len() < 24 {
+            cbor_data.push(0x60 + ufvk_bytes.len() as u8);
+        } else if ufvk_bytes.len() < 256 {
+            cbor_data.push(0x78); // text with 1-byte length
+            cbor_data.push(ufvk_bytes.len() as u8);
+        } else {
+            cbor_data.push(0x79); // text with 2-byte length (big-endian)
+            cbor_data.extend_from_slice(&(ufvk_bytes.len() as u16).to_be_bytes());
+        }
+        cbor_data.extend_from_slice(ufvk_bytes);
+
+        // Key 2: index (unsigned int)
+        // CBOR uint encoding: 0-23 inline, 0x18+byte for 24-255, 0x19+2bytes for 256-65535
+        cbor_data.push(0x02); // key = 2
+        if account_index < 24 {
+            cbor_data.push(account_index as u8);
+        } else if account_index < 256 {
+            cbor_data.push(0x18);
+            cbor_data.push(account_index as u8);
+        } else {
+            cbor_data.push(0x19);
+            cbor_data.extend_from_slice(&(account_index as u16).to_be_bytes());
+        }
+
+        // Key 3: name (optional text string)
+        if has_name {
+            cbor_data.push(0x03); // key = 3
+            let label_bytes = label.as_bytes();
+            if label_bytes.len() < 24 {
+                cbor_data.push(0x60 + label_bytes.len() as u8);
+            } else {
+                cbor_data.push(0x78);
+                cbor_data.push(label_bytes.len() as u8);
+            }
+            cbor_data.extend_from_slice(label_bytes);
+        }
+
+        // Encode CBOR as UR string using bytewords encoding
+        // Result format: "ur:zcash-accounts/..."
+        ur::ur::encode(&cbor_data, &ur::Type::Custom("zcash-accounts"))
+    };
+
+    // Build binary QR data for Zafu wallet
     let label_bytes = label.as_bytes();
     let label_len = label_bytes.len().min(255) as u8;
 
@@ -763,7 +1035,9 @@ fn export_zcash_fvk(
         mainnet,
         address,
         fvk_hex: hex::encode(&fvk_bytes),
+        ufvk,
         qr_data,
+        ur_string,
     })
 }
 
@@ -872,6 +1146,365 @@ fn encode_zcash_signature_qr(response: ZcashSignatureResponse) -> Result<Vec<u8>
     };
 
     Ok(rust_response.to_qr_bytes())
+}
+
+/// Generate a test Zcash sign request QR (for development/testing only)
+/// Returns hex-encoded QR payload
+fn generate_test_zcash_sign_request(
+    account_index: u32,
+    action_count: u32,
+    mainnet: bool,
+    summary: &str,
+) -> String {
+    let mut data = Vec::new();
+
+    // prelude: [0x53][0x04][0x02]
+    data.push(0x53);
+    data.push(0x04);
+    data.push(0x02);
+
+    // flags: bit 0 = mainnet
+    data.push(if mainnet { 0x01 } else { 0x00 });
+
+    // account index (4 bytes LE)
+    data.extend_from_slice(&account_index.to_le_bytes());
+
+    // sighash (32 bytes) - use deterministic test value
+    let test_sighash: [u8; 32] = [
+        0xde, 0xad, 0xbe, 0xef, 0x12, 0x34, 0x56, 0x78,
+        0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44,
+        0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
+        0xdd, 0xee, 0xff, 0x00, 0x01, 0x02, 0x03, 0x04,
+    ];
+    data.extend_from_slice(&test_sighash);
+
+    // action count (2 bytes LE)
+    data.extend_from_slice(&(action_count as u16).to_le_bytes());
+
+    // alphas (32 bytes each) - use deterministic test values
+    for i in 0..action_count {
+        let mut alpha = [0u8; 32];
+        // fill with pattern based on index
+        for j in 0..32 {
+            alpha[j] = (i as u8).wrapping_mul(17).wrapping_add(j as u8);
+        }
+        data.extend_from_slice(&alpha);
+    }
+
+    // summary (length-prefixed)
+    let summary_bytes = summary.as_bytes();
+    data.extend_from_slice(&(summary_bytes.len() as u16).to_le_bytes());
+    data.extend_from_slice(summary_bytes);
+
+    hex::encode(data)
+}
+
+// ============================================================================
+// PCZT (Partially Created Zcash Transaction) functions for Zashi compatibility
+// ============================================================================
+//
+// PCZT is the standard format for passing unsigned Zcash transactions between
+// watch-only wallets (like Zashi) and hardware signers (like Zigner/Keystone).
+//
+// UR (Uniform Resource) encoding:
+// - Type: zcash-pczt (CBOR tag 49204)
+// - Format: ur:zcash-pczt/<bytewords-encoded-cbor>
+// - For large PCZTs, UR supports animated QR sequences (fountain codes)
+//
+// Flow:
+// 1. Zashi creates PCZT, encodes as ur:zcash-pczt, shows animated QR
+// 2. Zigner scans QR sequence, decodes UR, parses PCZT
+// 3. Zigner extracts sighash and rsk randomizers, signs with spending key
+// 4. Zigner injects signatures into PCZT, encodes as ur:zcash-pczt
+// 5. Zashi scans signed PCZT QR, extracts signatures, broadcasts tx
+
+/// Decode UR string to get PCZT bytes
+/// Handles both single QR and animated QR sequences
+fn decode_ur_zcash_pczt(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDisplayed> {
+    use ur::ur::decode;
+
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "No UR parts provided".to_string(),
+        });
+    }
+
+    // Verify UR type from the URI string (format: ur:type/data)
+    fn verify_ur_type(ur_string: &str) -> Result<(), ErrorDisplayed> {
+        let lower = ur_string.to_lowercase();
+        if !lower.starts_with("ur:zcash-pczt/") {
+            return Err(ErrorDisplayed::Str {
+                s: format!("Expected ur:zcash-pczt/... got: {}", ur_string.chars().take(30).collect::<String>()),
+            });
+        }
+        Ok(())
+    }
+
+    // For single-part UR, decode directly
+    if ur_parts.len() == 1 {
+        verify_ur_type(&ur_parts[0])?;
+
+        let (_kind, cbor_data) = decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to decode UR: {:?}", e),
+        })?;
+
+        // Extract PCZT bytes from CBOR
+        // CBOR structure: { 1: bytes } (map with key 1 containing the PCZT bytes)
+        extract_pczt_from_cbor(&cbor_data)
+    } else {
+        // For multi-part (animated) UR, use fountain decoder
+        let mut decoder = ur::ur::Decoder::default();
+
+        // Verify type from first part
+        verify_ur_type(&ur_parts[0])?;
+
+        for part in &ur_parts {
+            decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to receive UR part: {:?}", e),
+            })?;
+
+            if decoder.complete() {
+                break;
+            }
+        }
+
+        if !decoder.complete() {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Incomplete UR sequence: received {} parts but not complete",
+                    ur_parts.len()
+                ),
+            });
+        }
+
+        let cbor_data = decoder.message().map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to get UR message: {:?}", e),
+        })?.ok_or_else(|| ErrorDisplayed::Str {
+            s: "UR decoder returned None despite being complete".to_string(),
+        })?;
+
+        extract_pczt_from_cbor(&cbor_data)
+    }
+}
+
+/// Extract PCZT bytes from CBOR wrapper
+/// CBOR structure: { 1: bytes } - map with key 1 containing raw PCZT bytes
+fn extract_pczt_from_cbor(cbor_data: &[u8]) -> Result<Vec<u8>, ErrorDisplayed> {
+    // Simple CBOR parsing for { 1: bytes }
+    // 0xa1 = map(1), 0x01 = key 1, then bytes
+    if cbor_data.len() < 3 {
+        return Err(ErrorDisplayed::Str {
+            s: "CBOR data too short".to_string(),
+        });
+    }
+
+    // Check for map(1)
+    if cbor_data[0] != 0xa1 {
+        return Err(ErrorDisplayed::Str {
+            s: format!("Expected CBOR map(1), got: 0x{:02x}", cbor_data[0]),
+        });
+    }
+
+    // Check for key 1
+    if cbor_data[1] != 0x01 {
+        return Err(ErrorDisplayed::Str {
+            s: format!("Expected CBOR key 1, got: 0x{:02x}", cbor_data[1]),
+        });
+    }
+
+    // Parse bytes at position 2
+    let (bytes, _) = parse_cbor_bytes(&cbor_data[2..]).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse CBOR bytes: {}", e),
+    })?;
+
+    Ok(bytes)
+}
+
+/// Parse CBOR bytes (major type 2)
+fn parse_cbor_bytes(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
+    if data.is_empty() {
+        return Err("Empty CBOR data".to_string());
+    }
+
+    let first = data[0];
+    let major_type = first >> 5;
+    let additional = first & 0x1f;
+
+    if major_type != 2 {
+        return Err(format!("Expected bytes (major type 2), got: {}", major_type));
+    }
+
+    let (len, header_len) = match additional {
+        0..=23 => (additional as usize, 1),
+        24 => {
+            if data.len() < 2 {
+                return Err("Truncated CBOR length".to_string());
+            }
+            (data[1] as usize, 2)
+        }
+        25 => {
+            if data.len() < 3 {
+                return Err("Truncated CBOR length".to_string());
+            }
+            (u16::from_be_bytes([data[1], data[2]]) as usize, 3)
+        }
+        26 => {
+            if data.len() < 5 {
+                return Err("Truncated CBOR length".to_string());
+            }
+            (u32::from_be_bytes([data[1], data[2], data[3], data[4]]) as usize, 5)
+        }
+        _ => return Err(format!("Unsupported CBOR additional info: {}", additional)),
+    };
+
+    if data.len() < header_len + len {
+        return Err("Truncated CBOR bytes".to_string());
+    }
+
+    Ok((data[header_len..header_len + len].to_vec(), header_len + len))
+}
+
+/// Sign a PCZT and return the signed PCZT bytes
+///
+/// This function:
+/// 1. Parses the PCZT to extract orchard actions
+/// 2. Signs each action with the spending key derived from seed
+/// 3. Injects signatures back into the PCZT
+fn sign_zcash_pczt(
+    seed_phrase: &str,
+    account_index: u32,
+    pczt_bytes: Vec<u8>,
+) -> Result<Vec<u8>, ErrorDisplayed> {
+    use pczt::Pczt;
+    use pczt::roles::signer::Signer;
+    use transaction_signing::zcash::OrchardSpendingKey;
+
+    // Parse the PCZT to get action count first
+    let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse PCZT: {:?}", e),
+    })?;
+
+    // Get number of orchard actions before creating signer
+    let action_count = pczt.orchard().actions().len();
+
+    // Derive the orchard spending key from seed
+    let spending_key = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to derive spending key: {}", e),
+        })?;
+
+    // Get the actual orchard spending key for signing
+    let orchard_sk = spending_key.to_spending_key().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to get orchard spending key: {}", e),
+    })?;
+
+    // Create signer
+    let mut signer = Signer::new(pczt).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to create PCZT signer: {:?}", e),
+    })?;
+
+    // Sign all orchard actions
+    // The signer needs the ask (spend authorizing key) derived from sk
+    let ask = orchard::keys::SpendAuthorizingKey::from(&orchard_sk);
+
+    // Sign each action
+    for action_index in 0..action_count {
+        signer.sign_orchard(action_index, &ask).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to sign orchard action {}: {:?}", action_index, e),
+        })?;
+    }
+
+    // Finish signing and get the signed PCZT
+    let signed_pczt = signer.finish();
+
+    // Serialize back to bytes
+    Ok(signed_pczt.serialize())
+}
+
+/// Encode signed PCZT as UR string(s) for QR display
+/// Returns a vector of UR parts for animated QR (or single part for small PCZTs)
+fn encode_signed_pczt_ur(pczt_bytes: Vec<u8>, max_fragment_len: u32) -> Result<Vec<String>, ErrorDisplayed> {
+    // Wrap PCZT bytes in CBOR: { 1: bytes }
+    let cbor_data = encode_pczt_to_cbor(&pczt_bytes);
+
+    if max_fragment_len == 0 || cbor_data.len() <= max_fragment_len as usize {
+        // Single part UR
+        let ur_string = ur::ur::encode(&cbor_data, &ur::Type::Custom("zcash-pczt"));
+        Ok(vec![ur_string])
+    } else {
+        // Multi-part (animated) UR using fountain codes
+        let mut encoder = ur::ur::Encoder::new(
+            &cbor_data,
+            max_fragment_len as usize,
+            "zcash-pczt",
+        ).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to create UR encoder: {:?}", e),
+        })?;
+
+        let mut parts = Vec::new();
+        // Generate enough parts to reconstruct (with some redundancy)
+        let total_parts = encoder.fragment_count() * 2; // 2x for fountain code redundancy
+
+        for _ in 0..total_parts {
+            let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to encode UR part: {:?}", e),
+            })?;
+            parts.push(part);
+        }
+
+        Ok(parts)
+    }
+}
+
+/// Encode PCZT bytes into CBOR wrapper
+/// CBOR structure: { 1: bytes }
+fn encode_pczt_to_cbor(pczt_bytes: &[u8]) -> Vec<u8> {
+    let mut cbor = Vec::new();
+
+    // map(1)
+    cbor.push(0xa1);
+    // key 1
+    cbor.push(0x01);
+
+    // bytes with appropriate length encoding
+    let len = pczt_bytes.len();
+    if len <= 23 {
+        cbor.push(0x40 | len as u8);
+    } else if len <= 255 {
+        cbor.push(0x58);
+        cbor.push(len as u8);
+    } else if len <= 65535 {
+        cbor.push(0x59);
+        cbor.push((len >> 8) as u8);
+        cbor.push(len as u8);
+    } else {
+        cbor.push(0x5a);
+        cbor.push((len >> 24) as u8);
+        cbor.push((len >> 16) as u8);
+        cbor.push((len >> 8) as u8);
+        cbor.push(len as u8);
+    }
+
+    cbor.extend_from_slice(pczt_bytes);
+    cbor
+}
+
+/// High-level function to sign a PCZT from UR-encoded QR data
+/// This is the main entry point for Zashi compatibility
+fn sign_zcash_pczt_ur(
+    seed_phrase: &str,
+    account_index: u32,
+    ur_parts: Vec<String>,
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
+    // Decode UR to get PCZT bytes
+    let pczt_bytes = decode_ur_zcash_pczt(ur_parts)?;
+
+    // Sign the PCZT
+    let signed_pczt_bytes = sign_zcash_pczt(seed_phrase, account_index, pczt_bytes)?;
+
+    // Encode back to UR
+    encode_signed_pczt_ur(signed_pczt_bytes, max_fragment_len)
 }
 
 /// Must be called once to initialize logging from Rust in development mode.
