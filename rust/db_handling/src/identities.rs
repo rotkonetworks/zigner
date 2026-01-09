@@ -367,8 +367,11 @@ fn penumbra_derive_multisigner_and_address(seed_phrase: &str, path: &str) -> Res
     use crate::penumbra;
 
     // Parse account number from path (m/44'/6532'/account'/...)
-    // Default to account 0 if parsing fails
-    let account = parse_penumbra_account(path).unwrap_or(0);
+    let account = parse_penumbra_account(path)
+        .ok_or_else(|| Error::Other(anyhow::anyhow!(
+            "Invalid Penumbra path format: '{}'. Expected 'm/44'/6532'/N' or account number",
+            path
+        )))?;
 
     // Derive spend key and full viewing key
     let spend_key_bytes = penumbra::derive_spend_key_bytes(seed_phrase, account)?;
@@ -389,14 +392,29 @@ fn penumbra_derive_multisigner_and_address(seed_phrase: &str, path: &str) -> Res
 }
 
 /// Parse account number from Penumbra BIP44 path
-/// Path format: m/44'/6532'/account'/...
+/// Path format: m/44'/6532'/account'/... or just an account number
 #[cfg(all(feature = "active", feature = "penumbra"))]
 fn parse_penumbra_account(path: &str) -> Option<u32> {
-    // Handle paths like "m/44'/6532'/0'" or just the path_id from network specs
+    // Empty path defaults to account 0
+    if path.is_empty() {
+        return Some(0);
+    }
+
+    // If it's just a number, parse it directly
+    if let Ok(account) = path.parse::<u32>() {
+        return Some(account);
+    }
+
+    // Handle full BIP44 path: m/44'/6532'/account'/...
     let parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
 
     // Look for the account part (third element, after 44' and 6532')
+    // Validate we have the correct coin type (6532)
     if parts.len() >= 3 {
+        // Check if this is actually a Penumbra path (coin type 6532)
+        if parts.len() > 1 && parts[1] != "6532'" {
+            return None;  // Wrong coin type
+        }
         let account_part = parts[2].trim_end_matches('\'');
         account_part.parse().ok()
     } else {
