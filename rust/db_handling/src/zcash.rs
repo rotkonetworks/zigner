@@ -74,6 +74,12 @@ pub fn derive_zcash_keys(seed_phrase: &str, path: &str, mainnet: bool) -> Result
     // Store first 32 bytes of FVK (Full Viewing Key) as identifier
     // Note: FVK is private - allows viewing transactions, not a public key
     let fvk_bytes = fvk.to_bytes();
+    if fvk_bytes.len() < 32 {
+        return Err(Error::Other(anyhow::anyhow!(
+            "FVK too short: expected at least 32 bytes, got {}",
+            fvk_bytes.len()
+        )));
+    }
     let mut fvk_id = [0u8; 32];
     fvk_id.copy_from_slice(&fvk_bytes[0..32]);
 
@@ -104,12 +110,15 @@ fn parse_account_from_path(path: &str) -> Result<u32> {
         if *part == "133'" && i + 1 < parts.len() {
             let account_str = parts[i + 1].trim_end_matches('\'');
             return account_str.parse::<u32>()
-                .map_err(|_| Error::Other(anyhow::anyhow!("Invalid account in path: {}", path)));
+                .map_err(|_| Error::Other(anyhow::anyhow!("Invalid account number in path: {}", path)));
         }
     }
 
-    // Default to account 0 if we can't parse
-    Ok(0)
+    // If we can't parse the path format, return error - don't silently default
+    Err(Error::Other(anyhow::anyhow!(
+        "Invalid path format: '{}'. Expected 'm/32'/133'/N' or account number",
+        path
+    )))
 }
 
 #[cfg(test)]
@@ -118,12 +127,18 @@ mod tests {
 
     #[test]
     fn test_parse_account_from_path() {
+        // Valid formats
         assert_eq!(parse_account_from_path("").unwrap(), 0);
         assert_eq!(parse_account_from_path("0").unwrap(), 0);
         assert_eq!(parse_account_from_path("5").unwrap(), 5);
         assert_eq!(parse_account_from_path("m/32'/133'/0'").unwrap(), 0);
         assert_eq!(parse_account_from_path("m/32'/133'/1'").unwrap(), 1);
         assert_eq!(parse_account_from_path("m/32'/133'/42'").unwrap(), 42);
+
+        // Invalid formats should error, not silently default
+        assert!(parse_account_from_path("invalid").is_err());
+        assert!(parse_account_from_path("m/32'/133'/").is_err());
+        assert!(parse_account_from_path("//polkadot//0").is_err());
     }
 
     #[test]

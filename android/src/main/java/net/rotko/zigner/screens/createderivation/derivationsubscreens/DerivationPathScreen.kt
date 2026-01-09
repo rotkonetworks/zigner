@@ -57,7 +57,13 @@ fun DerivationPathScreen(
 		mutableStateOf(
 			if (isBipStyleNetwork) {
 				// Extract account number from path like "m/32'/133'/5'" -> "5"
-				initialPath.substringAfterLast('/').replace("'", "")
+				// Safe extraction: validate it's numeric, default to "0" if invalid
+				val extracted = initialPath.substringAfterLast('/', "").replace("'", "")
+				if (extracted.isNotEmpty() && extracted.all { it.isDigit() }) {
+					extracted
+				} else {
+					"0"
+				}
 			} else {
 				"0"
 			}
@@ -75,7 +81,8 @@ fun DerivationPathScreen(
 	}
 
 	// Update path when account index changes (for BIP networks)
-	if (isBipStyleNetwork) {
+	// Only construct path if account index is valid (non-empty numeric)
+	if (isBipStyleNetwork && accountIndex.value.isNotEmpty()) {
 		val pathBase = network.pathId.substringBeforeLast('/')
 		val updatedPath = "$pathBase/${accountIndex.value}'"
 		if (path.value.text != updatedPath) {
@@ -134,8 +141,11 @@ fun DerivationPathScreen(
 			OutlinedTextField(
 				value = accountIndex.value,
 				onValueChange = { newValue ->
-					// Only allow digits
-					if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+					// Only allow non-empty numeric values
+					// Empty during editing is ok, but we default to "0" on submit
+					if (newValue.isEmpty()) {
+						accountIndex.value = "0"
+					} else if (newValue.all { it.isDigit() }) {
 						accountIndex.value = newValue
 					}
 				},

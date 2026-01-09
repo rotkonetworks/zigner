@@ -86,7 +86,8 @@ class DerivationCreateViewModel : ViewModel() {
 			// Check if this is a BIP-style network (Zcash/Penumbra)
 			val isBipStyle = netWork.pathId.startsWith("m/")
 
-			for (i in 0..Int.MAX_VALUE) {
+			// Search for available account index with reasonable limit
+			for (i in 0..10000) {
 				path = if (isBipStyle) {
 					// For BIP-style paths, increment the account index
 					// e.g., m/32'/133'/0' -> m/32'/133'/1'
@@ -101,6 +102,8 @@ class DerivationCreateViewModel : ViewModel() {
 					return path
 				}
 			}
+			// If we exhausted the search, return the last checked path
+			// (caller will see it as collision in validation)
 		}
 		return path
 	}
