@@ -842,7 +842,7 @@ fn export_penumbra_fvk(
 // Zcash cold signing functions
 // ============================================================================
 
-/// Export Zcash Orchard full viewing key for import into watch-only wallet (e.g., Zafu/Prax)
+/// Export Zcash Orchard full viewing key for import into watch-only wallet (e.g., Zafu)
 ///
 /// Returns both:
 /// - UFVK string (unified full viewing key) for direct import

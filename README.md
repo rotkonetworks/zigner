@@ -147,14 +147,16 @@ cd rust && cargo test --locked
 
 # Integration with Zafu
 
-Zigner works seamlessly with [Zafu](https://github.com/penumbra-zone/web) and [Prax](https://github.com/prax-wallet/prax):
+Zigner works with [Zafu](https://github.com/rotkonetworks/zafu), a Zcash web wallet:
 
 1. Create or import a seed phrase in Zigner
 2. Export the Full Viewing Key (FVK) via QR code
-3. Scan the FVK QR code in Zafu/Prax to import as watch-only wallet
-4. Use Zafu/Prax to create transactions
+3. Scan the FVK QR code in Zafu to import as watch-only wallet
+4. Use Zafu to create transactions
 5. Scan transaction QR codes in Zigner to sign
-6. Broadcast signed transactions from Zafu/Prax
+6. Broadcast signed transactions from Zafu
+
+**Note:** Prax (Penumbra) wallet integration is in progress but not yet functional.
 
 # Bugs and Feedback
 

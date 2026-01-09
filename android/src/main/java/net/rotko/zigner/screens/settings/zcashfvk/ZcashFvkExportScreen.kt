@@ -108,7 +108,7 @@ private fun ZcashFvkSeedSelectorScreen(
         )
 
         Text(
-            text = "Select a wallet to export its Orchard Full Viewing Key for Zafu/Prax:",
+            text = "Select a wallet to export its Orchard Full Viewing Key for Zafu:",
             style = SignerTypeface.BodyL,
             color = MaterialTheme.colors.textSecondary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
@@ -234,7 +234,7 @@ private fun ZcashFvkExportResultView(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Scan with Zafu or Prax to import",
+                text = "Scan with Zafu to import",
                 style = SignerTypeface.TitleS,
                 color = MaterialTheme.colors.primary
             )
