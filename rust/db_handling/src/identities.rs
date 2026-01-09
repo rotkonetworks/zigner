@@ -360,7 +360,8 @@ pub fn import_all_addrs(
 
 /// Derive Penumbra MultiSigner and bech32m address from seed phrase and path
 /// Path format: m/44'/6532'/account'/... (BIP44 style)
-/// Returns (MultiSigner, bech32m_address)
+/// Returns (MultiSigner with FVK verification key, bech32m_address)
+/// Note: The MultiSigner contains the ak (verification key) from the FVK, not a traditional public key
 #[cfg(all(feature = "active", feature = "penumbra"))]
 fn penumbra_derive_multisigner_and_address(seed_phrase: &str, path: &str) -> Result<(MultiSigner, String)> {
     use crate::penumbra;
@@ -377,10 +378,11 @@ fn penumbra_derive_multisigner_and_address(seed_phrase: &str, path: &str) -> Res
     let address = fvk.get_address(0)?;
     let bech32m_address = address.to_bech32m()?;
 
-    // Get the verification key (ak) - 32 bytes
+    // Get the verification key (ak) from FVK - 32 bytes
+    // Note: This is part of the FVK (Full Viewing Key), not a traditional public key
     let ak_bytes = fvk.ak.to_bytes();
 
-    // Store as Ed25519 since both are 32-byte keys
+    // Store as Ed25519 for MultiSigner compatibility (both are 32-byte keys)
     let multisigner = MultiSigner::Ed25519(ed25519::Public::from_raw(ak_bytes));
 
     Ok((multisigner, bech32m_address))
@@ -546,11 +548,12 @@ fn zcash_derive_multisigner_and_address(
         .map(|ns| !ns.name.to_lowercase().contains("test"))
         .unwrap_or(true);
 
-    // Derive Zcash keys
-    let (pubkey, unified_address) = zcash::derive_zcash_keys(seed_phrase, path, mainnet)?;
+    // Derive Zcash keys (FVK identifier and unified address)
+    let (fvk_id, unified_address) = zcash::derive_zcash_keys(seed_phrase, path, mainnet)?;
 
-    // Store as Ed25519 since both are 32-byte keys
-    let multisigner = MultiSigner::Ed25519(ed25519::Public::from_raw(pubkey));
+    // Store FVK ID as Ed25519 for MultiSigner compatibility (both are 32-byte keys)
+    // Note: This is NOT a real public key, it's an FVK identifier
+    let multisigner = MultiSigner::Ed25519(ed25519::Public::from_raw(fvk_id));
 
     Ok((multisigner, unified_address))
 }
@@ -1185,9 +1188,9 @@ pub(crate) fn create_address(
         #[cfg(feature = "zcash")]
         {
             let (multisigner, unified_address) = zcash_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
-            // Store the unified address for later retrieval
-            let pubkey_hex = hex::encode(multisigner_to_public(&multisigner));
-            crate::zcash::store_zcash_address(database, &pubkey_hex, &unified_address)?;
+            // Store the unified address for later retrieval (keyed by FVK ID)
+            let fvk_id_hex = hex::encode(multisigner_to_public(&multisigner));
+            crate::zcash::store_zcash_address(database, &fvk_id_hex, &unified_address)?;
             multisigner
         }
         #[cfg(not(feature = "zcash"))]

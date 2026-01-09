@@ -5,17 +5,17 @@ use crate::error::{Error, Result};
 use constants::ZCASH_ADDRESS_TREE;
 use zeroize::Zeroize;
 
-/// Store Zcash address in database (keyed by public key hex)
-pub fn store_zcash_address(database: &sled::Db, pubkey_hex: &str, address: &str) -> Result<()> {
+/// Store Zcash address in database (keyed by FVK identifier hex)
+pub fn store_zcash_address(database: &sled::Db, fvk_id_hex: &str, address: &str) -> Result<()> {
     let addresses = database.open_tree(ZCASH_ADDRESS_TREE)?;
-    addresses.insert(pubkey_hex.as_bytes(), address.as_bytes())?;
+    addresses.insert(fvk_id_hex.as_bytes(), address.as_bytes())?;
     Ok(())
 }
 
-/// Get Zcash address from database by public key hex
-pub fn get_zcash_address(database: &sled::Db, pubkey_hex: &str) -> Result<Option<String>> {
+/// Get Zcash address from database by FVK identifier hex
+pub fn get_zcash_address(database: &sled::Db, fvk_id_hex: &str) -> Result<Option<String>> {
     let addresses = database.open_tree(ZCASH_ADDRESS_TREE)?;
-    match addresses.get(pubkey_hex.as_bytes())? {
+    match addresses.get(fvk_id_hex.as_bytes())? {
         Some(bytes) => Ok(Some(
             String::from_utf8(bytes.to_vec())
                 .map_err(|e| Error::Other(anyhow::anyhow!("Invalid UTF-8 in stored address: {}", e)))?
@@ -26,7 +26,8 @@ pub fn get_zcash_address(database: &sled::Db, pubkey_hex: &str) -> Result<Option
 
 /// Derive Zcash keys from seed phrase
 /// Path format: m/32'/133'/account' (ZIP-32 for Orchard)
-/// Returns (32-byte public key for MultiSigner, unified address string)
+/// Returns (32-byte FVK identifier for storage, unified address string)
+/// Note: The returned identifier is derived from the FVK (Full Viewing Key), not a public key
 pub fn derive_zcash_keys(seed_phrase: &str, path: &str, mainnet: bool) -> Result<([u8; 32], String)> {
     // Parse account from path (format: m/32'/133'/account' or just account number)
     let account = parse_account_from_path(path)?;
@@ -70,16 +71,17 @@ pub fn derive_zcash_keys(seed_phrase: &str, path: &str, mainnet: bool) -> Result
         .map_err(|e| Error::Other(anyhow::anyhow!("Failed to create unified address: {e}")))?
         .encode(&network);
 
-    // Use first 32 bytes of FVK as the "public key" for MultiSigner storage
+    // Store first 32 bytes of FVK (Full Viewing Key) as identifier
+    // Note: FVK is private - allows viewing transactions, not a public key
     let fvk_bytes = fvk.to_bytes();
-    let mut pubkey = [0u8; 32];
-    pubkey.copy_from_slice(&fvk_bytes[0..32]);
+    let mut fvk_id = [0u8; 32];
+    fvk_id.copy_from_slice(&fvk_bytes[0..32]);
 
     // Zeroize sensitive data
     let mut sk_bytes = *sk.to_bytes();
     sk_bytes.zeroize();
 
-    Ok((pubkey, unified_address))
+    Ok((fvk_id, unified_address))
 }
 
 /// Parse account number from derivation path
@@ -129,12 +131,12 @@ mod tests {
         // Standard 24-word test mnemonic
         let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
-        let (pubkey, address) = derive_zcash_keys(test_mnemonic, "m/32'/133'/0'", true).unwrap();
+        let (fvk_id, address) = derive_zcash_keys(test_mnemonic, "m/32'/133'/0'", true).unwrap();
 
-        assert_eq!(pubkey.len(), 32);
+        assert_eq!(fvk_id.len(), 32);
         assert!(address.starts_with("u1"));  // Unified address prefix
 
-        println!("Zcash pubkey: {}", hex::encode(&pubkey));
+        println!("Zcash FVK ID: {}", hex::encode(&fvk_id));
         println!("Zcash address: {}", address);
     }
 
@@ -143,11 +145,11 @@ mod tests {
         // Standard 24-word test mnemonic
         let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
-        let (pubkey0, addr0) = derive_zcash_keys(test_mnemonic, "m/32'/133'/0'", true).unwrap();
-        let (pubkey1, addr1) = derive_zcash_keys(test_mnemonic, "m/32'/133'/1'", true).unwrap();
+        let (fvk_id0, addr0) = derive_zcash_keys(test_mnemonic, "m/32'/133'/0'", true).unwrap();
+        let (fvk_id1, addr1) = derive_zcash_keys(test_mnemonic, "m/32'/133'/1'", true).unwrap();
 
-        // Different accounts should have different keys and addresses
-        assert_ne!(pubkey0, pubkey1);
+        // Different accounts should have different FVK IDs and addresses
+        assert_ne!(fvk_id0, fvk_id1);
         assert_ne!(addr0, addr1);
     }
 }
