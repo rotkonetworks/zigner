@@ -13,7 +13,7 @@ data class NetworkDetailsModel(
     val base58prefix: UShort,
 //	val color: String,
     val decimals: UByte,
-//	val encryptionType: String,
+	val encryptionType: String,
     val genesisHash: String,
     val logo: String,
     val name: String,
@@ -29,6 +29,7 @@ data class NetworkDetailsModel(
 		fun createStub() = NetworkDetailsModel(
 			base58prefix = 0u,
 			decimals = 10.toUByte(),
+			encryptionType = "sr25519",
 			genesisHash = "5DCmwXp8XLzSMUyE4uhJMKV4vwvsWqqBYFKJq38CW53VHEVq",
 			logo = "polkadot",
 			name = "Polkadot",
@@ -48,6 +49,7 @@ data class NetworkDetailsModel(
 fun MNetworkDetails.toNetworkDetailsModel() = NetworkDetailsModel(
 	base58prefix = base58prefix,
 	decimals = decimals,
+	encryptionType = encryption.toString().lowercase(),
 	genesisHash = genesisHash.toUByteArray().toByteArray().encodeHex(),
 	logo = logo,
 	name = name,

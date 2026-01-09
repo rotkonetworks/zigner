@@ -180,6 +180,10 @@ private extension NetworkSettingsDetails {
                 Localizable.Settings.NetworkDetails.Label.unit.string,
                 viewModel.networkDetails.unit
             )
+            rowWrapper(
+                Localizable.Settings.NetworkDetails.Label.encryption.string,
+                viewModel.networkDetails.encryption.rawValue.lowercased()
+            )
             verticalRowWrapper(
                 Localizable.Settings.NetworkDetails.Label.genesisHash.string,
                 viewModel.networkDetails.genesisHash.formattedAsString

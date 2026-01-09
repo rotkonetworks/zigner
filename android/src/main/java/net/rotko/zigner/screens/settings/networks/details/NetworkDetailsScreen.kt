@@ -117,6 +117,11 @@ fun NetworkDetailsScreen(
 				)
 				SignerDivider(sidePadding = 0.dp)
 				TCNameValueOppositeElement(
+					name = stringResource(R.string.network_details_field_encryption),
+					value = model.encryptionType
+				)
+				SignerDivider(sidePadding = 0.dp)
+				TCNameValueOppositeElement(
 					name = stringResource(R.string.network_details_field_network_hash),
 					value = model.genesisHash,
 					valueInSameLine = false
