@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.ScreenHeaderWithButton
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.NetworkModel
 import net.rotko.zigner.screens.createderivation.DerivationCreateViewModel
 import net.rotko.zigner.screens.createderivation.DerivationPathAnalyzer
 import net.rotko.zigner.screens.createderivation.DerivationPathVisualTransformation
@@ -41,12 +42,29 @@ import net.rotko.zigner.ui.theme.*
 @Composable
 fun DerivationPathScreen(
 	initialPath: String,
+	network: NetworkModel,
 	onDerivationHelp: Callback,
 	onClose: Callback,
 	onDone: (String) -> Unit,
 	validator: (String) -> DerivationCreateViewModel.DerivationPathValidity,
 	modifier: Modifier = Modifier,
 ) {
+	// Check if this is a BIP-style network (Zcash/Penumbra) vs Substrate
+	val isBipStyleNetwork = network.pathId.startsWith("m/")
+
+	// For BIP-style networks, extract the account index from the path
+	val accountIndex = remember(initialPath) {
+		mutableStateOf(
+			if (isBipStyleNetwork) {
+				// Extract account number from path like "m/32'/133'/5'" -> "5"
+				initialPath.substringAfterLast('/').replace("'", "")
+			} else {
+				"0"
+			}
+		)
+	}
+
+	// For Substrate networks, use the full path
 	val path = remember {
 		mutableStateOf(
 			TextFieldValue(
@@ -54,6 +72,18 @@ fun DerivationPathScreen(
 				selection = TextRange(initialPath.length),
 			)
 		)
+	}
+
+	// Update path when account index changes (for BIP networks)
+	if (isBipStyleNetwork) {
+		val pathBase = network.pathId.substringBeforeLast('/')
+		val updatedPath = "$pathBase/${accountIndex.value}'"
+		if (path.value.text != updatedPath) {
+			path.value = TextFieldValue(
+				text = updatedPath,
+				selection = TextRange(updatedPath.length)
+			)
+		}
 	}
 	val pathValidity = validator(path.value.text)
 	val canProceed =
@@ -90,45 +120,85 @@ fun DerivationPathScreen(
 			onClose = onClose,
 			onDone = onDoneLocal,
 		)
-		Text(
-			text = stringResource(R.string.derivation_path_screen_title),
-			color = MaterialTheme.colors.primary,
-			style = SignerTypeface.BodyL,
-			modifier = Modifier
-				.padding(horizontal = 24.dp)
-		)
-		Spacer(modifier = Modifier.padding(top = 16.dp))
-		OutlinedTextField(
-			value = path.value, //hide password, add hint
-			onValueChange = { newStr -> path.value = newStr },
-			keyboardOptions = KeyboardOptions(
-//				fixme #1749 recreation of options leading to first letter dissapearing on some samsung devices
-				imeAction = ImeAction.Done
-			),
-			visualTransformation = DerivationPathVisualTransformation(
-				context = LocalContext.current,
-				themeColors = MaterialTheme.colors,
-				hidePassword = !passwordVisible,
-			),
-			keyboardActions = KeyboardActions(onDone = {
-				if (hasPassword) {
-					passwordFocusRequester.requestFocus()
-				} else {
-					onDoneLocal()
-				}
-			}),
-			isError = pathValidity != DerivationCreateViewModel.DerivationPathValidity.ALL_GOOD,
-			singleLine = true,
-			textStyle = SignerTypeface.LabelM,
-			colors = TextFieldDefaults.textFieldColors(
-				textColor = MaterialTheme.colors.primary,
-				errorCursorColor = MaterialTheme.colors.primary,
-			),
-			modifier = Modifier
-				.focusRequester(pathFocusRequester)
-				.fillMaxWidth(1f)
-				.padding(horizontal = 24.dp)
-		)
+		// Different UI for BIP-style vs Substrate networks
+		if (isBipStyleNetwork) {
+			// Simple account index input for Zcash/Penumbra
+			Text(
+				text = stringResource(R.string.derivation_path_screen_account_index_title),
+				color = MaterialTheme.colors.primary,
+				style = SignerTypeface.BodyL,
+				modifier = Modifier
+					.padding(horizontal = 24.dp)
+			)
+			Spacer(modifier = Modifier.padding(top = 16.dp))
+			OutlinedTextField(
+				value = accountIndex.value,
+				onValueChange = { newValue ->
+					// Only allow digits
+					if (newValue.isEmpty() || newValue.all { it.isDigit() }) {
+						accountIndex.value = newValue
+					}
+				},
+				keyboardOptions = KeyboardOptions(
+					keyboardType = KeyboardType.Number,
+					imeAction = ImeAction.Done
+				),
+				keyboardActions = KeyboardActions(onDone = { onDoneLocal() }),
+				isError = pathValidity != DerivationCreateViewModel.DerivationPathValidity.ALL_GOOD,
+				singleLine = true,
+				textStyle = SignerTypeface.LabelM,
+				colors = TextFieldDefaults.textFieldColors(
+					textColor = MaterialTheme.colors.primary,
+					errorCursorColor = MaterialTheme.colors.primary,
+				),
+				placeholder = { Text("0") },
+				modifier = Modifier
+					.focusRequester(pathFocusRequester)
+					.fillMaxWidth(1f)
+					.padding(horizontal = 24.dp)
+			)
+		} else {
+			// Complex path input for Substrate networks
+			Text(
+				text = stringResource(R.string.derivation_path_screen_title),
+				color = MaterialTheme.colors.primary,
+				style = SignerTypeface.BodyL,
+				modifier = Modifier
+					.padding(horizontal = 24.dp)
+			)
+			Spacer(modifier = Modifier.padding(top = 16.dp))
+			OutlinedTextField(
+				value = path.value, //hide password, add hint
+				onValueChange = { newStr -> path.value = newStr },
+				keyboardOptions = KeyboardOptions(
+//					fixme #1749 recreation of options leading to first letter dissapearing on some samsung devices
+					imeAction = ImeAction.Done
+				),
+				visualTransformation = DerivationPathVisualTransformation(
+					context = LocalContext.current,
+					themeColors = MaterialTheme.colors,
+					hidePassword = !passwordVisible,
+				),
+				keyboardActions = KeyboardActions(onDone = {
+					if (hasPassword) {
+						passwordFocusRequester.requestFocus()
+					} else {
+						onDoneLocal()
+					}
+				}),
+				isError = pathValidity != DerivationCreateViewModel.DerivationPathValidity.ALL_GOOD,
+				singleLine = true,
+				textStyle = SignerTypeface.LabelM,
+				colors = TextFieldDefaults.textFieldColors(
+					textColor = MaterialTheme.colors.primary,
+					errorCursorColor = MaterialTheme.colors.primary,
+				),
+				modifier = Modifier
+					.focusRequester(pathFocusRequester)
+					.fillMaxWidth(1f)
+					.padding(horizontal = 24.dp)
+			)
+		}
 		val errorForPath = when (pathValidity) {
 			DerivationCreateViewModel.DerivationPathValidity.ALL_GOOD -> null
 			DerivationCreateViewModel.DerivationPathValidity.WRONG_PATH -> stringResource(
@@ -156,82 +226,95 @@ fun DerivationPathScreen(
 		}
 
 
-		if (!hasPassword) {
-			//suggestion slashes
-			val hintBackground =
-				MaterialTheme.colors.fill6.compositeOver(MaterialTheme.colors.backgroundDanger)
-			Row(
-				modifier = Modifier
-					.padding(top = 8.dp, bottom = 16.dp)
-					.padding(horizontal = 24.dp),
-				horizontalArrangement = Arrangement.spacedBy(4.dp)
-			) {
-				Surface(
+		// Substrate-specific UI: slash suggestions and hint
+		if (!isBipStyleNetwork) {
+			if (!hasPassword) {
+				//suggestion slashes
+				val hintBackground =
+					MaterialTheme.colors.fill6.compositeOver(MaterialTheme.colors.backgroundDanger)
+				Row(
 					modifier = Modifier
-						.clickable {
-							val newText = path.value.text + "/"
-							path.value = TextFieldValue(
-								text = newText,
-								selection = TextRange(newText.length),
-							)
-						}
-						.background(hintBackground, RoundedCornerShape(24.dp))
-						.padding(vertical = 8.dp, horizontal = 20.dp),
+						.padding(top = 8.dp, bottom = 16.dp)
+						.padding(horizontal = 24.dp),
+					horizontalArrangement = Arrangement.spacedBy(4.dp)
 				) {
-					Text(
-						text = "/",
-						color = MaterialTheme.colors.pink300,
-						style = SignerTypeface.LabelS,
-					)
-				}
-				Surface(
-					modifier = Modifier
-						.clickable {
-							val newText = path.value.text + "//"
-							path.value = TextFieldValue(
-								text = newText,
-								selection = TextRange(newText.length),
-							)
-						}
-						.background(hintBackground, RoundedCornerShape(24.dp))
-						.padding(vertical = 8.dp, horizontal = 20.dp),
-				) {
-					Text(
-						text = "//",
-						color = MaterialTheme.colors.pink300,
-						style = SignerTypeface.LabelS,
-					)
-				}
-				Surface(
-					modifier = Modifier
-						.clickable {
-							val newText = path.value.text + "///"
-							path.value = TextFieldValue(
-								text = newText,
-								selection = TextRange(newText.length),
-							)
-						}
-						.background(hintBackground, RoundedCornerShape(24.dp))
-						.padding(vertical = 8.dp, horizontal = 20.dp),
-				) {
-					Text(
-						text = stringResource(R.string.derivation_path_screen_password_input_button),
-						color = MaterialTheme.colors.pink300,
-						style = SignerTypeface.LabelS,
-					)
+					Surface(
+						modifier = Modifier
+							.clickable {
+								val newText = path.value.text + "/"
+								path.value = TextFieldValue(
+									text = newText,
+									selection = TextRange(newText.length),
+								)
+							}
+							.background(hintBackground, RoundedCornerShape(24.dp))
+							.padding(vertical = 8.dp, horizontal = 20.dp),
+					) {
+						Text(
+							text = "/",
+							color = MaterialTheme.colors.pink300,
+							style = SignerTypeface.LabelS,
+						)
+					}
+					Surface(
+						modifier = Modifier
+							.clickable {
+								val newText = path.value.text + "//"
+								path.value = TextFieldValue(
+									text = newText,
+									selection = TextRange(newText.length),
+								)
+							}
+							.background(hintBackground, RoundedCornerShape(24.dp))
+							.padding(vertical = 8.dp, horizontal = 20.dp),
+					) {
+						Text(
+							text = "//",
+							color = MaterialTheme.colors.pink300,
+							style = SignerTypeface.LabelS,
+						)
+					}
+					Surface(
+						modifier = Modifier
+							.clickable {
+								val newText = path.value.text + "///"
+								path.value = TextFieldValue(
+									text = newText,
+									selection = TextRange(newText.length),
+								)
+							}
+							.background(hintBackground, RoundedCornerShape(24.dp))
+							.padding(vertical = 8.dp, horizontal = 20.dp),
+					) {
+						Text(
+							text = stringResource(R.string.derivation_path_screen_password_input_button),
+							color = MaterialTheme.colors.pink300,
+							style = SignerTypeface.LabelS,
+						)
+					}
 				}
 			}
+			Text(
+				text = stringResource(R.string.derivation_path_screen_subinput_hint),
+				color = MaterialTheme.colors.textTertiary,
+				style = SignerTypeface.CaptionM,
+				modifier = Modifier
+					.padding(horizontal = 24.dp)
+					.padding(vertical = 8.dp)
+			)
+		} else {
+			// BIP-style hint
+			Text(
+				text = stringResource(R.string.derivation_path_screen_account_index_hint),
+				color = MaterialTheme.colors.textTertiary,
+				style = SignerTypeface.CaptionM,
+				modifier = Modifier
+					.padding(horizontal = 24.dp)
+					.padding(vertical = 8.dp)
+			)
 		}
-		Text(
-			text = stringResource(R.string.derivation_path_screen_subinput_hint),
-			color = MaterialTheme.colors.textTertiary,
-			style = SignerTypeface.CaptionM,
-			modifier = Modifier
-				.padding(horizontal = 24.dp)
-				.padding(vertical = 8.dp)
-		)
 
-		if (hasPassword) {
+		if (!isBipStyleNetwork && hasPassword) {
 			Text(
 				text = stringResource(R.string.enter_password_title),
 				color = MaterialTheme.colors.primary,
@@ -365,6 +448,7 @@ private fun PreviewDerivationPathScreen() {
 	SignerNewTheme {
 		DerivationPathScreen(
 			initialPath = "//",
+			network = NetworkModel.createStub(),
 			{},
 			{},
 			{},
@@ -387,6 +471,7 @@ private fun PreviewDerivationPathPassworded() {
 	SignerNewTheme {
 		DerivationPathScreen(
 			initialPath = "//seed//1///ggg",
+			network = NetworkModel.createStub(),
 			{},
 			{},
 			{},

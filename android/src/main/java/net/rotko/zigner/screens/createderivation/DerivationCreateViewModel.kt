@@ -83,8 +83,20 @@ class DerivationCreateViewModel : ViewModel() {
 		if (!keys.any { it.key.path == path }) {
 			return path
 		} else {
+			// Check if this is a BIP-style network (Zcash/Penumbra)
+			val isBipStyle = netWork.pathId.startsWith("m/")
+
 			for (i in 0..Int.MAX_VALUE) {
-				path = "${netWork.pathId}//$i"
+				path = if (isBipStyle) {
+					// For BIP-style paths, increment the account index
+					// e.g., m/32'/133'/0' -> m/32'/133'/1'
+					val pathBase = netWork.pathId.substringBeforeLast('/')
+					"$pathBase/$i'"
+				} else {
+					// For Substrate-style paths, append //index
+					// e.g., //polkadot -> //polkadot//0
+					"${netWork.pathId}//$i"
+				}
 				if (!keys.any { it.key.path == path }) {
 					return path
 				}

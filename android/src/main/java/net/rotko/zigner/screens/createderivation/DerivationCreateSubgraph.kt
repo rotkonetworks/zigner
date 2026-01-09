@@ -39,6 +39,7 @@ fun DerivationCreateSubgraph(
 	deriveViewModel.setInitValues(seedName)
 	val context = LocalContext.current
 	val path = deriveViewModel.path.collectAsStateWithLifecycle()
+	val selectedNetwork = deriveViewModel.selectedNetwork.collectAsStateWithLifecycle()
 
 	val navController = rememberNavController()
 	NavHost(
@@ -72,24 +73,28 @@ fun DerivationCreateSubgraph(
 		composable(DerivationCreateSubgraph.path) {
 			val menuNavController = rememberNavController()
 			val keyboardController = LocalSoftwareKeyboardController.current
-			DerivationPathScreen(
-				initialPath = path.value,
-				onDerivationHelp = {
-					keyboardController?.hide()
-					menuNavController.navigate(PathDerivationSheetsSubGraph.help)
-				},
-				onClose = { navController.popBackStack() },
-				onDone = { newPath ->
-					deriveViewModel.updatePath(newPath)
-					keyboardController?.hide()
-					menuNavController.navigate(PathDerivationSheetsSubGraph.confirmation)
-				},
-				validator = deriveViewModel::checkPath,
-				modifier = Modifier
-					.statusBarsPadding()
-					.background(MaterialTheme.colors.background)
-					.imePadding(),
-			)
+			// Only show screen if network is selected
+			selectedNetwork.value?.let { network ->
+				DerivationPathScreen(
+					initialPath = path.value,
+					network = network,
+					onDerivationHelp = {
+						keyboardController?.hide()
+						menuNavController.navigate(PathDerivationSheetsSubGraph.help)
+					},
+					onClose = { navController.popBackStack() },
+					onDone = { newPath ->
+						deriveViewModel.updatePath(newPath)
+						keyboardController?.hide()
+						menuNavController.navigate(PathDerivationSheetsSubGraph.confirmation)
+					},
+					validator = deriveViewModel::checkPath,
+					modifier = Modifier
+						.statusBarsPadding()
+						.background(MaterialTheme.colors.background)
+						.imePadding(),
+				)
+			}
 			//bottom sheets
 			NavHost(
 				navController = menuNavController,
