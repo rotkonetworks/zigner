@@ -247,6 +247,8 @@
 	<string name="new_derivation_conformation_path_headline">Derivation Path Name</string>
 	<string name="new_derivation_conformation_checkbox_wrote_down">I have written down my derivation path name</string>
 	<string name="derivation_path_screen_title">Derivation Path Name</string>
+	<string name="derivation_path_screen_account_index_title">Account Index</string>
+	<string name="derivation_path_screen_account_index_hint">Enter the account number (0, 1, 2, etc.). Each number creates a separate account.</string>
 	<string name="derivation_path_screen_help_tile_message_highlited_part">/soft, //hard, ///password</string>
 	<string name="derivation_path_screen_help_tile_message">Learn more about /soft, //hard, ///password derivation methods</string>
 	<string name="derivation_path_screen_subinput_hint">Proceed with default or enter custom. \nPath name example: //&lt;network&gt;//0.</string>
@@ -286,7 +288,7 @@
 	<string name="key_sets_empty_title">You Don\'t Have Any Key Sets</string>
 	<string name="key_sets_empty_message">Add a new Key Set to Store Keys and Sign Transactions</string>
 	<string name="screen_lock_title">Set Up Screen Lock</string>
-	<string name="screen_lock_description">Any operation in Signer requires user authentication via pin or pattern. Please enable screen lock to set up those in your android. Using the application without a screen lock is not allowed.</string>
+	<string name="screen_lock_description">Any operation in Zigner requires user authentication via pin or pattern. Please enable screen lock to set up those in your android. Using the application without a screen lock is not allowed.</string>
 	<string name="screen_lock_open_settings_button">Go to Settings</string>
 	<string name="documents_terms_of_service">Terms of service</string>
 	<string name="documents_privacy_policy">Privacy policy</string>
@@ -347,6 +349,7 @@
 	<string name="network_details_field_prefix">Base58 prefix</string>
 	<string name="network_details_field_decimals">Decimals</string>
 	<string name="network_details_field_unit">Unit</string>
+	<string name="network_details_field_encryption">Encryption</string>
 	<string name="network_details_field_network_hash">Genesis hash</string>
 	<string name="network_details_verifier_unknown_type">Unknown</string>
 	<string name="network_details_metadata_sign_field_label">Sign this metadata</string>
@@ -365,7 +368,7 @@
 	<string name="verifier_certificate_title">Verifier Certificate</string>
 	<string name="verifier_certificate_remove_cta">Remove Certificate</string>
 	<string name="confirm_factory_reset_title">Wipe All Data</string>
-	<string name="confirm_factory_reset_message">Reset the Vault app to factory settings.\nThis operation cannot be reversed!</string>
+	<string name="confirm_factory_reset_message">Reset Zigner to factory settings.\nThis operation cannot be reversed!</string>
 	<string name="logs_add_comment_title">Add Note</string>
 	<string name="add_log_note_placeholder">Enter log note</string>
 	<string name="key_details_public_label_network">Network</string>
@@ -448,8 +451,8 @@
 	<string name="description_scan_icon">Scan icon</string>
   <string name="derivation_create_fast_cta">Create Key</string>
 	<string name="derivation_create_advanced_cta">Add Custom Derivation Path</string>
-	<string name="error_wrong_version_title">Upgrade your Polkadot Vault according the requirements</string>
-	<string name="error_wrong_version_description">"The new version has been installed with the air gap break. Your keys are safe, to continue using Polkadot Vault, you must upgrade your app according to the requirements. "</string>
+	<string name="error_wrong_version_title">Upgrade Zigner according to the requirements</string>
+	<string name="error_wrong_version_description">"The new version has been installed with the air gap break. Your keys are safe, to continue using Zigner, you must upgrade your app according to the requirements. "</string>
 	<string name="error_wrong_version_backup_cta">Backup Secret Phrase</string>
 	<string name="error_version_helper_link">github.com/rotkonetworks/zigner</string>
 	<string name="error_version_helper_description">"Find the latest Zigner upgrade information here "</string>
