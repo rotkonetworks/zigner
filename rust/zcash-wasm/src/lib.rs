@@ -1,0 +1,136 @@
+//! minimal zcash orchard key derivation for wasm
+//!
+//! isolated module for browser hot wallet support
+//! no substrate deps, no database, just zcash crypto
+
+use wasm_bindgen::prelude::*;
+use zeroize::Zeroize;
+
+const ZCASH_COIN_TYPE: u32 = 133;
+
+/// derive zcash orchard address from mnemonic
+///
+/// returns unified address (u1...) containing orchard receiver
+#[wasm_bindgen]
+pub fn derive_zcash_address(mnemonic: &str, account: u32, mainnet: bool) -> Result<String, JsError> {
+    let sk = derive_spending_key(mnemonic, account)?;
+    let address = get_address(&sk, mainnet);
+    Ok(address)
+}
+
+/// derive zcash unified full viewing key (ufvk) from mnemonic
+///
+/// returns ufvk string (uview1...) for watch-only wallet import
+#[wasm_bindgen]
+pub fn derive_zcash_ufvk(mnemonic: &str, account: u32, mainnet: bool) -> Result<String, JsError> {
+    let sk = derive_spending_key(mnemonic, account)?;
+    let ufvk = get_ufvk(&sk, mainnet);
+    Ok(ufvk)
+}
+
+/// derive zcash orchard full viewing key bytes from mnemonic
+///
+/// returns 96-byte fvk as hex string
+#[wasm_bindgen]
+pub fn derive_zcash_fvk_bytes(mnemonic: &str, account: u32) -> Result<String, JsError> {
+    let sk = derive_spending_key(mnemonic, account)?;
+    let fvk_bytes = get_fvk_bytes(&sk);
+    Ok(hex::encode(fvk_bytes))
+}
+
+// === internal helpers ===
+
+#[derive(Zeroize)]
+#[zeroize(drop)]
+struct SpendingKeyBytes([u8; 32]);
+
+fn derive_spending_key(mnemonic: &str, account: u32) -> Result<SpendingKeyBytes, JsError> {
+    use bip32::Mnemonic;
+    use orchard::keys::SpendingKey;
+    use zip32::AccountId;
+
+    let mnemonic = Mnemonic::new(mnemonic, bip32::Language::English)
+        .map_err(|e| JsError::new(&format!("invalid mnemonic: {}", e)))?;
+
+    let seed = mnemonic.to_seed("");
+    let seed_bytes: &[u8] = seed.as_bytes();
+
+    let account_id = AccountId::try_from(account)
+        .map_err(|_| JsError::new("invalid account index"))?;
+
+    let sk = SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
+        .map_err(|e| JsError::new(&format!("key derivation failed: {:?}", e)))?;
+
+    Ok(SpendingKeyBytes(*sk.to_bytes()))
+}
+
+fn get_fvk_bytes(sk: &SpendingKeyBytes) -> [u8; 96] {
+    use orchard::keys::FullViewingKey;
+    let orchard_sk = orchard::keys::SpendingKey::from_bytes(sk.0)
+        .into_option()
+        .expect("valid spending key");
+    let fvk = FullViewingKey::from(&orchard_sk);
+    fvk.to_bytes()
+}
+
+fn get_address(sk: &SpendingKeyBytes, mainnet: bool) -> String {
+    use orchard::keys::FullViewingKey;
+    use zcash_address::unified::{Address as UnifiedAddress, Receiver, Encoding};
+    use zcash_address::Network;
+
+    let orchard_sk = orchard::keys::SpendingKey::from_bytes(sk.0)
+        .into_option()
+        .expect("valid spending key");
+    let fvk = FullViewingKey::from(&orchard_sk);
+    let addr = fvk.address_at(0u32, orchard::keys::Scope::External);
+
+    let receiver = Receiver::Orchard(addr.to_raw_address_bytes());
+    let network = if mainnet { Network::Main } else { Network::Test };
+
+    UnifiedAddress::try_from_items(vec![receiver])
+        .expect("valid receiver")
+        .encode(&network)
+}
+
+fn get_ufvk(sk: &SpendingKeyBytes, mainnet: bool) -> String {
+    use orchard::keys::FullViewingKey;
+    use zcash_address::unified::{Encoding, Fvk, Ufvk};
+    use zcash_address::Network;
+
+    let orchard_sk = orchard::keys::SpendingKey::from_bytes(sk.0)
+        .into_option()
+        .expect("valid spending key");
+    let fvk = FullViewingKey::from(&orchard_sk);
+
+    let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
+    let network = if mainnet { Network::Main } else { Network::Test };
+
+    Ufvk::try_from_items(vec![orchard_fvk])
+        .expect("valid fvk")
+        .encode(&network)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    #[test]
+    fn test_derive_address() {
+        let addr = derive_zcash_address(TEST_MNEMONIC, 0, true).unwrap();
+        assert!(addr.starts_with("u1"));
+    }
+
+    #[test]
+    fn test_derive_ufvk() {
+        let ufvk = derive_zcash_ufvk(TEST_MNEMONIC, 0, true).unwrap();
+        assert!(ufvk.starts_with("uview"));
+    }
+
+    #[test]
+    fn test_derive_fvk_bytes() {
+        let fvk_hex = derive_zcash_fvk_bytes(TEST_MNEMONIC, 0).unwrap();
+        assert_eq!(fvk_hex.len(), 192); // 96 bytes = 192 hex chars
+    }
+}
