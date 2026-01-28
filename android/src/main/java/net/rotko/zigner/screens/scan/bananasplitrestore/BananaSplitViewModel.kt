@@ -117,7 +117,16 @@ class BananaSplitViewModel() : ViewModel() {
 									context.getString(R.string.banana_split_password_error_seed_phrase_exists)
 								return
 							}
-							_seedPhrase.value = seedPhraseResult.s
+							// directly create keyset without network selection
+							val success = createKeySetUseCase.createKeySetWithNetworks(
+								seedName.value, seedPhraseResult.s, emptyList()
+							)
+							if (success != AuthOperationResult.Success) {
+								_isCustomErrorTerminal.value =
+									context.getString(R.string.banana_split_password_error_cannot_save_seed)
+								return
+							}
+							_isSuccessTerminal.value = seedName.value
 						}
 
 						BananaSplitRecoveryResult.RequestPassword -> {

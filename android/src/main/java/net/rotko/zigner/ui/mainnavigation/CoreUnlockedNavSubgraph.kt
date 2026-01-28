@@ -18,6 +18,7 @@ import net.rotko.zigner.screens.keysets.create.NewKeysetSubgraph
 import net.rotko.zigner.screens.keysets.restore.KeysetRecoverSubgraph
 import net.rotko.zigner.screens.scan.ScanNavSubgraph
 import net.rotko.zigner.screens.scan.bananasplitcreate.bananaSplitCreateDestination
+import net.rotko.zigner.screens.settings.backupexport.BackupExportSubgraph
 import net.rotko.zigner.screens.settings.networks.helper.networkHelpersCoreSubgraph
 import net.rotko.zigner.screens.settings.settingsFullSubgraph
 
@@ -58,6 +59,21 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 			)
 		}
 		bananaSplitCreateDestination(navController)
+		composable(
+			route = CoreUnlockedNavSubgraph.BackupExport.route,
+			arguments = listOf(
+				navArgument(CoreUnlockedNavSubgraph.BackupExport.seedNameArg) {
+					type = NavType.StringType
+				}
+			)
+		) {
+			val seedName =
+				it.arguments?.getString(CoreUnlockedNavSubgraph.BackupExport.seedNameArg)!!
+			BackupExportSubgraph(
+				seedName = seedName,
+				onClose = { navController.popBackStack() }
+			)
+		}
 		composable(
 			route = CoreUnlockedNavSubgraph.KeyDetails.route,
 			arguments = listOf(
@@ -213,6 +229,13 @@ object CoreUnlockedNavSubgraph {
 			argVerbose: String
 		) =
 			"$baseRoute/$argHeader/$argDescription/$argVerbose"
+	}
+
+	object BackupExport {
+		internal const val seedNameArg = "seed_name_arg"
+		private const val baseRoute = "backup_export"
+		const val route = "$baseRoute/{$seedNameArg}"
+		fun destination(seedName: String) = "$baseRoute/$seedName"
 	}
 
 	const val errorWrongDbVersionUpdate = "core_wrong_version_mismatch"

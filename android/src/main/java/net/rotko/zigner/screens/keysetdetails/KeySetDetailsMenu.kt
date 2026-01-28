@@ -48,6 +48,7 @@ fun KeyDetailsMenuGeneral(
 	networkState: State<NetworkState?>,
 	onSelectKeysClicked: Callback,
 	onBackupSeedClicked: Callback,
+	onExportToDeviceClicked: Callback,
 	onDeleteClicked: Callback,
 	exposeConfirmAction: Callback,//also called shield
 	onCancel: Callback,
@@ -74,6 +75,12 @@ fun KeyDetailsMenuGeneral(
 				else
 					exposeConfirmAction()
 			}
+		)
+
+		MenuItemForBottomSheet(
+			Icons.Outlined.QrCode,
+			label = stringResource(R.string.key_set_menu_option_export_wallet),
+			onclick = onExportToDeviceClicked
 		)
 
 		MenuItemForBottomSheet(
@@ -106,7 +113,7 @@ private fun PreviewKeyDetailsMenu() {
 	SignerNewTheme {
 		val state = remember { mutableStateOf(NetworkState.None) }
 		KeyDetailsMenuGeneral(
-			state, {}, {}, {}, {}, {},
+			state, {}, {}, {}, {}, {}, {},
 		)
 	}
 }

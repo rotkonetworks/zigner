@@ -38,6 +38,7 @@ fun ScanScreen(
 	onDynamicDerivations: suspend (String) -> Unit,
 	onDynamicDerivationsTransactions: suspend (List<String>) -> Unit,
 	onZcashSignRequest: (String) -> Unit = {},
+	onUrBackupRestore: (List<String>) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
 
@@ -51,6 +52,7 @@ fun ScanScreen(
 		onDynamicDerivationsTransactions
 	)
 	val currentOnZcashSignRequest by rememberUpdatedState(onZcashSignRequest)
+	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
@@ -101,6 +103,17 @@ fun ScanScreen(
 				.collect { qrData ->
 					currentOnZcashSignRequest(qrData)
 					viewModel.resetZcashSignRequest()
+				}
+		}
+
+		// UR backup restore handler
+		launch {
+			viewModel.urBackupComplete
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { urFrames ->
+					currentOnUrBackupRestore(urFrames)
+					viewModel.resetUrBackup()
 				}
 		}
 	}

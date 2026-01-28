@@ -157,6 +157,14 @@ fun KeySetDetailsScreenSubgraph(
 									popUpTo(KeySetDetailsMenuSubgraph.empty)
 								}
 							},
+							onExportToDeviceClicked = {
+								menuNavController.popBackStack()
+								seedName.value?.let { name ->
+									coreNavController.navigate(
+										CoreUnlockedNavSubgraph.BackupExport.destination(name)
+									)
+								}
+							},
 							onCancel = {
 								menuNavController.popBackStack()
 							},

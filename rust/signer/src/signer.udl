@@ -624,6 +624,9 @@ namespace signer {
     void try_create_address([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string path, [ByRef] string network);
 
     [Throws=ErrorDisplayed]
+    void try_create_address_by_genesis([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string path, [ByRef] string genesis_hash_hex);
+
+    [Throws=ErrorDisplayed]
     MSignedTransaction sign_dd_transaction([ByRef] sequence<string> payload, record<string, string> seeds);
 
     [Throws=ErrorDisplayed]
@@ -726,6 +729,24 @@ namespace signer {
 
     [Throws=ErrorDisplayed]
     sequence<QrData> bs_encrypt([ByRef] string secret, [ByRef] string title, [ByRef] string passphrase, u32 total_shards, u32 required_shards);
+
+    // Export seed backup data as JSON with account metadata
+    [Throws=ErrorDisplayed]
+    string bs_export_backup_data([ByRef] string seed_name, [ByRef] string seed_phrase);
+
+    // Export seed backup as UR-encoded QR images for device-to-device migration (animated QR)
+    // max_fragment_len: 0 = single QR, 200-500 typical for animated QR
+    [Throws=ErrorDisplayed]
+    sequence<QrData> export_backup_qr([ByRef] string seed_name, [ByRef] string seed_phrase, u32 max_fragment_len);
+
+    // Export seed backup as UR-encoded string frames for device-to-device migration
+    // max_fragment_len: 0 = single QR, 200-500 typical for animated QR
+    [Throws=ErrorDisplayed]
+    sequence<string> export_backup_ur([ByRef] string seed_name, [ByRef] string seed_phrase, u32 max_fragment_len);
+
+    // Decode UR-encoded backup QR frames and return JSON string
+    [Throws=ErrorDisplayed]
+    string decode_backup_ur(sequence<string> ur_parts);
 
     // Penumbra FVK export - generate viewing key QR for Prax import
     [Throws=ErrorDisplayed]

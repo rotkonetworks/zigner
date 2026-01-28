@@ -36,6 +36,12 @@ class CameraViewModel() : ViewModel() {
 	val zcashSignRequestPayload: StateFlow<String?> =
 		_zcashSignRequestPayload.asStateFlow()
 
+	// UR backup frames (multipart UR QR codes starting with "ur:")
+	private val _urBackupFrames = MutableStateFlow<List<String>>(emptyList())
+	val urBackupFrames: StateFlow<List<String>> = _urBackupFrames.asStateFlow()
+	private val _urBackupComplete = MutableStateFlow<List<String>?>(null)
+	val urBackupComplete: StateFlow<List<String>?> = _urBackupComplete.asStateFlow()
+
 	private val _dynamicDerivationPayload =
 		MutableStateFlow<String?>(null)
 	val dynamicDerivationPayload: StateFlow<String?> =
@@ -76,6 +82,13 @@ class CameraViewModel() : ViewModel() {
 			.addOnSuccessListener { barcodes ->
 				Trace.beginSection("process frame vault code")
 				barcodes.forEach {
+					// Check for UR QR codes first (text-based, start with "ur:")
+					val textValue = it?.rawValue
+					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
+						processUrFrame(textValue)
+						return@forEach
+					}
+
 					val payloadString = it?.rawBytes?.encodeHex()
 					if (!currentMultiQrTransaction.contains(payloadString) && !payloadString.isNullOrEmpty()) {
 						val knownTotal = total.value
@@ -177,6 +190,50 @@ class CameraViewModel() : ViewModel() {
 		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
 	}
 
+	/**
+	 * Process UR (Uniform Resource) QR frame for backup restore
+	 * UR format: "ur:type/sequence/fragment" for multipart or "ur:type/fragment" for single
+	 */
+	private fun processUrFrame(urString: String) {
+		val normalizedUr = urString.lowercase()
+
+		// Check if this is a zigner backup UR (ur:zigner-backup type)
+		if (!normalizedUr.startsWith("ur:zigner-backup")) {
+			Timber.d("Ignoring non-backup UR: $normalizedUr")
+			return
+		}
+
+		// Check if this frame is already collected
+		val currentFrames = _urBackupFrames.value
+		if (currentFrames.any { it.lowercase() == normalizedUr }) {
+			return
+		}
+
+		// Add frame to collection
+		val updatedFrames = currentFrames + urString
+		_urBackupFrames.value = updatedFrames
+
+		// Parse sequence info from UR (format: ur:zigner-backup/1-3/... for multipart)
+		val sequenceMatch = Regex("ur:zigner-backup/(\\d+)-(\\d+)/").find(normalizedUr)
+		if (sequenceMatch != null) {
+			val (_, totalStr) = sequenceMatch.destructured
+			val totalFrames = totalStr.toIntOrNull() ?: 1
+			_total.value = totalFrames
+			_captured.value = updatedFrames.size
+
+			// Check if we have all frames (fountain codes may need extra frames)
+			if (updatedFrames.size >= totalFrames) {
+				// Complete - signal backup restore ready
+				resetScanValues()
+				_urBackupComplete.value = updatedFrames
+			}
+		} else {
+			// Single-part UR, complete immediately
+			resetScanValues()
+			_urBackupComplete.value = listOf(urString)
+		}
+	}
+
 	private fun addPendingTransaction(payload: String) {
 		_pendingTransactionPayloads.value += payload
 	}
@@ -196,7 +253,14 @@ class CameraViewModel() : ViewModel() {
 		_dynamicDerivationPayload.value = null
 		_dynamicDerivationTransactionPayload.value = null
 		_zcashSignRequestPayload.value = null
+		_urBackupFrames.value = emptyList()
+		_urBackupComplete.value = null
 		resetScanValues()
+	}
+
+	fun resetUrBackup() {
+		_urBackupFrames.value = emptyList()
+		_urBackupComplete.value = null
 	}
 
 	fun resetZcashSignRequest() {

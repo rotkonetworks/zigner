@@ -17,6 +17,7 @@ import net.rotko.zigner.bottomsheets.password.EnterPassword
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.FakeNavigator
 import net.rotko.zigner.screens.scan.addnetwork.AddedNetworkSheetsSubgraph
+import net.rotko.zigner.screens.scan.backuprestore.BackupRestoreSubgraph
 import net.rotko.zigner.screens.scan.bananasplitrestore.BananaSplitSubgraph
 import net.rotko.zigner.screens.scan.camera.ScanScreen
 import net.rotko.zigner.screens.scan.elements.WrongPasswordBottomSheet
@@ -61,6 +62,9 @@ fun ScanNavSubgraph(
 	val zcashSignRequest = scanViewModel.zcashSignRequest.collectAsStateWithLifecycle()
 	val zcashSignatureQr = scanViewModel.zcashSignatureQr.collectAsStateWithLifecycle()
 
+	// UR backup restore state
+	val urBackupFrames = scanViewModel.urBackupFrames.collectAsStateWithLifecycle()
+
 	val addedNetworkName: MutableState<String?> =
 		remember { mutableStateOf(null) }
 
@@ -79,7 +83,33 @@ fun ScanNavSubgraph(
 	val transactionsValue = transactions.value
 	val bananaQrData = bananaSplitPassword.value
 	val dynamicDerivationsData = dynamicDerivations.value
-	if (bananaQrData != null) {
+	val urBackupData = urBackupFrames.value
+
+	if (urBackupData != null) {
+		BackupRestoreSubgraph(
+			urFrames = urBackupData,
+			onClose = {
+				backAction()
+			},
+			onSuccess = { seedName ->
+				Toast.makeText(
+					context,
+					context.getString(
+						R.string.backup_restore_success_toast,
+						seedName
+					),
+					Toast.LENGTH_LONG
+				).show()
+				scanViewModel.clearState()
+				openKeySet(seedName)
+			},
+			onError = { error ->
+				scanViewModel.transactionError.value =
+					LocalErrorSheetModel(context = context, details = error)
+				scanViewModel.urBackupFrames.value = null
+			},
+		)
+	} else if (bananaQrData != null) {
 		BananaSplitSubgraph(
 			qrData = bananaQrData,
 			onClose = {
@@ -154,6 +184,9 @@ fun ScanNavSubgraph(
 			},
 			onZcashSignRequest = { payload ->
 				scanViewModel.performZcashSignRequest(payload, context)
+			},
+			onUrBackupRestore = { urFrames ->
+				scanViewModel.urBackupFrames.value = urFrames
 			},
 		)
 	} else {

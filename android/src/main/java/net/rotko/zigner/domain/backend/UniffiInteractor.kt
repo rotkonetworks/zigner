@@ -369,6 +369,88 @@ class UniffiInteractor(val appContext: Context) {
 				UniffiResult.Error(e)
 			}
 		}
+
+	suspend fun exportBackupData(
+		seedName: String, seedPhrase: String
+	): UniffiResult<String> =
+		withContext(Dispatchers.IO) {
+			try {
+				val json = io.parity.signer.uniffi.bsExportBackupData(seedName, seedPhrase)
+				UniffiResult.Success(json)
+			} catch (e: ErrorDisplayed) {
+				UniffiResult.Error(e)
+			}
+		}
+
+	/**
+	 * Export seed backup as UR-encoded QR images for device-to-device migration (animated QR)
+	 * @param maxFragmentLen max bytes per QR frame (0 = single QR, 300 typical for animated)
+	 * @return List of QrData images to display as animated QR
+	 */
+	suspend fun exportBackupQr(
+		seedName: String, seedPhrase: String, maxFragmentLen: UInt = 300u
+	): UniffiResult<List<io.parity.signer.uniffi.QrData>> =
+		withContext(Dispatchers.IO) {
+			try {
+				val frames = io.parity.signer.uniffi.exportBackupQr(seedName, seedPhrase, maxFragmentLen)
+				UniffiResult.Success(frames)
+			} catch (e: ErrorDisplayed) {
+				UniffiResult.Error(e)
+			}
+		}
+
+	/**
+	 * Export seed backup as UR-encoded multipart string frames for device-to-device migration
+	 * @param maxFragmentLen max bytes per QR frame (0 = single QR, 300 typical for animated)
+	 * @return List of UR strings to display as animated QR
+	 */
+	suspend fun exportBackupUr(
+		seedName: String, seedPhrase: String, maxFragmentLen: UInt = 300u
+	): UniffiResult<List<String>> =
+		withContext(Dispatchers.IO) {
+			try {
+				val frames = io.parity.signer.uniffi.exportBackupUr(seedName, seedPhrase, maxFragmentLen)
+				UniffiResult.Success(frames)
+			} catch (e: ErrorDisplayed) {
+				UniffiResult.Error(e)
+			}
+		}
+
+	/**
+	 * Decode UR-encoded backup QR frames and return JSON backup string
+	 * @param urParts collected UR frames from scanner
+	 * @return JSON backup data
+	 */
+	suspend fun decodeBackupUr(
+		urParts: List<String>
+	): UniffiResult<String> =
+		withContext(Dispatchers.IO) {
+			try {
+				val json = io.parity.signer.uniffi.decodeBackupUr(urParts)
+				UniffiResult.Success(json)
+			} catch (e: ErrorDisplayed) {
+				UniffiResult.Error(e)
+			}
+		}
+
+	/**
+	 * Create an address by looking up network via genesis hash
+	 * @param seedName name of the seed
+	 * @param seedPhrase the seed phrase
+	 * @param path derivation path like "//polkadot//0"
+	 * @param genesisHashHex hex-encoded 32-byte genesis hash
+	 */
+	suspend fun tryCreateAddressByGenesis(
+		seedName: String, seedPhrase: String, path: String, genesisHashHex: String
+	): UniffiResult<Unit> =
+		withContext(Dispatchers.IO) {
+			try {
+				io.parity.signer.uniffi.tryCreateAddressByGenesis(seedName, seedPhrase, path, genesisHashHex)
+				UniffiResult.Success(Unit)
+			} catch (e: ErrorDisplayed) {
+				UniffiResult.Error(e)
+			}
+		}
 }
 
 sealed class UniffiResult<T> {

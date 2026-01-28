@@ -1,5 +1,5 @@
 <resources>
-	<string name="app_name">zigner zafu</string>
+	<string name="app_name">zafu zigner</string>
 	<string name="remove_key_confirm_title">Forget this key?</string>
 	<string name="remove_key_confirm_text">This key will be removed for this network. Are you sure?</string>
 	<string name="remove_key_confirm_cta">Remove key</string>
@@ -91,7 +91,7 @@
 	<string name="log_message_network_custom">custom</string>
 	<string name="menu_option_add_note">Add Note</string>
 	<string name="menu_option_clear_logs">Clear Logs</string>
-	<string name="unlock_device_title">unlock zigner zafu</string>
+	<string name="unlock_device_title">unlock zafu zigner</string>
 	<string name="unlock_device_subtitle">Please authenticate yourself</string>
 	<string name="auth_error_message">Authentication error: %s</string>
 	<string name="auth_failed_message">Authentication failed</string>
@@ -130,9 +130,9 @@
 	<string name="camera_no_permission_text">Camera permission not granted</string>
 	<string name="general_got_it">Got it</string>
 	<string name="exposed_now_title">Network Connected</string>
-	<string name="exposed_now_message">zigner zafu detects currently connected network; please enable airplane mode, disable wifi and bt, disconnect all cables and handle security breach according with your security protocol.</string>
+	<string name="exposed_now_message">zafu zigner detects currently connected network; please enable airplane mode, disable wifi and bt, disconnect all cables and handle security breach according with your security protocol.</string>
 	<string name="exposed_past_title">Network Was Connected!</string>
-	<string name="exposed_past_message">your zigner zafu device has connected to a mobile, wifi, tether or bluetooth network since your last acknowledgement and should be considered unsafe to use.</string>
+	<string name="exposed_past_message">your zafu zigner device has connected to a mobile, wifi, tether or bluetooth network since your last acknowledgement and should be considered unsafe to use.</string>
 	<string name="exposed_before_cancel_button">Go Back</string>
 	<string name="exposed_before_proceed_button">Acknowledge and Proceed</string>
 	<string name="settings_title">Settings</string>
@@ -142,7 +142,7 @@
 	<string name="settings_backup_keys">Backup keys</string>
 	<string name="settings_wipe_data">Wipe all Data</string>
 	<string name="settings_hardware_key">Hardware seed protection: %1$s</string>
-	<string name="settings_version">zigner zafu version: %1$s</string>
+	<string name="settings_version">zafu zigner version: %1$s</string>
 	<string name="button_next">Next</string>
 	<string name="new_key_set_backup_subtitle">Backup your Secret Recovery Phrase</string>
 	<string name="new_key_set_backup_warning_message">Choose a backup method: write it down securely or use Banana Split for sharded backup.</string>
@@ -281,7 +281,7 @@
 	<string name="create_derivations_empty">All derived keys already added</string>
 	<string name="create_derivations_failure">Derivation key failure: %1$s</string>
 	<string name="unlock_screen_title">Please Unlock the App</string>
-	<string name="unlock_screen_description">the device has been locked because of failed authentication, please unlock the device to keep using zigner zafu</string>
+	<string name="unlock_screen_description">the device has been locked because of failed authentication, please unlock the device to keep using zafu zigner</string>
 	<string name="key_set_details_no_keys_title">Key Set Don\'t Have Any Derived Keys</string>
 	<string name="key_sets_empty_title">You Don\'t Have Any Key Sets</string>
 	<string name="key_sets_empty_message">Add a new Key Set to Store Keys and Sign Transactions</string>
@@ -309,7 +309,7 @@
 	<string name="settings_confirmation_wipe_all_title">Wipe All Data?</string>
 	<string name="settings_confirmation_wipe_all_message_yes_label">I Understand, Remove all Data</string>
 	<string name="derivation_key_empty_path_placeholder">Derivation Path is Empty</string>
-	<string name="navigation_error_general_message">please restart zigner zafu app and try again.\ninternal error description: %1$s</string>
+	<string name="navigation_error_general_message">please restart zafu zigner app and try again.\ninternal error description: %1$s</string>
 	<string name="general_error_link_clicked_on_airgap_device">No internet! Use different device.</string>
 	<string name="transaction_error_steps_1">Go to Portal where your network is stored</string>
 	<string name="transaction_error_steps_2_url_core_networks">metadata.parity.io</string>
@@ -347,6 +347,7 @@
 	<string name="network_details_field_prefix">Base58 prefix</string>
 	<string name="network_details_field_decimals">Decimals</string>
 	<string name="network_details_field_unit">Unit</string>
+	<string name="network_details_field_crypto">Signature</string>
 	<string name="network_details_field_network_hash">Genesis hash</string>
 	<string name="network_details_verifier_unknown_type">Unknown</string>
 	<string name="network_details_metadata_sign_field_label">Sign this metadata</string>
@@ -356,7 +357,7 @@
 	<string name="network_details_add_network_metadata_label">Add Network Metadata</string>
 	<string name="network_details_verifier_public_key_for_general">Key</string>
 	<string name="network_details_verifier_public_key_for_custom">Public Key</string>
-	<string name="network_details_verifier_crypto_field">Crypto</string>
+	<string name="network_details_verifier_crypto_field">Verifier Signature</string>
 	<string name="network_details_verifier_identicon_field">Identicon</string>
 	<string name="keys_backup_screen_title">Select Key Set</string>
 	<string name="keys_backup_screen_subtitle">Select a key set you want to Expose a Secret Recovery Phrase for</string>
@@ -393,7 +394,7 @@
 	<string name="network_help_metadata_go_scan">Go to “Update Metadata” Tab and Scan the Metadata Animated QR Code</string>
 	<string name="network_help_metadata_scan_cta">Scan Metadata</string>
 	<string name="onboarding_skip">Skip</string>
-	<string name="onboarding_welcome">welcome to zigner zafu</string>
+	<string name="onboarding_welcome">welcome to zafu zigner</string>
 	<string name="onboarding_header_1">Privacy-First Cold Wallet for Penumbra and Zcash</string>
 	<string name="onboarding_header_2">Generate and Store Multiple Private Keys</string>
 	<string name="onboarding_header_3">Sign Transactions While Keeping Your Private Keys Offline</string>
@@ -477,6 +478,30 @@
 	<string name="banana_split_menu_option_remove_backup">Remove Backup</string>
 	<string name="banana_split_menu_password_title">Passphrase</string>
 	<string name="banana_split_backup_removed_ok">Banana Split Backup removed</string>
+
+	<!-- Backup Restore -->
+	<string name="backup_restore_title">Restore Accounts</string>
+	<string name="backup_restore_description">This backup contains account derivations for an existing wallet. The accounts will be added to your existing seed.</string>
+	<string name="backup_restore_seed_name_label">Wallet Name</string>
+	<string name="backup_restore_seed_found">Wallet found - accounts will be added to this seed</string>
+	<string name="backup_restore_accounts_label">Accounts (%1$d)</string>
+	<string name="backup_restore_no_accounts">No derived accounts in backup</string>
+	<string name="backup_restore_button">Restore Accounts</string>
+	<string name="backup_restore_loading">Decoding backup...</string>
+	<string name="backup_restore_seed_collision_warning">A wallet with this name already exists. Please rename it first.</string>
+	<string name="backup_restore_error_decode">Failed to decode backup QR</string>
+	<string name="backup_restore_error_invalid_format">Invalid backup format</string>
+	<string name="backup_restore_error_seed_exists">This seed phrase already exists in your wallet</string>
+	<string name="backup_restore_error_seed_not_found">Seed \"%1$s\" not found. Import the seed phrase first via Banana Split or manual entry.</string>
+	<string name="backup_restore_error_save">Failed to save wallet</string>
+	<string name="backup_restore_error_auth">Authentication failed</string>
+	<string name="backup_restore_success_toast">Accounts for \"%1$s\" restored successfully</string>
+
+	<!-- Backup Export -->
+	<string name="backup_export_title">Export Accounts</string>
+	<string name="backup_export_description">Scan this animated QR code on another device to restore your account derivations. The seed phrase must be imported separately.</string>
+	<string name="backup_export_warning">This QR contains account metadata only (no seed phrase). Restore the seed phrase first on the target device.</string>
+	<string name="key_set_menu_option_export_wallet">Export to New Device</string>
 
 </resources>
 

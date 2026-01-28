@@ -28,17 +28,17 @@ internal class ZcashFvkExportViewModel : ViewModel() {
         return try {
             val export = exportZcashFvk(seedPhrase, accountIndex, label, mainnet)
 
-            // Use UR-encoded string for Zashi/Keystone QR compatibility
-            // The ur_string is "ur:zcash-accounts/..." format
+            // Generate UR-encoded QR code ("ur:zcash-accounts/...")
+            // UR format is the standard for hardware wallets and works with Zafu, Zashi, Keystone
             val urBytes = export.urString.toByteArray(Charsets.UTF_8).map { it.toUByte() }
-            val urQrPng = encodeToQr(urBytes, false)
+            val qrPng = encodeToQr(urBytes, false)
 
             ZcashFvkExportResult(
                 address = export.address,
                 ufvk = export.ufvk,
                 fvkHex = export.fvkHex,
                 urString = export.urString,
-                qrPng = urQrPng.toUByteArray().toList(),
+                qrPng = qrPng.toUByteArray().toList(),
                 label = export.label,
                 accountIndex = export.accountIndex,
                 mainnet = export.mainnet
@@ -55,7 +55,7 @@ data class ZcashFvkExportResult(
     val ufvk: String,
     /** Raw FVK bytes as hex */
     val fvkHex: String,
-    /** UR-encoded string for Zashi/Keystone QR compatibility ("ur:zcash-accounts/...") */
+    /** UR-encoded string ("ur:zcash-accounts/...") */
     val urString: String,
     /** QR code PNG of the UR string */
     val qrPng: List<UByte>,

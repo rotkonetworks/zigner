@@ -80,6 +80,9 @@ class ScanViewModel : ViewModel() {
 	var zcashSignRequest: MutableStateFlow<ZcashSignRequest?> = MutableStateFlow(null)
 	var zcashSignatureQr: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
 
+	// UR backup restore state
+	var urBackupFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
+
 	private val transactionIsInProgress = MutableStateFlow<Boolean>(false)
 
 	suspend fun performTransactionPayload(payload: String, context: Context) {
@@ -364,7 +367,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || urBackupFrames.value != null) {
 			clearState()
 			true
 		} else {
@@ -383,6 +386,7 @@ class ScanViewModel : ViewModel() {
 		errorWrongPassword.value = false
 		zcashSignRequest.value = null
 		zcashSignatureQr.value = null
+		urBackupFrames.value = null
 	}
 
 	private suspend fun signTransaction(

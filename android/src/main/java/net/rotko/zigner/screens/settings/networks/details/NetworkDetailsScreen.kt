@@ -117,12 +117,20 @@ fun NetworkDetailsScreen(
 				)
 				SignerDivider(sidePadding = 0.dp)
 				TCNameValueOppositeElement(
+					name = stringResource(R.string.network_details_field_crypto),
+					value = model.encryption
+				)
+				SignerDivider(sidePadding = 0.dp)
+				TCNameValueOppositeElement(
 					name = stringResource(R.string.network_details_field_network_hash),
 					value = model.genesisHash,
 					valueInSameLine = false
 				)
-				SignerDivider(sidePadding = 0.dp)
-				VerifierContent(model.currentVerifier)
+				// Only show verifier for Substrate networks (they use signed metadata updates)
+				if (model.isSubstrate) {
+					SignerDivider(sidePadding = 0.dp)
+					VerifierContent(model.currentVerifier)
+				}
 			}
 
 			//metadata

@@ -234,7 +234,7 @@ private fun ZcashFvkExportResultView(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Scan with Zafu or Prax to import",
+                text = "scan with zafu/zashi/keystone",
                 style = SignerTypeface.TitleS,
                 color = MaterialTheme.colors.primary
             )

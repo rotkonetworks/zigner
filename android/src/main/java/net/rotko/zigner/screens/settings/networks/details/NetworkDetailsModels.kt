@@ -11,24 +11,25 @@ import io.parity.signer.uniffi.MVerifier
 
 data class NetworkDetailsModel(
     val base58prefix: UShort,
-//	val color: String,
     val decimals: UByte,
-//	val encryptionType: String,
+    val encryption: String,
     val genesisHash: String,
     val logo: String,
     val name: String,
-//	val order: String,
-//	val pathId: String,
-//	val secondaryColor: String,
     val title: String,
     val unit: String,
     val currentVerifier: VerifierModel,
     val meta: List<MetadataModel>
 ) {
+	/** Substrate networks use verifier certificates for metadata updates */
+	val isSubstrate: Boolean
+		get() = encryption in listOf("sr25519", "ed25519", "ecdsa")
+
 	companion object {
 		fun createStub() = NetworkDetailsModel(
 			base58prefix = 0u,
 			decimals = 10.toUByte(),
+			encryption = "sr25519",
 			genesisHash = "5DCmwXp8XLzSMUyE4uhJMKV4vwvsWqqBYFKJq38CW53VHEVq",
 			logo = "polkadot",
 			name = "Polkadot",
@@ -48,6 +49,7 @@ data class NetworkDetailsModel(
 fun MNetworkDetails.toNetworkDetailsModel() = NetworkDetailsModel(
 	base58prefix = base58prefix,
 	decimals = decimals,
+	encryption = encryption.toDisplayName(),
 	genesisHash = genesisHash.toUByteArray().toByteArray().encodeHex(),
 	logo = logo,
 	name = name,
@@ -56,6 +58,20 @@ fun MNetworkDetails.toNetworkDetailsModel() = NetworkDetailsModel(
 	currentVerifier = currentVerifier.toVerifierModel(),
 	meta = meta.map { it.toMetadataModel() },
 )
+
+fun io.parity.signer.uniffi.Encryption.toDisplayName(): String = when (this) {
+	io.parity.signer.uniffi.Encryption.ED25519 -> "ed25519"
+	io.parity.signer.uniffi.Encryption.SR25519 -> "sr25519"
+	io.parity.signer.uniffi.Encryption.ECDSA -> "ecdsa"
+	io.parity.signer.uniffi.Encryption.ETHEREUM -> "secp256k1"
+	io.parity.signer.uniffi.Encryption.PENUMBRA -> "decaf377"
+	io.parity.signer.uniffi.Encryption.ZCASH -> "ed25519-zebra"
+	io.parity.signer.uniffi.Encryption.LEDGER_ED25519 -> "ed25519-bip32"
+	io.parity.signer.uniffi.Encryption.COSMOS -> "secp256k1"
+	io.parity.signer.uniffi.Encryption.BITCOIN -> "secp256k1-schnorr"
+	io.parity.signer.uniffi.Encryption.NOSTR -> "secp256k1-schnorr"
+	io.parity.signer.uniffi.Encryption.AT_PROTOCOL -> "secp256k1"
+}
 
 data class VerifierModel(
 	val ttype: String,

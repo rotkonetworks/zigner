@@ -28,12 +28,15 @@ internal class PenumbraFvkExportViewModel : ViewModel() {
         return try {
             val export = exportPenumbraFvk(seedPhrase, accountIndex, label)
 
-            // Encode QR data as PNG
-            val qrPng = encodeToQr(export.qrData, false)
+            // Generate UR-encoded QR code ("ur:penumbra-accounts/...")
+            // UR format is the standard for hardware wallets and works with Zafu/Prax
+            val urBytes = export.urString.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+            val qrPng = encodeToQr(urBytes, false)
 
             PenumbraFvkExportResult(
                 fvkBech32m = export.fvkBech32m,
                 walletIdBech32m = export.walletIdBech32m,
+                urString = export.urString,
                 qrPng = qrPng.toUByteArray().toList(),
                 label = export.label,
                 accountIndex = export.accountIndex
@@ -47,6 +50,9 @@ internal class PenumbraFvkExportViewModel : ViewModel() {
 data class PenumbraFvkExportResult(
     val fvkBech32m: String,
     val walletIdBech32m: String,
+    /** UR-encoded string ("ur:penumbra-accounts/...") */
+    val urString: String,
+    /** QR code PNG of the UR string */
     val qrPng: List<UByte>,
     val label: String,
     val accountIndex: UInt

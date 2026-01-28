@@ -366,6 +366,33 @@ fn try_create_address(
         .map_err(|e| e.to_string().into())
 }
 
+/// Create address by looking up network via genesis hash
+/// genesis_hash_hex: hex-encoded 32-byte genesis hash
+fn try_create_address_by_genesis(
+    seed_name: &str,
+    seed_phrase: &str,
+    path: &str,
+    genesis_hash_hex: &str,
+) -> anyhow::Result<(), ErrorDisplayed> {
+    use db_handling::helpers::genesis_hash_in_specs;
+    use sp_core::H256;
+
+    let db = get_db()?;
+    let genesis_hash_bytes = hex::decode(genesis_hash_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Invalid genesis hash hex: {e}") })?;
+    if genesis_hash_bytes.len() != 32 {
+        return Err(ErrorDisplayed::Str { s: "Genesis hash must be 32 bytes".to_string() });
+    }
+    let genesis_hash = H256::from_slice(&genesis_hash_bytes);
+
+    let specs_invariants = genesis_hash_in_specs(&db, genesis_hash)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("{e}") })?
+        .ok_or_else(|| ErrorDisplayed::Str { s: format!("Network with genesis hash {} not found", genesis_hash_hex) })?;
+
+    db_handling::identities::try_create_address(&db, seed_name, seed_phrase, path, &specs_invariants.first_network_specs_key)
+        .map_err(|e| e.to_string().into())
+}
+
 /// Must be called with `DecodeSequenceResult::DynamicDerivationTransaction` payload
 fn sign_dd_transaction(
     payload: &[String],
@@ -628,6 +655,179 @@ fn bs_encrypt(
 /// Generate Banana Split passphrase
 fn bs_generate_passphrase(n: u32) -> String {
     navigator::banana_split_passphrase(n)
+}
+
+/// Export seed backup data as JSON including account metadata (NO seed phrase)
+/// Returns JSON: {"v":2,"name":"...","accounts":[{"path":"...","genesis_hash":"...","network":"...","encryption":"..."}]}
+/// The seed phrase must be restored separately via banana split or manual entry
+fn bs_export_backup_data(seed_name: &str, _seed_phrase: &str) -> Result<String, ErrorDisplayed> {
+    use db_handling::identities::get_addresses_by_seed_name;
+    use db_handling::helpers::try_get_network_specs;
+    use serde_json::{json, Value};
+
+    let db = get_db()?;
+    let addresses = get_addresses_by_seed_name(&db, seed_name)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
+
+    let accounts: Vec<Value> = addresses
+        .into_iter()
+        .filter(|(_, details)| !details.is_root()) // skip root key, only derived accounts
+        .map(|(_, details)| {
+            // Look up network specs to get genesis_hash, network name, and base58prefix
+            let (genesis_hash, network_name, base58prefix) = if let Some(ref network_id) = details.network_id {
+                if let Ok(Some(specs)) = try_get_network_specs(&db, network_id) {
+                    // Only include base58prefix for Substrate networks (sr25519/ed25519/ecdsa)
+                    // Zcash and Penumbra don't use SS58 addresses
+                    let prefix: Option<u16> = match details.encryption {
+                        definitions::crypto::Encryption::Sr25519 |
+                        definitions::crypto::Encryption::Ed25519 |
+                        definitions::crypto::Encryption::Ecdsa => Some(specs.specs.base58prefix),
+                        _ => None,
+                    };
+                    (Some(hex::encode(specs.specs.genesis_hash)), Some(specs.specs.name), prefix)
+                } else {
+                    (None, None, None)
+                }
+            } else {
+                (None, None, None)
+            };
+
+            json!({
+                "path": details.path,
+                "genesis_hash": genesis_hash,
+                "network": network_name,
+                "encryption": details.encryption.show(),
+                "has_pwd": details.has_pwd,
+                "base58prefix": base58prefix,
+            })
+        })
+        .collect();
+
+    let backup = json!({
+        "v": 2,
+        "name": seed_name,
+        "accounts": accounts,
+    });
+
+    serde_json::to_string(&backup)
+        .map_err(|e| ErrorDisplayed::from(format!("JSON serialization error: {e}")))
+}
+
+/// Export seed backup as UR-encoded multipart QR frames for device-to-device migration
+/// Returns QR image data ready for display as animated QR
+/// max_fragment_len: max bytes per QR frame (0 = single QR, 200-500 typical for animated)
+fn export_backup_qr(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -> Result<Vec<QrData>, ErrorDisplayed> {
+    let ur_strings = export_backup_ur(seed_name, seed_phrase, max_fragment_len)?;
+
+    // Convert each UR string to a QR image
+    let qr_images: Result<Vec<QrData>, ErrorDisplayed> = ur_strings
+        .into_iter()
+        .map(|ur_string| {
+            qrcode_static::png_qr_from_string(&ur_string, qrcode_static::DataType::Sensitive)
+                .map(|data| QrData::Sensitive { data })
+                .map_err(|e| ErrorDisplayed::Str { s: format!("QR encoding error: {e}") })
+        })
+        .collect();
+
+    qr_images
+}
+
+/// Export seed backup as UR-encoded multipart string frames for device-to-device migration
+/// Uses fountain codes for reliable animated QR scanning
+/// max_fragment_len: max bytes per QR frame (0 = single QR, 200-500 typical for animated)
+fn export_backup_ur(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -> Result<Vec<String>, ErrorDisplayed> {
+    // Get JSON backup data
+    let json_data = bs_export_backup_data(seed_name, seed_phrase)?;
+    let data_bytes = json_data.as_bytes();
+
+    // Wrap in simple CBOR byte string
+    let mut cbor_data = Vec::with_capacity(data_bytes.len() + 10);
+    let len = data_bytes.len();
+    if len <= 23 {
+        cbor_data.push(0x40 | len as u8);
+    } else if len <= 255 {
+        cbor_data.push(0x58);
+        cbor_data.push(len as u8);
+    } else if len <= 65535 {
+        cbor_data.push(0x59);
+        cbor_data.push((len >> 8) as u8);
+        cbor_data.push(len as u8);
+    } else {
+        cbor_data.push(0x5a);
+        cbor_data.push((len >> 24) as u8);
+        cbor_data.push((len >> 16) as u8);
+        cbor_data.push((len >> 8) as u8);
+        cbor_data.push(len as u8);
+    }
+    cbor_data.extend_from_slice(data_bytes);
+
+    if max_fragment_len == 0 || cbor_data.len() <= max_fragment_len as usize {
+        // Single part UR
+        let ur_string = ur::ur::encode(&cbor_data, &ur::Type::Custom("zigner-backup"));
+        Ok(vec![ur_string])
+    } else {
+        // Multi-part (animated) UR using fountain codes
+        let mut encoder = ur::ur::Encoder::new(
+            &cbor_data,
+            max_fragment_len as usize,
+            "zigner-backup",
+        ).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to create UR encoder: {:?}", e),
+        })?;
+
+        // Generate enough frames for reliable scanning (2x the minimum)
+        let frame_count = encoder.fragment_count() * 2;
+        let mut frames = Vec::with_capacity(frame_count);
+        for _ in 0..frame_count {
+            let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to encode UR part: {:?}", e),
+            })?;
+            frames.push(part);
+        }
+        Ok(frames)
+    }
+}
+
+/// Decode UR-encoded backup and return JSON string
+fn decode_backup_ur(ur_parts: Vec<String>) -> Result<String, ErrorDisplayed> {
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str { s: "No UR parts provided".to_string() });
+    }
+
+    // Try single-part decode first
+    if ur_parts.len() == 1 {
+        let (_, cbor_data) = ur::ur::decode(&ur_parts[0])
+            .map_err(|e| ErrorDisplayed::Str { s: format!("UR decode error: {:?}", e) })?;
+        return extract_backup_json_from_cbor(&cbor_data);
+    }
+
+    // Multi-part decode using fountain codes
+    let mut decoder = ur::ur::Decoder::default();
+
+    for part in &ur_parts {
+        decoder.receive(part)
+            .map_err(|e| ErrorDisplayed::Str { s: format!("UR receive error: {:?}", e) })?;
+
+        if decoder.complete() {
+            match decoder.message() {
+                Ok(Some(cbor_data)) => return extract_backup_json_from_cbor(&cbor_data),
+                Ok(None) => return Err(ErrorDisplayed::Str { s: "UR decoder complete but no message".to_string() }),
+                Err(e) => return Err(ErrorDisplayed::Str { s: format!("UR message error: {:?}", e) }),
+            }
+        }
+    }
+
+    Err(ErrorDisplayed::Str { s: "Incomplete UR data - need more frames".to_string() })
+}
+
+fn extract_backup_json_from_cbor(cbor_data: &[u8]) -> Result<String, ErrorDisplayed> {
+    // Parse CBOR bytes using existing helper
+    let (json_bytes, _) = parse_cbor_bytes(cbor_data).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse CBOR: {}", e),
+    })?;
+
+    String::from_utf8(json_bytes)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Invalid UTF-8 in backup: {e}") })
 }
 
 fn sign_metadata_with_key(
@@ -1015,19 +1215,27 @@ fn export_zcash_fvk(
     };
 
     // Build binary QR data for Zafu wallet
+    // Format must match Zafu's parseZcashFvkQR():
+    // [0x53][0x04][0x01][flags:1][account:4 LE][label_len:1][label][orchard_fvk:96][addr_len:2 LE][address]
     let label_bytes = label.as_bytes();
     let label_len = label_bytes.len().min(255) as u8;
+    let address_bytes = address.as_bytes();
 
-    let mut qr_data = Vec::with_capacity(3 + 4 + 1 + 2 + label_bytes.len() + 96);
-    qr_data.push(0x53); // 'S' for Signer
-    qr_data.push(0x04); // Zcash network ID
+    // flags: bit 0 = mainnet, bit 1 = has orchard, bit 2 = has transparent, bit 3 = has address
+    let flags: u8 = (if mainnet { 0x01 } else { 0x00 }) | 0x02 | 0x08; // has orchard + has address
+
+    let mut qr_data = Vec::with_capacity(3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len());
+    qr_data.push(0x53); // 'S' for Signer (substrate compat)
+    qr_data.push(0x04); // Zcash chain ID
     qr_data.push(QR_TYPE_ZCASH_FVK_EXPORT);
+    qr_data.push(flags);
     qr_data.extend_from_slice(&account_index.to_le_bytes());
-    qr_data.push(if mainnet { 1 } else { 0 });
     qr_data.push(label_len);
-    qr_data.push(0); // padding for alignment
     qr_data.extend_from_slice(&label_bytes[..label_len as usize]);
     qr_data.extend_from_slice(&fvk_bytes);
+    // Add unified address (bit 3 flag)
+    qr_data.extend_from_slice(&(address_bytes.len() as u16).to_le_bytes());
+    qr_data.extend_from_slice(address_bytes);
 
     Ok(ZcashFvkExport {
         account_index,
