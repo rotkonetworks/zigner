@@ -4,8 +4,11 @@ import android.content.res.Configuration
 import androidx.camera.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -38,6 +41,7 @@ fun ScanScreen(
 	onDynamicDerivations: suspend (String) -> Unit,
 	onDynamicDerivationsTransactions: suspend (List<String>) -> Unit,
 	onZcashSignRequest: (String) -> Unit = {},
+	onPenumbraSignRequest: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
@@ -52,6 +56,7 @@ fun ScanScreen(
 		onDynamicDerivationsTransactions
 	)
 	val currentOnZcashSignRequest by rememberUpdatedState(onZcashSignRequest)
+	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 
 	LaunchedEffect(viewModel) {
@@ -106,6 +111,17 @@ fun ScanScreen(
 				}
 		}
 
+		// Penumbra sign request handler
+		launch {
+			viewModel.penumbraSignRequestPayload
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { qrData ->
+					currentOnPenumbraSignRequest(qrData)
+					viewModel.resetPenumbraSignRequest()
+				}
+		}
+
 		// UR backup restore handler
 		launch {
 			viewModel.urBackupComplete
@@ -137,6 +153,26 @@ fun ScanScreen(
 			val capturedCpy = captured
 			if (capturedCpy != null) {
 				ScanProgressBar(capturedCpy, total) { viewModel.resetScanValues() }
+			}
+		}
+
+		// Debug overlay - shows QR scan debug info on screen
+		val debugText by viewModel.debugLog.collectAsStateWithLifecycle()
+		if (debugText.isNotEmpty()) {
+			Box(
+				modifier = Modifier
+					.align(Alignment.BottomCenter)
+					.fillMaxWidth()
+					.heightIn(max = 200.dp)
+					.background(Color.Black.copy(alpha = 0.85f))
+					.padding(8.dp)
+			) {
+				Text(
+					text = debugText,
+					color = Color.Green,
+					style = MaterialTheme.typography.caption,
+					modifier = Modifier.verticalScroll(rememberScrollState())
+				)
 			}
 		}
 	}

@@ -966,6 +966,17 @@ pub struct ZcashFvkExport {
     pub ur_string: String,
 }
 
+/// Penumbra sign request parsed from QR
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PenumbraSignRequest {
+    pub chain_id: String,
+    pub effect_hash_hex: String,
+    pub spend_count: u32,
+    pub vote_count: u32,
+    pub lqt_vote_count: u32,
+    pub raw_qr_hex: String,
+}
+
 /// Zcash sign request parsed from QR
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashSignRequest {

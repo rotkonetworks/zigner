@@ -22,6 +22,15 @@ class CameraViewModel() : ViewModel() {
 
 	val isTorchEnabled = MutableStateFlow(false)
 
+	// Debug overlay for on-device debugging (no ADB needed)
+	private val _debugLog = MutableStateFlow("DEBUG OVERLAY READY\n")
+	val debugLog: StateFlow<String> = _debugLog.asStateFlow()
+	private var frameCount = 0
+	private fun dbg(msg: String) {
+		Timber.d("QR_DEBUG: $msg")
+		_debugLog.value = msg + "\n" + _debugLog.value.take(500)
+	}
+
 	private val _bananaSplitPayload = MutableStateFlow<List<String>?>(null)
 	val bananaSplitPayload: StateFlow<List<String>?> =
 		_bananaSplitPayload.asStateFlow()
@@ -35,6 +44,11 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashSignRequestPayload = MutableStateFlow<String?>(null)
 	val zcashSignRequestPayload: StateFlow<String?> =
 		_zcashSignRequestPayload.asStateFlow()
+
+	// Penumbra sign request payload (detected by 530310 prefix)
+	private val _penumbraSignRequestPayload = MutableStateFlow<String?>(null)
+	val penumbraSignRequestPayload: StateFlow<String?> =
+		_penumbraSignRequestPayload.asStateFlow()
 
 	// UR backup frames (multipart UR QR codes starting with "ur:")
 	private val _urBackupFrames = MutableStateFlow<List<String>>(emptyList())
@@ -81,7 +95,19 @@ class CameraViewModel() : ViewModel() {
 		barcodeScanner.process(inputImage)
 			.addOnSuccessListener { barcodes ->
 				Trace.beginSection("process frame vault code")
+				frameCount++
+				if (frameCount % 30 == 1) {
+					dbg("frame #$frameCount, barcodes=${barcodes.size}")
+				}
+				if (barcodes.isNotEmpty()) {
+					dbg("detected ${barcodes.size} barcode(s)")
+				}
 				barcodes.forEach {
+					val rawBytesLen = it?.rawBytes?.size ?: -1
+					val rawValueLen = it?.rawValue?.length ?: -1
+					val rawValuePreview = it?.rawValue?.take(40) ?: "null"
+					dbg("rawBytes=${rawBytesLen}b, rawValue=${rawValueLen}c, preview='${rawValuePreview}'")
+
 					// Check for UR QR codes first (text-based, start with "ur:")
 					val textValue = it?.rawValue
 					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
@@ -89,14 +115,26 @@ class CameraViewModel() : ViewModel() {
 						return@forEach
 					}
 
-					val payloadString = it?.rawBytes?.encodeHex()
+					// Try rawBytes first; fall back to rawValue for byte-mode QR codes
+					// where ML Kit may return null rawBytes but valid Latin-1 text
+					val fromRawBytes = it?.rawBytes?.encodeHex()
+					val fromRawValue = it?.rawValue?.let { text ->
+						text.map { ch -> "%02x".format(ch.code and 0xFF) }
+							.joinToString("")
+							.takeIf { hex -> hex.length >= 6 && hex.startsWith("53") }
+					}
+					val payloadString = fromRawBytes ?: fromRawValue
+					dbg("fromRawBytes=${fromRawBytes?.take(20)}, fromRawValue=${fromRawValue?.take(20)}, payload=${payloadString?.take(20)}")
+
 					if (!currentMultiQrTransaction.contains(payloadString) && !payloadString.isNullOrEmpty()) {
 						val knownTotal = total.value
 
 						if (knownTotal == null) {
 							try {
+								dbg("calling getPacketsTotal with ${payloadString.length} hex chars")
 								val proposeTotal =
 									qrparserGetPacketsTotal(payloadString, true).toInt()
+								dbg("packetsTotal=$proposeTotal")
 								if (proposeTotal == 1) {
 									decode(listOf(payloadString))
 								} else {
@@ -105,7 +143,7 @@ class CameraViewModel() : ViewModel() {
 									_total.value = proposeTotal
 								}
 							} catch (e: java.lang.Exception) {
-								Timber.e("QR sequence length estimation $e")
+								dbg("getPacketsTotal FAILED: $e")
 							}
 						} else {
 							currentMultiQrTransaction += payloadString
@@ -116,13 +154,14 @@ class CameraViewModel() : ViewModel() {
 								_captured.value = currentMultiQrTransaction.size
 							}
 
-							Timber.d("captured " + captured.value.toString())
+							dbg("captured " + captured.value.toString())
 						}
 					}
 				}
 				Trace.endSection()
 			}
 			.addOnFailureListener {
+				dbg("Scan FAILED: $it")
 				Timber.e(it, "Scan failed")
 			}
 			.addOnCompleteListener {
@@ -135,22 +174,33 @@ class CameraViewModel() : ViewModel() {
 		try {
 			// Check for Zcash sign request first (prefix 530402)
 			val firstPayload = completePayload.firstOrNull() ?: return
+			dbg("decode() called, size=${completePayload.size}, first=${firstPayload.take(40)}")
 			if (isZcashSignRequest(firstPayload)) {
+				dbg("detected Zcash sign request")
 				resetScanValues()
 				_zcashSignRequestPayload.value = firstPayload
 				return
 			}
 
+			if (isPenumbraTransaction(firstPayload)) {
+				dbg("detected Penumbra transaction")
+				resetScanValues()
+				_penumbraSignRequestPayload.value = firstPayload
+				return
+			}
+
+			dbg("calling qrparserTryDecodeQrSequence cleaned=true")
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
 				cleaned = true,
 			)
+			dbg("decode result: ${payload::class.simpleName}")
 			when (payload) {
 				is DecodeSequenceResult.BBananaSplitRecoveryResult -> {
+					dbg("BananaSplit: ${payload.b::class.simpleName}")
 					when (payload.b) {
 						is BananaSplitRecoveryResult.RecoveredSeed -> {
-							//we passed a null password in qrparserTryDecodeQrSequence so we can't get there
 							submitErrorState("cannot happen here that for scanning we don't have password request")
 						}
 
@@ -163,22 +213,26 @@ class CameraViewModel() : ViewModel() {
 
 				is DecodeSequenceResult.Other -> {
 					val actualPayload = payload.s
+					dbg("Other result, len=${actualPayload.length}, preview=${actualPayload.take(80)}")
 					resetScanValues()
 					addPendingTransaction(actualPayload)
 				}
 
 				is DecodeSequenceResult.DynamicDerivations -> {
+					dbg("DynamicDerivations result")
 					resetScanValues()
 					_dynamicDerivationPayload.value = payload.s
 				}
 
 				is DecodeSequenceResult.DynamicDerivationTransaction -> {
+					dbg("DynamicDerivationTransaction result")
 					resetScanValues()
 					_dynamicDerivationTransactionPayload.value = payload.s
 				}
 			}
 
 		} catch (e: Exception) {
+			dbg("decode() EXCEPTION: $e")
 			Timber.e(e, "Single frame decode failed")
 		}
 	}
@@ -188,6 +242,13 @@ class CameraViewModel() : ViewModel() {
 	 */
 	private fun isZcashSignRequest(hexPayload: String): Boolean {
 		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
+	}
+
+	/**
+	 * Check if hex payload is a Penumbra transaction (prefix 530310)
+	 */
+	private fun isPenumbraTransaction(hexPayload: String): Boolean {
+		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530310", ignoreCase = true)
 	}
 
 	/**
@@ -253,6 +314,7 @@ class CameraViewModel() : ViewModel() {
 		_dynamicDerivationPayload.value = null
 		_dynamicDerivationTransactionPayload.value = null
 		_zcashSignRequestPayload.value = null
+		_penumbraSignRequestPayload.value = null
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
 		resetScanValues()
@@ -265,5 +327,9 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetZcashSignRequest() {
 		_zcashSignRequestPayload.value = null
+	}
+
+	fun resetPenumbraSignRequest() {
+		_penumbraSignRequestPayload.value = null
 	}
 }
