@@ -26,6 +26,8 @@ import net.rotko.zigner.screens.scan.errors.LocalErrorSheetModel
 import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
 import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
 import net.rotko.zigner.screens.scan.transaction.ZcashTransactionScreen
+import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
+import net.rotko.zigner.screens.scan.transaction.PenumbraSignatureQrScreen
 import net.rotko.zigner.screens.scan.transaction.dynamicderivations.AddDynamicDerivationScreenFull
 import net.rotko.zigner.screens.scan.transaction.previewType
 import net.rotko.zigner.screens.scan.transaction.ZcashSignatureQrScreen
@@ -61,6 +63,10 @@ fun ScanNavSubgraph(
 	// Zcash signing state
 	val zcashSignRequest = scanViewModel.zcashSignRequest.collectAsStateWithLifecycle()
 	val zcashSignatureQr = scanViewModel.zcashSignatureQr.collectAsStateWithLifecycle()
+
+	// Penumbra signing state
+	val penumbraSignRequest = scanViewModel.penumbraSignRequest.collectAsStateWithLifecycle()
+	val penumbraSignatureQr = scanViewModel.penumbraSignatureQr.collectAsStateWithLifecycle()
 
 	// UR backup restore state
 	val urBackupFrames = scanViewModel.urBackupFrames.collectAsStateWithLifecycle()
@@ -166,6 +172,27 @@ fun ScanNavSubgraph(
 				scanViewModel.clearZcashState()
 			}
 		)
+	} else if (penumbraSignatureQr.value != null) {
+		// Show Penumbra signature QR after signing
+		PenumbraSignatureQrScreen(
+			signatureBytes = penumbraSignatureQr.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onDone = {
+				scanViewModel.clearPenumbraState()
+			}
+		)
+	} else if (penumbraSignRequest.value != null) {
+		// Show Penumbra transaction for approval
+		PenumbraTransactionScreen(
+			request = penumbraSignRequest.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onApprove = {
+				scanViewModel.signPenumbraTransaction(context)
+			},
+			onDecline = {
+				scanViewModel.clearPenumbraState()
+			}
+		)
 	} else if (transactionsValue == null || showingModals) {
 
 		ScanScreen(
@@ -184,6 +211,9 @@ fun ScanNavSubgraph(
 			},
 			onZcashSignRequest = { payload ->
 				scanViewModel.performZcashSignRequest(payload, context)
+			},
+			onPenumbraSignRequest = { payload ->
+				scanViewModel.performPenumbraSignRequest(payload, context)
 			},
 			onUrBackupRestore = { urFrames ->
 				scanViewModel.urBackupFrames.value = urFrames

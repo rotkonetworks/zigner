@@ -43,6 +43,9 @@ import io.parity.signer.uniffi.ZcashSignatureResponse
 import io.parity.signer.uniffi.parseZcashSignRequest
 import io.parity.signer.uniffi.signZcashTransaction as uniffiSignZcashTransaction
 import io.parity.signer.uniffi.encodeZcashSignatureQr
+import io.parity.signer.uniffi.PenumbraSignRequest
+import io.parity.signer.uniffi.parsePenumbraSignRequest
+import io.parity.signer.uniffi.signPenumbraTransaction as uniffiSignPenumbraTransaction
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -79,6 +82,10 @@ class ScanViewModel : ViewModel() {
 	// Zcash signing state
 	var zcashSignRequest: MutableStateFlow<ZcashSignRequest?> = MutableStateFlow(null)
 	var zcashSignatureQr: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
+
+	// Penumbra signing state
+	var penumbraSignRequest: MutableStateFlow<PenumbraSignRequest?> = MutableStateFlow(null)
+	var penumbraSignatureQr: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
 
 	// UR backup restore state
 	var urBackupFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
@@ -367,7 +374,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || urBackupFrames.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || urBackupFrames.value != null) {
 			clearState()
 			true
 		} else {
@@ -386,6 +393,8 @@ class ScanViewModel : ViewModel() {
 		errorWrongPassword.value = false
 		zcashSignRequest.value = null
 		zcashSignatureQr.value = null
+		penumbraSignRequest.value = null
+		penumbraSignatureQr.value = null
 		urBackupFrames.value = null
 	}
 
@@ -538,5 +547,69 @@ class ScanViewModel : ViewModel() {
 	fun clearZcashState() {
 		zcashSignRequest.value = null
 		zcashSignatureQr.value = null
+	}
+
+	/**
+	 * Parse Penumbra sign request from QR hex and set it for display
+	 */
+	fun performPenumbraSignRequest(qrHex: String, context: Context) {
+		try {
+			val request = parsePenumbraSignRequest(qrHex)
+			penumbraSignRequest.value = request
+		} catch (e: Exception) {
+			Timber.e(e, "Failed to parse Penumbra sign request")
+			transactionError.value = LocalErrorSheetModel(
+				title = context.getString(R.string.scan_screen_error_bad_format_title),
+				subtitle = e.message ?: "Failed to parse Penumbra transaction"
+			)
+		}
+	}
+
+	/**
+	 * Sign Penumbra transaction and generate signature QR bytes
+	 */
+	fun signPenumbraTransaction(context: Context) {
+		val request = penumbraSignRequest.value ?: return
+
+		viewModelScope.launch {
+			try {
+				when (val seeds = seedRepository.getAllSeeds()) {
+					is RepoResult.Failure -> {
+						Timber.e(TAG, "Failed to get seeds for Penumbra signing: ${seeds.error}")
+						transactionError.value = LocalErrorSheetModel(
+							title = "Signing Error",
+							subtitle = "Could not access seed phrases"
+						)
+					}
+					is RepoResult.Success -> {
+						val seedPhrase = seeds.result.values.firstOrNull()
+						if (seedPhrase == null) {
+							transactionError.value = LocalErrorSheetModel(
+								title = "No Seed Found",
+								subtitle = "No seed phrase available for signing"
+							)
+							return@launch
+						}
+
+						val signatureBytes = uniffiSignPenumbraTransaction(seedPhrase, request)
+						penumbraSignatureQr.value = signatureBytes.map { it.toByte() }.toByteArray()
+					}
+				}
+			} catch (e: Exception) {
+				Timber.e(e, "Failed to sign Penumbra transaction")
+				transactionError.value = LocalErrorSheetModel(
+					title = "Signing Failed",
+					subtitle = e.message ?: "Unknown error during signing"
+				)
+			}
+		}
+	}
+
+	/**
+	 * Clear Penumbra signing state
+	 */
+	fun clearPenumbraState() {
+		penumbraSignRequest.value = null
+		penumbraSignatureQr.value = null
 	}
 }

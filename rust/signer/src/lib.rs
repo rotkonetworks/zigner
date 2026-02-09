@@ -1039,6 +1039,62 @@ fn export_penumbra_fvk(
 }
 
 // ============================================================================
+// Penumbra cold signing functions
+// ============================================================================
+
+/// Parse a Penumbra sign request from QR hex data
+fn parse_penumbra_sign_request(qr_hex: &str) -> Result<PenumbraSignRequest, ErrorDisplayed> {
+    use transaction_parsing::penumbra::parse_penumbra_transaction;
+
+    let plan = parse_penumbra_transaction(qr_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse Penumbra QR: {e}") })?;
+
+    let effect_hash_hex = plan.effect_hash
+        .map(|h| hex::encode(h))
+        .unwrap_or_default();
+
+    Ok(PenumbraSignRequest {
+        chain_id: plan.chain_id.unwrap_or_default(),
+        effect_hash_hex,
+        spend_count: plan.spend_randomizers.len() as u32,
+        vote_count: plan.delegator_vote_randomizers.len() as u32,
+        lqt_vote_count: plan.lqt_vote_randomizers.len() as u32,
+        raw_qr_hex: qr_hex.to_string(),
+    })
+}
+
+/// Sign a Penumbra transaction and return encoded signature QR bytes
+fn sign_penumbra_transaction(
+    seed_phrase: &str,
+    request: PenumbraSignRequest,
+) -> Result<Vec<u8>, ErrorDisplayed> {
+    use transaction_parsing::penumbra::{parse_penumbra_transaction, SpendKeyBytes, sign_transaction};
+
+    // Re-parse to get the full plan data
+    let plan = parse_penumbra_transaction(&request.raw_qr_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse Penumbra QR: {e}") })?;
+
+    let effect_hash = plan.effect_hash
+        .ok_or_else(|| ErrorDisplayed::Str { s: "No effect hash in QR".to_string() })?;
+
+    // Derive spend key from seed phrase (account 0)
+    let spend_key = SpendKeyBytes::from_seed_phrase(seed_phrase, 0)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Key derivation failed: {e}") })?;
+
+    // Sign the transaction
+    let auth_data = sign_transaction(
+        effect_hash,
+        &plan.spend_randomizers,
+        &plan.delegator_vote_randomizers,
+        &plan.lqt_vote_randomizers,
+        &spend_key,
+    ).map_err(|e| ErrorDisplayed::Str { s: format!("Signing failed: {e}") })?;
+
+    // Encode as QR response bytes
+    Ok(auth_data.encode())
+}
+
+// ============================================================================
 // Zcash cold signing functions
 // ============================================================================
 
