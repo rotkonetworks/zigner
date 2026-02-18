@@ -8056,6 +8056,7 @@ dependencies = [
  "sled",
  "sp-core",
  "sp-runtime",
+ "subtle",
  "tempfile",
  "thiserror 1.0.69",
  "transaction_parsing",

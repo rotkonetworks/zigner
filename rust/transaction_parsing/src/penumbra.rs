@@ -91,7 +91,8 @@ fn parse_asset_metadata(data: &[u8]) -> Result<(Vec<String>, usize)> {
                 "asset name extends beyond data".to_string(),
             ));
         }
-        let name = String::from_utf8_lossy(&data[offset..offset + name_len]).to_string();
+        let name = String::from_utf8(data[offset..offset + name_len].to_vec())
+            .map_err(|e| Error::PenumbraParseError(format!("invalid UTF-8 in asset name: {e}")))?;
         assets.push(name);
         offset += name_len;
     }
@@ -162,7 +163,8 @@ pub fn parse_penumbra_transaction(data_hex: &str) -> Result<PenumbraTransactionP
 
             if offset + chain_id_len <= data.len() {
                 chain_id = Some(
-                    String::from_utf8_lossy(&data[offset..offset + chain_id_len]).to_string()
+                    String::from_utf8(data[offset..offset + chain_id_len].to_vec())
+                        .map_err(|e| Error::PenumbraParseError(format!("invalid UTF-8 in chain_id: {e}")))?
                 );
                 offset += chain_id_len;
             }
@@ -251,13 +253,34 @@ pub fn parse_penumbra_transaction(data_hex: &str) -> Result<PenumbraTransactionP
         }
     }
 
+    // parse LQT vote randomizers
+    let mut lqt_vote_randomizers = Vec::new();
+    if offset + 2 <= data.len() {
+        let lqt_count = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+        offset += 2;
+
+        for _ in 0..lqt_count {
+            if offset + 32 > data.len() {
+                return Err(Error::PenumbraParseError(
+                    "truncated LQT vote randomizer".to_string(),
+                ));
+            }
+            let mut r = [0u8; 32];
+            r.copy_from_slice(&data[offset..offset + 32]);
+            lqt_vote_randomizers.push(r);
+            offset += 32;
+        }
+    }
+
+    let _ = offset; // may have trailing data
+
     Ok(PenumbraTransactionPlan {
         plan_bytes,
         asset_metadata,
         spend_randomizers,
         delegator_vote_randomizers,
-        lqt_vote_randomizers: Vec::new(), // LQT votes not yet supported
-        chain_id, // parsed from QR or None if v1 format
+        lqt_vote_randomizers,
+        chain_id,
         expiry_height: None,
         effect_hash,
     })

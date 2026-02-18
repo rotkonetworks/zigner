@@ -28,7 +28,7 @@ pub const PENUMBRA_BIP44_PATH: &str = "m/44'/6532'/0'";
 const SPEND_AUTH_EXPAND_LABEL: &[u8; 16] = b"Penumbra_ExpndSd";
 
 /// spend key bytes - the 32-byte seed derived from bip44
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 #[cfg(feature = "penumbra")]
 pub struct SpendKeyBytes(pub [u8; 32]);
 
@@ -68,12 +68,13 @@ impl SpendKeyBytes {
         })?)
         .map_err(|e| Error::PenumbraKeyDerivation(format!("key derivation failed: {e}")))?;
 
-        // extract 32-byte private key
+        // extract 32-byte private key and zeroize intermediates
+        let mut child_key_bytes = child_key.to_bytes();
         let mut key_bytes = [0u8; 32];
-        key_bytes.copy_from_slice(&child_key.to_bytes()[..32]);
+        key_bytes.copy_from_slice(&child_key_bytes[..32]);
 
-        // zeroize seed
         seed_bytes.zeroize();
+        child_key_bytes.zeroize();
 
         Ok(Self(key_bytes))
     }
@@ -170,24 +171,31 @@ impl PenumbraAuthorizationData {
     /// - lqt_vote_count: 2 bytes (le)
     /// - lqt_vote_sigs: 64 bytes each
     pub fn encode(&self) -> Vec<u8> {
-        let mut output = Vec::new();
+        // pre-allocate exact size
+        let capacity = 64 + 6
+            + (self.spend_auths.len() + self.delegator_vote_auths.len()
+                + self.lqt_vote_auths.len()) * 64;
+        let mut output = Vec::with_capacity(capacity);
 
         // effect hash
         output.extend_from_slice(&self.effect_hash);
 
-        // spend auths
+        // spend auths (bounds-checked to prevent silent u16 truncation)
+        assert!(self.spend_auths.len() <= u16::MAX as usize, "too many spend auths");
         output.extend_from_slice(&(self.spend_auths.len() as u16).to_le_bytes());
         for sig in &self.spend_auths {
             output.extend_from_slice(sig);
         }
 
         // delegator vote auths
+        assert!(self.delegator_vote_auths.len() <= u16::MAX as usize, "too many vote auths");
         output.extend_from_slice(&(self.delegator_vote_auths.len() as u16).to_le_bytes());
         for sig in &self.delegator_vote_auths {
             output.extend_from_slice(sig);
         }
 
         // lqt vote auths
+        assert!(self.lqt_vote_auths.len() <= u16::MAX as usize, "too many lqt vote auths");
         output.extend_from_slice(&(self.lqt_vote_auths.len() as u16).to_le_bytes());
         for sig in &self.lqt_vote_auths {
             output.extend_from_slice(sig);
@@ -269,8 +277,9 @@ pub fn verify_effect_hash(
     let computed_hash = plan.effect_hash(fvk)
         .map_err(|e| Error::PenumbraKeyDerivation(format!("failed to compute effect hash: {e}")))?;
 
-    // Compare
-    if computed_hash.as_bytes() != qr_effect_hash {
+    // Constant-time comparison to prevent timing side-channel attacks
+    use subtle::ConstantTimeEq;
+    if computed_hash.as_bytes().ct_eq(qr_effect_hash).unwrap_u8() != 1 {
         return Err(Error::PenumbraKeyDerivation(
             "effect hash mismatch: QR hash does not match computed hash from plan. \
              The hot wallet may be compromised.".to_string(),
@@ -633,12 +642,13 @@ impl FvkExportData {
         // account index
         output.extend_from_slice(&self.account_index.to_le_bytes());
 
-        // label
+        // label (truncated to 255 bytes max for u8 length prefix)
         match &self.label {
             Some(label) => {
                 let label_bytes = label.as_bytes();
-                output.push(label_bytes.len() as u8);
-                output.extend_from_slice(label_bytes);
+                let len = label_bytes.len().min(255);
+                output.push(len as u8);
+                output.extend_from_slice(&label_bytes[..len]);
             }
             None => {
                 output.push(0);
@@ -684,7 +694,8 @@ impl FvkExportData {
             }
             let label_bytes = &data[offset..offset + label_len];
             offset += label_len;
-            Some(String::from_utf8_lossy(label_bytes).to_string())
+            Some(String::from_utf8(label_bytes.to_vec())
+                .map_err(|e| Error::PenumbraKeyDerivation(format!("invalid UTF-8 in label: {e}")))?)
         } else {
             None
         };
