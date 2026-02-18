@@ -237,6 +237,50 @@ pub fn sign_transaction(
 }
 
 // ============================================================================
+// effect hash verification (using penumbra SDK)
+// ============================================================================
+
+/// Verify that the effect hash from the QR matches the correct effect hash
+/// computed from the transaction plan and FVK derived from the spend key.
+///
+/// This is critical for airgap security: without this check, a compromised
+/// hot wallet could send a different effect hash than what the plan describes,
+/// tricking Zigner into signing an unintended transaction.
+#[cfg(feature = "penumbra")]
+pub fn verify_effect_hash(
+    plan_bytes: &[u8],
+    qr_effect_hash: &[u8; 64],
+    spend_key_bytes: &SpendKeyBytes,
+) -> Result<()> {
+    use penumbra_keys::keys::SpendKeyBytes as SdkSpendKeyBytes;
+    use penumbra_keys::keys::SpendKey;
+    use penumbra_transaction::plan::TransactionPlan;
+    use penumbra_proto::DomainType;
+
+    // Construct the SDK's SpendKey from our raw 32-byte seed
+    let sdk_spend_key: SpendKey = SdkSpendKeyBytes(spend_key_bytes.0).into();
+    let fvk = sdk_spend_key.full_viewing_key();
+
+    // Decode the transaction plan from protobuf
+    let plan = TransactionPlan::decode(plan_bytes)
+        .map_err(|e| Error::PenumbraKeyDerivation(format!("failed to decode plan: {e}")))?;
+
+    // Compute the correct effect hash
+    let computed_hash = plan.effect_hash(fvk)
+        .map_err(|e| Error::PenumbraKeyDerivation(format!("failed to compute effect hash: {e}")))?;
+
+    // Compare
+    if computed_hash.as_bytes() != qr_effect_hash {
+        return Err(Error::PenumbraKeyDerivation(
+            "effect hash mismatch: QR hash does not match computed hash from plan. \
+             The hot wallet may be compromised.".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+// ============================================================================
 // effect hash computation
 // ============================================================================
 

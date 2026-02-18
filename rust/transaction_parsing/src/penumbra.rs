@@ -54,7 +54,7 @@ pub struct PenumbraTransactionPlan {
     /// expiry height if present
     pub expiry_height: Option<u64>,
     /// pre-computed effect hash from hot wallet (64 bytes)
-    /// this is what gets signed - Zigner trusts pcli to compute it correctly
+    /// this is what gets signed - Zigner verifies it against the plan + FVK before signing
     pub effect_hash: Option<[u8; 64]>,
 }
 

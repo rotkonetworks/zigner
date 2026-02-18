@@ -1069,6 +1069,7 @@ fn sign_penumbra_transaction(
     request: PenumbraSignRequest,
 ) -> Result<Vec<u8>, ErrorDisplayed> {
     use transaction_parsing::penumbra::{parse_penumbra_transaction, SpendKeyBytes, sign_transaction};
+    use transaction_signing::penumbra::verify_effect_hash;
 
     // Re-parse to get the full plan data
     let plan = parse_penumbra_transaction(&request.raw_qr_hex)
@@ -1080,6 +1081,12 @@ fn sign_penumbra_transaction(
     // Derive spend key from seed phrase (account 0)
     let spend_key = SpendKeyBytes::from_seed_phrase(seed_phrase, 0)
         .map_err(|e| ErrorDisplayed::Str { s: format!("Key derivation failed: {e}") })?;
+
+    // SECURITY: Verify the effect hash from the QR matches what we compute
+    // from the plan + our FVK. This prevents a compromised hot wallet from
+    // tricking us into signing a different transaction.
+    verify_effect_hash(&plan.plan_bytes, &effect_hash, &spend_key)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Effect hash verification failed: {e}") })?;
 
     // Sign the transaction
     let auth_data = sign_transaction(
