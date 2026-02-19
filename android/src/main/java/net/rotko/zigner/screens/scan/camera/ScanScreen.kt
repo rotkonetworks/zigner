@@ -4,8 +4,6 @@ import android.content.res.Configuration
 import androidx.camera.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -156,25 +154,6 @@ fun ScanScreen(
 			}
 		}
 
-		// Debug overlay - shows QR scan debug info on screen
-		val debugText by viewModel.debugLog.collectAsStateWithLifecycle()
-		if (debugText.isNotEmpty()) {
-			Box(
-				modifier = Modifier
-					.align(Alignment.BottomCenter)
-					.fillMaxWidth()
-					.heightIn(max = 200.dp)
-					.background(Color.Black.copy(alpha = 0.85f))
-					.padding(8.dp)
-			) {
-				Text(
-					text = debugText,
-					color = Color.Green,
-					style = MaterialTheme.typography.caption,
-					modifier = Modifier.verticalScroll(rememberScrollState())
-				)
-			}
-		}
 	}
 	KeepScreenOn()
 }

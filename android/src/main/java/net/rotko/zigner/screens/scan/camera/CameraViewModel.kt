@@ -22,15 +22,6 @@ class CameraViewModel() : ViewModel() {
 
 	val isTorchEnabled = MutableStateFlow(false)
 
-	// Debug overlay for on-device debugging (no ADB needed)
-	private val _debugLog = MutableStateFlow("DEBUG OVERLAY READY\n")
-	val debugLog: StateFlow<String> = _debugLog.asStateFlow()
-	private var frameCount = 0
-	private fun dbg(msg: String) {
-		Timber.d("QR_DEBUG: $msg")
-		_debugLog.value = msg + "\n" + _debugLog.value.take(500)
-	}
-
 	private val _bananaSplitPayload = MutableStateFlow<List<String>?>(null)
 	val bananaSplitPayload: StateFlow<List<String>?> =
 		_bananaSplitPayload.asStateFlow()
@@ -95,19 +86,7 @@ class CameraViewModel() : ViewModel() {
 		barcodeScanner.process(inputImage)
 			.addOnSuccessListener { barcodes ->
 				Trace.beginSection("process frame vault code")
-				frameCount++
-				if (frameCount % 30 == 1) {
-					dbg("frame #$frameCount, barcodes=${barcodes.size}")
-				}
-				if (barcodes.isNotEmpty()) {
-					dbg("detected ${barcodes.size} barcode(s)")
-				}
 				barcodes.forEach {
-					val rawBytesLen = it?.rawBytes?.size ?: -1
-					val rawValueLen = it?.rawValue?.length ?: -1
-					val rawValuePreview = it?.rawValue?.take(40) ?: "null"
-					dbg("rawBytes=${rawBytesLen}b, rawValue=${rawValueLen}c, preview='${rawValuePreview}'")
-
 					// Check for UR QR codes first (text-based, start with "ur:")
 					val textValue = it?.rawValue
 					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
@@ -124,17 +103,14 @@ class CameraViewModel() : ViewModel() {
 							.takeIf { hex -> hex.length >= 6 && hex.startsWith("53") }
 					}
 					val payloadString = fromRawBytes ?: fromRawValue
-					dbg("fromRawBytes=${fromRawBytes?.take(20)}, fromRawValue=${fromRawValue?.take(20)}, payload=${payloadString?.take(20)}")
 
 					if (!currentMultiQrTransaction.contains(payloadString) && !payloadString.isNullOrEmpty()) {
 						val knownTotal = total.value
 
 						if (knownTotal == null) {
 							try {
-								dbg("calling getPacketsTotal with ${payloadString.length} hex chars")
 								val proposeTotal =
 									qrparserGetPacketsTotal(payloadString, true).toInt()
-								dbg("packetsTotal=$proposeTotal")
 								if (proposeTotal == 1) {
 									decode(listOf(payloadString))
 								} else {
@@ -143,7 +119,7 @@ class CameraViewModel() : ViewModel() {
 									_total.value = proposeTotal
 								}
 							} catch (e: java.lang.Exception) {
-								dbg("getPacketsTotal FAILED: $e")
+								Timber.d(e, "getPacketsTotal failed")
 							}
 						} else {
 							currentMultiQrTransaction += payloadString
@@ -153,15 +129,12 @@ class CameraViewModel() : ViewModel() {
 							} else {
 								_captured.value = currentMultiQrTransaction.size
 							}
-
-							dbg("captured " + captured.value.toString())
 						}
 					}
 				}
 				Trace.endSection()
 			}
 			.addOnFailureListener {
-				dbg("Scan FAILED: $it")
 				Timber.e(it, "Scan failed")
 			}
 			.addOnCompleteListener {
@@ -174,31 +147,25 @@ class CameraViewModel() : ViewModel() {
 		try {
 			// Check for Zcash sign request first (prefix 530402)
 			val firstPayload = completePayload.firstOrNull() ?: return
-			dbg("decode() called, size=${completePayload.size}, first=${firstPayload.take(40)}")
 			if (isZcashSignRequest(firstPayload)) {
-				dbg("detected Zcash sign request")
 				resetScanValues()
 				_zcashSignRequestPayload.value = firstPayload
 				return
 			}
 
 			if (isPenumbraTransaction(firstPayload)) {
-				dbg("detected Penumbra transaction")
 				resetScanValues()
 				_penumbraSignRequestPayload.value = firstPayload
 				return
 			}
 
-			dbg("calling qrparserTryDecodeQrSequence cleaned=true")
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
 				cleaned = true,
 			)
-			dbg("decode result: ${payload::class.simpleName}")
 			when (payload) {
 				is DecodeSequenceResult.BBananaSplitRecoveryResult -> {
-					dbg("BananaSplit: ${payload.b::class.simpleName}")
 					when (payload.b) {
 						is BananaSplitRecoveryResult.RecoveredSeed -> {
 							submitErrorState("cannot happen here that for scanning we don't have password request")
@@ -212,27 +179,22 @@ class CameraViewModel() : ViewModel() {
 				}
 
 				is DecodeSequenceResult.Other -> {
-					val actualPayload = payload.s
-					dbg("Other result, len=${actualPayload.length}, preview=${actualPayload.take(80)}")
 					resetScanValues()
-					addPendingTransaction(actualPayload)
+					addPendingTransaction(payload.s)
 				}
 
 				is DecodeSequenceResult.DynamicDerivations -> {
-					dbg("DynamicDerivations result")
 					resetScanValues()
 					_dynamicDerivationPayload.value = payload.s
 				}
 
 				is DecodeSequenceResult.DynamicDerivationTransaction -> {
-					dbg("DynamicDerivationTransaction result")
 					resetScanValues()
 					_dynamicDerivationTransactionPayload.value = payload.s
 				}
 			}
 
 		} catch (e: Exception) {
-			dbg("decode() EXCEPTION: $e")
 			Timber.e(e, "Single frame decode failed")
 		}
 	}
