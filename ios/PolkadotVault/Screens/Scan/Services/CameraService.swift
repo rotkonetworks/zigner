@@ -156,7 +156,6 @@ private extension CameraService {
     }
 
     func decode(completeOperationPayload: [String]) {
-        // Detect Penumbra/Zcash payloads before passing to generic decoder
         if let first = completeOperationPayload.first {
             let hexPrefix = first.prefix(6).lowercased()
             if hexPrefix == "530310" {

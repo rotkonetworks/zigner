@@ -16,7 +16,6 @@ struct CameraView: View {
 
     var body: some View {
         ZStack {
-            // Full screen camera preview
             CameraPreview(session: model.session)
                 .onReceive(model.$payload) { payload in
                     guard let payload else { return }
@@ -42,7 +41,6 @@ struct CameraView: View {
                 }
             VStack {
                 ZStack(alignment: .bottom) {
-                    // Blur overlay
                     Rectangle()
                         .background(.regularMaterial)
                     VStack {
@@ -61,7 +59,6 @@ struct CameraView: View {
                         .padding(.horizontal, Spacing.medium)
                         .padding(.top, Spacing.medium + safeAreaInsets.top)
                         Spacer()
-                        // Camera cutout
                         ZStack {
                             RoundedRectangle(cornerRadius: CornerRadius.qrCodeScanner)
                                 .aspectRatio(1.0, contentMode: .fit)
@@ -74,7 +71,6 @@ struct CameraView: View {
                         }
                         .padding(.horizontal, Spacing.medium)
                         Spacer()
-                        // Text description
                         VStack(alignment: .center, spacing: Spacing.small) {
                             Text(viewModel.header)
                                 .font(PrimaryFont.titleL.font)

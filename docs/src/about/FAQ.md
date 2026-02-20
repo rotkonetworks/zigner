@@ -1,103 +1,128 @@
 # FAQ
 
-- [About](#about)
+- [Security](#security)
 - [Penumbra](#penumbra)
 - [Zcash](#zcash)
-- [Substrate Networks](#substrate-networks)
+- [Substrate](#substrate)
 - [Seeds and keys](#seeds-and-keys)
 
-## About
+## Security
 
 ### What is Zigner?
 
-Zigner is an air-gapped cold wallet app that turns an offline smartphone into a secure hardware wallet. It supports Penumbra, Zcash, and Substrate-based chains (Polkadot, Kusama). Your private keys never leave the device — all communication happens via QR codes.
+An air-gapped cold signer. It holds private keys on an offline phone and
+signs transactions presented as QR codes. It never touches a network.
 
-### Should I use Zigner?
+### What does it protect against?
 
-Zigner is optimized for the highest security requirements for privacy-focused blockchains. If you hold Penumbra or Zcash assets and want hardware-wallet-grade security without trusting a hardware vendor, Zigner is for you. Get in touch via [GitHub Issues](https://github.com/rotkonetworks/zigner/issues) if you need help.
+A compromised hot wallet. Even if Prax, Zafu, or Polkadot.js is backdoored,
+the attacker cannot extract your spending key because it never leaves the
+signing device. They can present a malicious transaction, but Zigner displays
+the decoded contents for you to review before signing.
 
-### How does an offline device communicate with the outside world?
+### What does it NOT protect against?
 
-Communication happens through scanning and generating QR codes. Your hot wallet (Prax, Zafu, Zashi, Polkadot.js) constructs a transaction and encodes it as a QR code. Zigner scans it, signs it offline with your private key, and displays a signature QR code that your hot wallet scans to broadcast the transaction. Keys never leave the air-gapped device.
+- You approving a transaction you didn't read
+- Physical access to the unlocked device
+- A supply chain attack on Zigner itself (verify reproducible builds)
+- Side channels on the phone hardware (EM, power analysis)
 
-### How do I keep my keys secure?
+### How does the device communicate?
 
-Zigner keeps your keys safe on an air-gapped device, but you must also back up your seed phrases. We recommend paper backups stored in safe locations. Zigner also supports [Banana Split](https://bs.parity.io/) — Shamir Secret Sharing that splits your seed into QR code shards requiring a threshold to reconstruct.
+QR codes only. The hot wallet encodes an unsigned transaction as a QR code.
+Zigner scans it, displays the parsed contents, signs if approved, and shows
+a signature QR code. The hot wallet scans that and broadcasts. No bytes
+traverse any network interface on the signing device.
+
+### What if I accidentally enable WiFi?
+
+Zigner detects connectivity changes and warns you. But the fundamental
+guarantee is gone: any malware on the device could have exfiltrated keys
+during the window the radio was active. Treat it as a compromise.
 
 ## Penumbra
 
-### What Penumbra operations can I sign?
+### What can I sign?
 
-Zigner supports signing all major Penumbra transaction actions:
-- **Shielded transfers** — spends and outputs
-- **DEX** — swaps, liquidity position open/close/withdraw
-- **Staking** — delegate, undelegate, undelegate claim
-- **Governance** — delegator votes
-- **Dutch auctions** — schedule, end, withdraw
-- **IBC** — ICS20 withdrawal for cross-chain transfers
+All transaction actions: spends, outputs, swaps, liquidity positions,
+delegate/undelegate/claim, delegator votes, Dutch auctions, ICS20
+withdrawals.
 
-### How do I use Zigner with Prax?
+### How does Prax pairing work?
 
-1. In Zigner, export your Penumbra Full Viewing Key (FVK) as a QR code
-2. Import the FVK into Prax to create a watch-only wallet
-3. Construct transactions in Prax — it will display a QR code
-4. Scan the transaction QR with Zigner, review and approve
-5. Zigner displays a signature QR — scan it with Prax to broadcast
+1. Export your Full Viewing Key (FVK) from Zigner as a QR code
+2. Import into Prax (watch-only)
+3. Prax constructs transactions and shows QR codes
+4. Scan with Zigner, review, approve
+5. Scan the signature QR back into Prax to broadcast
 
-### Does Zigner validate the Penumbra chain ID?
+### Is the chain ID validated?
 
-Yes. Zigner validates the chain ID in every transaction plan to prevent cross-chain signing attacks.
+Yes. Every signing request includes a chain ID. Zigner rejects requests
+where the chain ID doesn't match what the transaction plan specifies. This
+prevents cross-chain replay and mainnet/testnet confusion.
 
 ## Zcash
 
-### What Zcash operations can I sign?
+### What can I sign?
 
-- **Orchard (shielded)** — RedPallas signatures on the Pallas curve
-- **Transparent** — secp256k1 ECDSA signatures for legacy P2PKH inputs
-- **PCZT** — Partially Constructed Zcash Transactions for multi-party signing workflows
+- Orchard shielded actions (RedPallas on Pallas)
+- Transparent inputs (secp256k1 ECDSA, P2PKH)
+- PCZT (Partially Created Zcash Transactions) for multi-party flows
 
-### How do I use Zigner with Zafu or Zashi?
+### How does Zafu/Zashi pairing work?
 
-1. In Zigner, export your Unified Full Viewing Key (UFVK) as a QR code
-2. Import the UFVK into your hot wallet (Zafu or Zashi) to create a watch-only wallet
-3. Construct transactions in your hot wallet — it will display a QR code (UR-encoded)
-4. Scan the transaction QR with Zigner, review and approve
-5. Zigner displays a signature QR — scan it with your hot wallet to broadcast
+Same flow as Penumbra: export a Unified Full Viewing Key (UFVK) per ZIP-316,
+import into your hot wallet as watch-only, then scan transaction QRs back
+and forth. Wire format is UR-encoded (Keystone SDK compatible).
 
-### Does Zigner support both mainnet and testnet?
+### What key derivation is used?
 
-Yes. Zigner supports Zcash mainnet and testnet, with network detection built into the signing flow.
-
-### What key derivation does Zigner use for Zcash?
-
-- Orchard keys: ZIP-32 derivation at `m/32'/133'/account'`
-- Transparent keys: BIP-44 derivation at `m/44'/133'/account'/change/index`
+- Orchard: ZIP-32 at `m/32'/133'/account'`
+- Transparent: BIP-44 at `m/44'/133'/account'/change/index`
 - Unified addresses and UFVKs per ZIP-316
 
-## Substrate Networks
+### Mainnet and testnet?
 
-### What Substrate networks does Zigner support?
+Both supported. Network detection is built into the signing flow.
 
-Out of the box: Polkadot, Kusama, and Westend. Any Substrate-based network can be added by scanning network specs and metadata QR codes.
+## Substrate
 
-### How can I update network metadata?
+### What networks are supported?
 
-Scan multipart metadata QR codes from [metadata.parity.io](https://metadata.parity.io/) or [metadata.rotko.net](https://metadata.rotko.net) for parachains.
+Polkadot, Kusama, and Westend ship built-in. Any Substrate chain can be
+added by scanning its network specs and metadata as QR codes from
+[metadata.parity.io](https://metadata.parity.io/) or
+[metadata.rotko.net](https://metadata.rotko.net).
 
-### How can I add a new network?
+### How do I update metadata?
 
-Follow the [Add New Network](../tutorials/Add-New-Network.md) guide.
+Scan the multipart metadata QR from the portal for your network. Zigner
+validates the metadata signature against the verifier certificate before
+accepting it.
 
 ## Seeds and keys
 
-### Can I use the same seed for Penumbra, Zcash, and Substrate?
+### Can I use one seed for Penumbra, Zcash, and Substrate?
 
-Yes. Zigner derives keys for each chain from the same seed phrase using chain-specific derivation paths (BIP-44 coin types), so keys are isolated per chain while sharing a single backup.
+Yes. Each chain derives keys from the same BIP-39 seed using distinct
+derivation paths (different BIP-44 coin types), so keys are cryptographically
+isolated per chain.
 
-### What is the difference between seed key and derived key?
+### What is a derived key?
 
-A seed key is generated directly from a seed phrase. Derived keys are "grown" from a seed by adding derivation paths. The main advantage: derived keys only need a derivation path backed up (alongside the seed phrase) for recovery.
+A key produced by applying a derivation path to a seed. Recovery requires
+only the seed phrase and the path, not the derived key itself.
 
-### How can I rename a seed?
+### Can I rename a seed?
 
-Due to security considerations, you cannot rename a seed. Back up the seed and derived keys, remove it, and add the seed again with a new name.
+No. Seed names are bound at creation time as a security invariant. To change
+a name: back up the seed phrase, remove the key set, re-add it with the new
+name.
+
+### What is Banana Split?
+
+Shamir Secret Sharing for seed phrases. Splits a seed into N QR code shards
+with a threshold of K required to reconstruct. No single shard reveals
+anything about the seed. Uses [bs.parity.io](https://bs.parity.io/) for
+shard encoding.

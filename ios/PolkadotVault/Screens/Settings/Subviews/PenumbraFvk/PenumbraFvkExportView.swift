@@ -89,7 +89,6 @@ struct PenumbraFvkExportView: View {
                     .font(PrimaryFont.titleS.font)
                     .foregroundColor(.textAndIconsPrimary)
 
-                // Wallet ID
                 VStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     Text("Wallet ID")
                         .font(PrimaryFont.labelM.font)
@@ -102,7 +101,6 @@ struct PenumbraFvkExportView: View {
                 .padding(Spacing.small)
                 .containerBackground()
 
-                // FVK
                 VStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     Text("Full Viewing Key")
                         .font(PrimaryFont.labelM.font)
@@ -180,7 +178,6 @@ extension PenumbraFvkExportView {
                         accountIndex: 0,
                         label: seedName
                     )
-                    // Encode UR string as QR code data
                     let urBytes = Array(export.urString.utf8)
                     let qrPng = try encodeToQr(payload: urBytes, isDanger: false)
                     DispatchQueue.main.async {

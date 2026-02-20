@@ -20,6 +20,8 @@ struct PenumbraTransactionView: View {
                 )
             )
             switch viewModel.state {
+            case .seedSelection:
+                seedSelectionView
             case .review:
                 reviewView
             case .signing:
@@ -36,14 +38,39 @@ struct PenumbraTransactionView: View {
         .background(.backgroundPrimary)
     }
 
+    private var seedSelectionView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Select a key set to sign with:")
+                .font(PrimaryFont.bodyL.font)
+                .foregroundColor(.textAndIconsSecondary)
+                .padding(.horizontal, Spacing.large)
+                .padding(.vertical, Spacing.medium)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(viewModel.seedNames, id: \.self) { seedName in
+                        Button(action: { viewModel.selectSeed(seedName: seedName) }) {
+                            HStack {
+                                Text(seedName)
+                                    .font(PrimaryFont.titleS.font)
+                                    .foregroundColor(.textAndIconsPrimary)
+                                Spacer()
+                                Image(.chevronRight)
+                                    .foregroundColor(.textAndIconsTertiary)
+                            }
+                            .padding(.horizontal, Spacing.large)
+                            .padding(.vertical, Spacing.medium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var reviewView: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.small) {
-                    // Chain ID
                     infoCard(label: "Chain", value: viewModel.request?.chainId ?? "Unknown")
-
-                    // Effect hash
                     infoCard(
                         label: "Effect Hash",
                         value: {
@@ -55,7 +82,6 @@ struct PenumbraTransactionView: View {
                         }()
                     )
 
-                    // Actions summary
                     actionsCard
                 }
                 .padding(.horizontal, Spacing.medium)
@@ -117,7 +143,7 @@ struct PenumbraTransactionView: View {
         VStack {
             Spacer()
             ProgressView()
-            Text("Signing transaction...")
+            Text("Signing...")
                 .font(PrimaryFont.titleS.font)
                 .foregroundColor(.textAndIconsPrimary)
                 .padding(.top, Spacing.medium)
@@ -164,6 +190,7 @@ struct PenumbraTransactionView: View {
 
 extension PenumbraTransactionView {
     enum State {
+        case seedSelection
         case review
         case signing
         case signature([UInt8])
@@ -172,9 +199,11 @@ extension PenumbraTransactionView {
 
     final class ViewModel: ObservableObject {
         @Published var state: State = .review
+        @Published var seedNames: [String] = []
         var request: PenumbraSignRequest?
         private let seedsMediator: SeedsMediating
         private let onCompletion: () -> Void
+        private var selectedSeedPhrase: String?
 
         init(
             qrHex: String,
@@ -183,22 +212,41 @@ extension PenumbraTransactionView {
         ) {
             self.seedsMediator = seedsMediator
             self.onCompletion = onCompletion
+            self.seedNames = seedsMediator.seedNames
             do {
                 self.request = try parsePenumbraSignRequest(qrHex: qrHex)
             } catch {
                 self.state = .error(error.localizedDescription)
+                return
+            }
+            if seedNames.count > 1 {
+                state = .seedSelection
+            } else if let name = seedNames.first {
+                let phrase = seedsMediator.getSeed(seedName: name)
+                if phrase.isEmpty {
+                    state = .error("No seed phrase available")
+                } else {
+                    selectedSeedPhrase = phrase
+                    state = .review
+                }
+            } else {
+                state = .error("No seed phrase available")
             }
         }
 
-        func onApprove() {
-            guard let request else { return }
-            state = .signing
-            // Get seed phrase (uses first available seed - account 0)
-            let seeds = seedsMediator.getAllSeeds()
-            guard let seedPhrase = seeds.values.first, !seedPhrase.isEmpty else {
-                state = .error("No seed phrase available")
+        func selectSeed(seedName: String) {
+            let phrase = seedsMediator.getSeed(seedName: seedName)
+            guard !phrase.isEmpty else {
+                state = .error("Failed to retrieve seed phrase")
                 return
             }
+            selectedSeedPhrase = phrase
+            state = .review
+        }
+
+        func onApprove() {
+            guard let request, let seedPhrase = selectedSeedPhrase else { return }
+            state = .signing
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 do {
                     let signatureBytes = try signPenumbraTransaction(

@@ -97,7 +97,6 @@ struct ZcashFvkExportView: View {
     private func resultView(address: String, fvkHex: String, isMainnet: Bool, qrData: [UInt8]) -> some View {
         ScrollView {
             VStack(alignment: .center, spacing: Spacing.medium) {
-                // Network badge
                 Text(isMainnet ? "Mainnet" : "Testnet")
                     .font(PrimaryFont.labelM.font)
                     .foregroundColor(isMainnet ? .accentGreen300 : .accentRed300)
@@ -113,7 +112,6 @@ struct ZcashFvkExportView: View {
                     .font(PrimaryFont.titleS.font)
                     .foregroundColor(.textAndIconsPrimary)
 
-                // Unified Address
                 VStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     Text("Unified Address")
                         .font(PrimaryFont.labelM.font)
@@ -126,7 +124,6 @@ struct ZcashFvkExportView: View {
                 .padding(Spacing.small)
                 .containerBackground()
 
-                // Orchard FVK
                 VStack(alignment: .leading, spacing: Spacing.extraSmall) {
                     Text("Orchard FVK")
                         .font(PrimaryFont.labelM.font)
@@ -207,7 +204,6 @@ extension ZcashFvkExportView {
                         label: seedName,
                         mainnet: mainnet
                     )
-                    // Encode UR string as QR code data
                     let urBytes = Array(export.urString.utf8)
                     let qrPng = try encodeToQr(payload: urBytes, isDanger: false)
                     DispatchQueue.main.async {

@@ -22,9 +22,9 @@ extension SettingsItem {
     var title: String {
         switch self {
         case .penumbraFvkExport:
-            "Penumbra FVK Export"
+            Localizable.Settings.Label.penumbraFvkExport.string
         case .zcashFvkExport:
-            "Zcash FVK Export"
+            Localizable.Settings.Label.zcashFvkExport.string
         case .logs:
             Localizable.Settings.Label.logs.string
         case .networks:
