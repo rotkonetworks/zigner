@@ -57,6 +57,14 @@ jobs:
           cd $(dirname "${{ steps.sign_app.outputs.signedReleaseFile }}")
           sha256sum $(basename "${{ steps.sign_app.outputs.signedReleaseFile }}") > SHA256SUMS
 
+      - name: Sign checksums
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_SIGNING_KEY }}" > ~/.ssh/signing_key
+          chmod 600 ~/.ssh/signing_key
+          ssh-keygen -Y sign -f ~/.ssh/signing_key -n file app/SHA256SUMS
+          rm ~/.ssh/signing_key
+
       - name: Get previous tag
         id: prev_tag
         run: |
@@ -91,3 +99,4 @@ jobs:
           files: |
             ${{ steps.sign_app.outputs.signedReleaseFile }}
             app/SHA256SUMS
+            app/SHA256SUMS.sig
