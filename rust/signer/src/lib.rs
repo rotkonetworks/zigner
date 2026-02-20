@@ -1039,6 +1039,81 @@ fn export_penumbra_fvk(
 }
 
 // ============================================================================
+// Cosmos account export
+// ============================================================================
+
+/// Export Cosmos chain addresses (Osmosis, Noble, Celestia) from a seed phrase.
+///
+/// Derives a secp256k1 key using BIP44 path m/44'/118'/account'/0/0
+/// and generates bech32 addresses for each supported Cosmos chain.
+/// The QR data encodes a simple JSON payload for Zafu to import.
+fn export_cosmos_accounts(
+    seed_phrase: &str,
+    account_index: u32,
+    label: &str,
+) -> Result<CosmosAccountExport, ErrorDisplayed> {
+    use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS, PREFIX_OSMOSIS, PREFIX_NOBLE, PREFIX_CELESTIA};
+
+    let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account_index, 0)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to derive Cosmos key: {e}"),
+        })?;
+
+    let pubkey_hex = hex::encode(&key.public_key);
+
+    // Generate addresses for supported chains
+    let chains: Vec<(&str, &str)> = vec![
+        ("osmosis", PREFIX_OSMOSIS),
+        ("noble", PREFIX_NOBLE),
+        ("celestia", PREFIX_CELESTIA),
+    ];
+
+    let mut addresses = Vec::new();
+    for (chain_id, prefix) in &chains {
+        let addr = key.bech32_address(prefix)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to encode {chain_id} address: {e}"),
+            })?;
+        addresses.push(CosmosChainAddress {
+            chain_id: chain_id.to_string(),
+            address: addr,
+            prefix: prefix.to_string(),
+        });
+    }
+
+    // Build QR data as JSON for Zafu import
+    let label_str = if label.is_empty() { "Zigner" } else { label };
+    let json = serde_json::json!({
+        "type": "cosmos-accounts",
+        "version": 1,
+        "label": label_str,
+        "account_index": account_index,
+        "public_key": pubkey_hex,
+        "addresses": addresses.iter().map(|a| {
+            serde_json::json!({
+                "chain_id": a.chain_id,
+                "address": a.address,
+                "prefix": a.prefix,
+            })
+        }).collect::<Vec<_>>(),
+    });
+
+    let json_bytes = json.to_string().into_bytes();
+    let qr_data = encode_to_qr(&json_bytes, false)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to generate QR: {e}"),
+        })?;
+
+    Ok(CosmosAccountExport {
+        account_index,
+        label: label_str.to_string(),
+        public_key_hex: pubkey_hex,
+        addresses,
+        qr_data,
+    })
+}
+
+// ============================================================================
 // Penumbra cold signing functions
 // ============================================================================
 

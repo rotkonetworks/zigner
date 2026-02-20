@@ -41,17 +41,26 @@ use crate::identities::{
 use crate::{db_transactions::TrDbCold, helpers::get_valid_current_verifier};
 use crate::{Error, Result};
 
-/// Get display address for a multisigner - checks for stored Penumbra address first
+/// Get display address for a multisigner - checks for stored addresses first
 fn get_display_address(
     database: &sled::Db,
     multisigner: &MultiSigner,
     optional_prefix: Option<u16>,
     encryption: Encryption,
+    network_name: Option<&str>,
 ) -> String {
     // For Penumbra, try to get the stored bech32m address
     if encryption == Encryption::Penumbra {
         let ak_hex = hex::encode(multisigner_to_public(multisigner));
         if let Ok(Some(address)) = crate::penumbra::get_penumbra_address(database, &ak_hex) {
+            return address;
+        }
+    }
+    // For Cosmos, compute bech32 address on-the-fly from pubkey + chain prefix
+    #[cfg(feature = "cosmos")]
+    if encryption == Encryption::Cosmos {
+        let pubkey_bytes = multisigner_to_public(multisigner);
+        if let Ok(address) = crate::cosmos::pubkey_to_bech32_address(&pubkey_bytes, network_name.unwrap_or("cosmos")) {
             return address;
         }
     }
@@ -191,7 +200,7 @@ pub fn keys_by_seed_name(database: &sled::Db, seed_name: &str) -> Result<MKeysNe
         // TODO: root always prefix 42 for substrate.
         let address_key = hex::encode(AddressKey::new(root.0.clone(), None).key());
         MAddressCard {
-            base58: get_display_address(database, &root.0, None, root.1.encryption),
+            base58: get_display_address(database, &root.0, None, root.1.encryption, None),
             address_key,
             address,
         }
@@ -209,6 +218,7 @@ pub fn keys_by_seed_name(database: &sled::Db, seed_name: &str) -> Result<MKeysNe
                 &multisigner,
                 Some(network_specs.specs.base58prefix),
                 network_specs.specs.encryption,
+                Some(&network_specs.specs.name),
             );
             let address_key = hex::encode(
                 AddressKey::new(multisigner.clone(), Some(network_specs.specs.genesis_hash)).key(),
@@ -354,6 +364,7 @@ pub fn export_key(
         multisigner,
         Some(network_specs.base58prefix),
         network_specs.encryption,
+        Some(&network_specs.name),
     );
 
     let public_key = multisigner_to_public(multisigner);
@@ -362,6 +373,8 @@ pub fn export_key(
         if address_details.network_id.as_ref() == Some(network_specs_key) {
             let prefix = if network_specs.encryption == Encryption::Ethereum {
                 "ethereum"
+            } else if network_specs.encryption == Encryption::Cosmos {
+                "cosmos"
             } else {
                 "substrate"
             };
@@ -527,6 +540,7 @@ fn dynamic_path_check_unhexed(
                         &multisigner,
                         Some(ordered_network_specs.specs.base58prefix),
                         address_details.encryption,
+                        Some(&ordered_network_specs.specs.name),
                     );
                     let identicon = make_identicon_from_multisigner(
                         &multisigner,

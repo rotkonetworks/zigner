@@ -752,6 +752,10 @@ namespace signer {
     [Throws=ErrorDisplayed]
     PenumbraFvkExport export_penumbra_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
 
+    // Cosmos accounts export - generate addresses QR for Zafu import
+    [Throws=ErrorDisplayed]
+    CosmosAccountExport export_cosmos_accounts([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
+
     // ========================================================================
     // Penumbra cold signing functions
     // ========================================================================
@@ -1067,6 +1071,21 @@ dictionary PenumbraFvkExport {
     string wallet_id_bech32m;
     sequence<u8> qr_data;
     string ur_string;
+};
+
+// Cosmos account export for Zafu wallet import
+dictionary CosmosAccountExport {
+    u32 account_index;
+    string label;
+    string public_key_hex;
+    sequence<CosmosChainAddress> addresses;
+    sequence<u8> qr_data;
+};
+
+dictionary CosmosChainAddress {
+    string chain_id;
+    string address;
+    string prefix;
 };
 
 // Penumbra sign request parsed from QR

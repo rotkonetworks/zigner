@@ -869,6 +869,30 @@ pub struct PenumbraFvkExport {
     pub ur_string: String,
 }
 
+/// Cosmos account export data for Zafu wallet import
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosAccountExport {
+    pub account_index: u32,
+    pub label: String,
+    /// Hex-encoded compressed secp256k1 public key (33 bytes)
+    pub public_key_hex: String,
+    /// Bech32 addresses for each chain
+    pub addresses: Vec<CosmosChainAddress>,
+    /// Binary QR data for Zafu wallet
+    pub qr_data: Vec<u8>,
+}
+
+/// A bech32 address on a specific Cosmos chain
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosChainAddress {
+    /// Chain identifier (e.g. "osmosis", "noble")
+    pub chain_id: String,
+    /// Bech32 address (e.g. "osmo1...")
+    pub address: String,
+    /// Bech32 prefix (e.g. "osmo")
+    pub prefix: String,
+}
+
 /// String pair for FFI compatibility
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StringPair {

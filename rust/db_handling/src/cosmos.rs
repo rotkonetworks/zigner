@@ -16,17 +16,19 @@ use crate::error::{Error, Result};
 /// Sled tree name for storing Cosmos bech32 addresses
 const COSMOS_ADDRS: &str = "cosmos_addresses";
 
-/// Store a Cosmos bech32 address for a given public key hex
-pub fn store_cosmos_address(database: &sled::Db, pubkey_hex: &str, bech32_address: &str) -> Result<()> {
+/// Store a Cosmos bech32 address for a given public key hex and genesis hash
+pub fn store_cosmos_address(database: &sled::Db, pubkey_hex: &str, genesis_hash: &str, bech32_address: &str) -> Result<()> {
     let tree = database.open_tree(COSMOS_ADDRS)?;
-    tree.insert(pubkey_hex.as_bytes(), bech32_address.as_bytes())?;
+    let key = format!("{}_{}", pubkey_hex, genesis_hash);
+    tree.insert(key.as_bytes(), bech32_address.as_bytes())?;
     Ok(())
 }
 
-/// Retrieve a Cosmos bech32 address for a given public key hex
-pub fn get_cosmos_address(database: &sled::Db, pubkey_hex: &str) -> Result<Option<String>> {
+/// Retrieve a Cosmos bech32 address for a given public key hex and genesis hash
+pub fn get_cosmos_address(database: &sled::Db, pubkey_hex: &str, genesis_hash: &str) -> Result<Option<String>> {
     let tree = database.open_tree(COSMOS_ADDRS)?;
-    match tree.get(pubkey_hex.as_bytes())? {
+    let key = format!("{}_{}", pubkey_hex, genesis_hash);
+    match tree.get(key.as_bytes())? {
         Some(bytes) => {
             let address = String::from_utf8(bytes.to_vec())
                 .map_err(|e| Error::Other(anyhow::anyhow!("Invalid UTF-8: {}", e)))?;
@@ -39,6 +41,36 @@ use bip32::{DerivationPath, XPrv};
 use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// Compute bech32 cosmos address from compressed pubkey bytes and network name.
+/// Same key for all cosmos chains (coin type 118), just different bech32 prefix.
+/// This follows how zafu differentiates addresses: fromBech32 → toBech32 with chain prefix.
+pub fn pubkey_to_bech32_address(pubkey_bytes: &[u8], network_name: &str) -> Result<String> {
+    use bech32::{Bech32, Hrp};
+
+    // Map network name to bech32 prefix
+    let prefix = match network_name {
+        "osmosis" => PREFIX_OSMOSIS,
+        "noble" => PREFIX_NOBLE,
+        "celestia" => PREFIX_CELESTIA,
+        "terra" => PREFIX_TERRA,
+        "kava" => PREFIX_KAVA,
+        "secret" => PREFIX_SECRET,
+        "injective" => PREFIX_INJECTIVE,
+        _ => PREFIX_COSMOS,
+    };
+
+    // RIPEMD160(SHA256(pubkey)) → 20 bytes address
+    let sha256_hash = Sha256::digest(pubkey_bytes);
+    let ripemd160_hash = Ripemd160::digest(&sha256_hash);
+
+    let hrp = Hrp::parse(prefix)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Invalid bech32 prefix: {}", e)))?;
+    let address = bech32::encode::<Bech32>(hrp, &ripemd160_hash)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Bech32 encoding error: {}", e)))?;
+
+    Ok(address)
+}
 
 /// SLIP-0044 coin types for popular Cosmos chains
 pub const SLIP0044_COSMOS: u32 = 118;     // Cosmos Hub (ATOM)
