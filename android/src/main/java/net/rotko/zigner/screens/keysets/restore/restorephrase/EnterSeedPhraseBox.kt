@@ -70,11 +70,15 @@ fun EnterSeedPhraseBox(
 	//workaround for //https://issuetracker.google.com/issues/160257648 and https://issuetracker.google.com/issues/235576056 - update to new TextField
 	//for now need to keep this intermediate state
 	val seedWord = remember { mutableStateOf(TextFieldValue(" ")) }
-	seedWord.value = TextFieldValue(
-		text = rawUserInput,
-		//to always keep position after artificially added " "
-		selection = TextRange(rawUserInput.length)
-	)
+	// Only update from ViewModel when rawUserInput actually changes (e.g. after word added)
+	// to avoid resetting IME state on every recomposition
+	LaunchedEffect(rawUserInput) {
+		seedWord.value = TextFieldValue(
+			text = rawUserInput,
+			//to always keep position after artificially added " "
+			selection = TextRange(rawUserInput.length)
+		)
+	}
 
 	Column(
 		modifier
