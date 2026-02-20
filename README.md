@@ -16,12 +16,21 @@ and returned as QR codes. The only output channel is the screen.
 The device MUST have WiFi, Bluetooth, NFC, and cellular disabled. Airplane
 mode is the minimum. Physically removing wireless hardware is better.
 
+On devices with a secure element (Pixel 8+ Titan M2, Samsung Knox), seed
+encryption keys are generated and stored inside the hardware module via
+Android StrongBox. The key never exists in main memory. On iOS, seeds are
+Keychain-backed by the Secure Enclave. Zigner reports the detected security
+level in Settings.
+
+Recommended: Pixel 8+ running GrapheneOS. See
+[Security and Privacy](docs/src/about/Security-And-Privacy.md) for details.
+
 What Zigner does NOT protect against:
 
 - A compromised build toolchain (use reproducible builds and verify checksums)
-- Physical access to an unlocked device
+- Physical access to an unlocked device with no secure element
 - A user who approves a transaction without reading it
-- Side-channel attacks on the device hardware
+- Side-channel attacks on the device hardware (partially mitigated by StrongBox)
 
 ## Penumbra
 
