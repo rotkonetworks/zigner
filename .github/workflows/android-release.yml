@@ -1,0 +1,93 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  run-tests:
+    name: Run tests
+    uses: ./.github/workflows/reusable-android-tests.yml
+
+  build-apk:
+    name: Build APKs
+    uses: ./.github/workflows/reusable-android-build.yml
+    with:
+      is-release: true
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [run-tests, build-apk]
+    steps:
+      - name: Checkout Sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup build-tool version variable
+        shell: bash
+        run: |
+          echo "BUILD_TOOL_VERSION=${{ needs.build-apk.outputs.build-tool-version }}" >> $GITHUB_ENV
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: zigner-apk
+          path: app
+
+      - name: Sign app APK
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: app
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEYSTORE_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
+
+      - name: Compute checksums
+        run: |
+          cd $(dirname "${{ steps.sign_app.outputs.signedReleaseFile }}")
+          sha256sum $(basename "${{ steps.sign_app.outputs.signedReleaseFile }}") > SHA256SUMS
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || echo "")
+          echo "tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ -n "${{ steps.prev_tag.outputs.tag }}" ]; then
+            git log --pretty=format:"- %s (%h)" "${{ steps.prev_tag.outputs.tag }}".."${{ github.ref_name }}" > release-notes.md
+          else
+            git log --pretty=format:"- %s (%h)" > release-notes.md
+          fi
+
+      - name: Determine pre-release
+        id: prerelease
+        run: |
+          if echo "${{ github.ref_name }}" | grep -q '-'; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Zafu Zigner ${{ github.ref_name }}
+          body_path: release-notes.md
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          files: |
+            ${{ steps.sign_app.outputs.signedReleaseFile }}
+            app/SHA256SUMS
