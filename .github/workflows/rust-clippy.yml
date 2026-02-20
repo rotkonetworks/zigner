@@ -15,7 +15,10 @@ jobs:
     name: Cargo clippy
     runs-on: ubuntu-22.04
     container:
-      image: ghcr.io/${{ github.repository }}/opencv-builder@sha256:c55a187a86eac41e1381d1f305eb1f139c80ba0082dea1cd9f9b55e43329d8f3
+      image: ghcr.io/${{ github.repository }}/opencv-builder:4.11.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4

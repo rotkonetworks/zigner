@@ -85,7 +85,11 @@ fn get_address(sk: &SpendingKeyBytes, mainnet: bool) -> String {
     let addr = fvk.address_at(0u32, orchard::keys::Scope::External);
 
     let receiver = Receiver::Orchard(addr.to_raw_address_bytes());
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
 
     UnifiedAddress::try_from_items(vec![receiver])
         .expect("valid receiver")
@@ -103,7 +107,11 @@ fn get_ufvk(sk: &SpendingKeyBytes, mainnet: bool) -> String {
     let fvk = FullViewingKey::from(&orchard_sk);
 
     let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
 
     Ufvk::try_from_items(vec![orchard_fvk])
         .expect("valid fvk")

@@ -2,6 +2,7 @@ name: Check links and Publish Docs
 
 permissions:
   contents: write
+  packages: read
   pages: write
   id-token: write
 
@@ -21,6 +22,9 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ghcr.io/${{ github.repository }}/opencv-builder:4.11.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4.1.1
