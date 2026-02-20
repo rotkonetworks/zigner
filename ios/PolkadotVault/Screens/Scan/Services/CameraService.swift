@@ -13,12 +13,16 @@ enum DecodedPayloadType: Equatable {
     case transaction
     case dynamicDerivations
     case dynamicDerivationsTransaction
+    case penumbraTransaction
+    case zcashSignRequest
 }
 
 enum DecodedPayload: Equatable {
     case transaction(String)
     case dynamicDerivations(String)
     case dynamicDerivationsTransaction([String])
+    case penumbraTransaction(String)
+    case zcashSignRequest(String)
 
     var type: DecodedPayloadType {
         switch self {
@@ -28,6 +32,10 @@ enum DecodedPayload: Equatable {
             DecodedPayloadType.dynamicDerivations
         case .dynamicDerivationsTransaction:
             DecodedPayloadType.dynamicDerivationsTransaction
+        case .penumbraTransaction:
+            DecodedPayloadType.penumbraTransaction
+        case .zcashSignRequest:
+            DecodedPayloadType.zcashSignRequest
         }
     }
 }
@@ -148,6 +156,25 @@ private extension CameraService {
     }
 
     func decode(completeOperationPayload: [String]) {
+        // Detect Penumbra/Zcash payloads before passing to generic decoder
+        if let first = completeOperationPayload.first {
+            let hexPrefix = first.prefix(6).lowercased()
+            if hexPrefix == "530310" {
+                callbackQueue.async {
+                    self.payload = .penumbraTransaction(first)
+                    self.shutdown()
+                }
+                return
+            }
+            if hexPrefix == "530402" {
+                callbackQueue.async {
+                    self.payload = .zcashSignRequest(first)
+                    self.shutdown()
+                }
+                return
+            }
+        }
+
         guard let result = try? qrparserTryDecodeQrSequence(
             data: completeOperationPayload,
             password: nil,

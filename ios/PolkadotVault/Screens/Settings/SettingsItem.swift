@@ -1,6 +1,6 @@
 //
 //  SettingsItem.swift
-//  Polkadot Vault
+//  Zigner
 //
 //  Created by Krzysztof Rodak on 12/12/2022.
 //
@@ -8,6 +8,8 @@
 import Foundation
 
 enum SettingsItem: Equatable, Hashable, CaseIterable {
+    case penumbraFvkExport
+    case zcashFvkExport
     case logs
     case networks
     case verifier
@@ -19,6 +21,10 @@ enum SettingsItem: Equatable, Hashable, CaseIterable {
 extension SettingsItem {
     var title: String {
         switch self {
+        case .penumbraFvkExport:
+            "Penumbra FVK Export"
+        case .zcashFvkExport:
+            "Zcash FVK Export"
         case .logs:
             Localizable.Settings.Label.logs.string
         case .networks:

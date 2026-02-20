@@ -199,6 +199,52 @@ struct CameraView: View {
             )
             .clearModalBackground()
         }
+        .fullScreenModal(
+            isPresented: $viewModel.isPresentingPenumbraTransaction,
+            onDismiss: {
+                model.payload = nil
+                model.start()
+                viewModel.clearTransactionState()
+            }
+        ) {
+            if let hex = viewModel.penumbraQrHex {
+                PenumbraTransactionView(
+                    viewModel: .init(
+                        qrHex: hex,
+                        onCompletion: {
+                            viewModel.isPresentingPenumbraTransaction = false
+                            viewModel.penumbraQrHex = nil
+                            model.payload = nil
+                            model.start()
+                            viewModel.clearTransactionState()
+                        }
+                    )
+                )
+            }
+        }
+        .fullScreenModal(
+            isPresented: $viewModel.isPresentingZcashTransaction,
+            onDismiss: {
+                model.payload = nil
+                model.start()
+                viewModel.clearTransactionState()
+            }
+        ) {
+            if let hex = viewModel.zcashQrHex {
+                ZcashTransactionView(
+                    viewModel: .init(
+                        qrHex: hex,
+                        onCompletion: {
+                            viewModel.isPresentingZcashTransaction = false
+                            viewModel.zcashQrHex = nil
+                            model.payload = nil
+                            model.start()
+                            viewModel.clearTransactionState()
+                        }
+                    )
+                )
+            }
+        }
         .bottomSnackbar(
             viewModel.snackbarViewModel,
             isPresented: $viewModel.isSnackbarPresented
@@ -236,6 +282,12 @@ extension CameraView {
         @Published var shouldPresentError: Bool = false
         @Published var isPresentingError: Bool = false
         @Published var isInTransactionProgress: Bool = false
+
+        // Penumbra / Zcash transaction modals
+        @Published var isPresentingPenumbraTransaction: Bool = false
+        @Published var isPresentingZcashTransaction: Bool = false
+        var penumbraQrHex: String?
+        var zcashQrHex: String?
 
         // Banana split flow
         @Published var isPresentingEnterBananaSplitPassword: Bool = false
@@ -290,6 +342,12 @@ extension CameraView {
             guard !isInTransactionProgress else { return }
             isInTransactionProgress = true
             switch payload {
+            case let .penumbraTransaction(hexData):
+                penumbraQrHex = hexData
+                isPresentingPenumbraTransaction = true
+            case let .zcashSignRequest(hexData):
+                zcashQrHex = hexData
+                isPresentingZcashTransaction = true
             case let .dynamicDerivations(data):
                 guard runtimePropertiesProvider.dynamicDerivationsEnabled else {
                     presentableError = .featureNotAvailable()
