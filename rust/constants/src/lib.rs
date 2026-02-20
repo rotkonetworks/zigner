@@ -1,7 +1,7 @@
-//! Constants used throughout in [Vault](https://github.com/paritytech/parity-signer)
-//! and Vault-supporting ecosystem.
+//! Constants used throughout in [Zigner](https://github.com/rotkonetworks/zigner)
+//! and Zigner-supporting ecosystem.
 //!
-//! Vault uses **cold** database.
+//! Zigner uses **cold** database.
 //!
 //! The database used on a non air-gapper device for updates generation is
 //! called **hot** database.

@@ -1,5 +1,5 @@
 //! This crate deals with standard database-related procedures used in
-//! [Vault](https://github.com/paritytech/parity-signer) and Vault-supporting
+//! [Zigner](https://github.com/rotkonetworks/zigner) and Zigner-supporting
 //! ecosystem.  
 //!
 //! This crate:

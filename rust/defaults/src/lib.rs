@@ -1,7 +1,7 @@
-//! Default data for [Vault](https://github.com/paritytech/parity-signer)
-//! and Vault-supporting ecosystem.
+//! Default data for [Zigner](https://github.com/rotkonetworks/zigner)
+//! and Zigner-supporting ecosystem.
 //!
-//! This crate deals with data loaded into Vault on build and retained on reset.
+//! This crate deals with data loaded into Zigner on build and retained on reset.
 //!
 //! Vault supports by default three networks: Polkadot, Kusama, and Westend,
 //! both on the cold and the hot side. More default networks could be considered

@@ -1,98 +1,103 @@
 # FAQ
 
 - [About](#about)
-- [Networks](#networks)
+- [Penumbra](#penumbra)
+- [Zcash](#zcash)
+- [Substrate Networks](#substrate-networks)
 - [Seeds and keys](#seeds-and-keys)
 
 ## About
 
-### What is Vault?
+### What is Zigner?
 
-Vault is an app for an air-gapped device, it turns an offline device — usually a smartphone — into a secure hardware wallet. Vault offers you a way to securely generate, store, manage and use your blockchain credentials.
+Zigner is an air-gapped cold wallet app that turns an offline smartphone into a secure hardware wallet. It supports Penumbra, Zcash, and Substrate-based chains (Polkadot, Kusama). Your private keys never leave the device — all communication happens via QR codes.
 
-### Should I use Vault?
+### Should I use Zigner?
 
-Vault is optimized for the highest security requirements. If you already manage many accounts on multiple networks, Vault is great for you. If you have little experience with blockchain networks but still want good security affordances, you might find the learning curve steep. We strive to make Vault as intuitive as possible; get in touch via [signer@parity.io](mailto:signer@parity.io) or [GitHub Issues](https://github.com/paritytech/parity-signer/issues) if you can help us get there!
+Zigner is optimized for the highest security requirements for privacy-focused blockchains. If you hold Penumbra or Zcash assets and want hardware-wallet-grade security without trusting a hardware vendor, Zigner is for you. Get in touch via [GitHub Issues](https://github.com/rotkonetworks/zigner/issues) if you need help.
 
 ### How does an offline device communicate with the outside world?
 
-Communication happens through scanning and generating QR codes. Scanned with Vault input-QRs interact with keys stored in Vault to, generate response-QRs on behalf of those keys. Usually, input-QR is a blockchain transaction, and a response-QR is a signature for this transaction. There are tried and true cryptographic algorithms that power these QR codes, as well as some smart engineering that make your dedicated device safe to use.
+Communication happens through scanning and generating QR codes. Your hot wallet (Prax, Zafu, Zashi, Polkadot.js) constructs a transaction and encodes it as a QR code. Zigner scans it, signs it offline with your private key, and displays a signature QR code that your hot wallet scans to broadcast the transaction. Keys never leave the air-gapped device.
 
 ### How do I keep my keys secure?
 
-Vault is a safe way to use your keys. However, that alone won't be enough to keep your keys secure. Devices break and get lost. This is why we always recommend backing up your seed phrases and derivation paths on paper. We are such big fans of paper backups that we even support a special tool to power your paper backup game by splitting your backups into shards called [Banana Split](https://bs.parity.io/).
+Zigner keeps your keys safe on an air-gapped device, but you must also back up your seed phrases. We recommend paper backups stored in safe locations. Zigner also supports [Banana Split](https://bs.parity.io/) — Shamir Secret Sharing that splits your seed into QR code shards requiring a threshold to reconstruct.
 
-### How do I know I am not interacting with malicious apps or actors?
+## Penumbra
 
-The Vault does not interact with a network. The app itself does not have a way to check if an app or an account you're interacting with is malicious. 
-If you use Vault with PolkadotJS Browser Extension, PolkadotJS Apps, or Signer Component Browser Extension they will rely on a community-driven curated list of potentially less-than-honest operators: [<https://polkadot.js.org/phishing/#>](https://polkadot.js.org/phishing/#) to prevent you from interacting with certain sites and addresses. However, there are no limitations on the use of Vault with other tools.
+### What Penumbra operations can I sign?
 
-### I want to play with Vault to get a better feeling of how it works. Is there a way to do it without spending valuable tokens?
+Zigner supports signing all major Penumbra transaction actions:
+- **Shielded transfers** — spends and outputs
+- **DEX** — swaps, liquidity position open/close/withdraw
+- **Staking** — delegate, undelegate, undelegate claim
+- **Governance** — delegator votes
+- **Dutch auctions** — schedule, end, withdraw
+- **IBC** — ICS20 withdrawal for cross-chain transfers
 
-Yes. In Vault, you should add a key for an address on Westend network and request test tokens for that address, see the step-by-step guide on [Polkadot Network Wiki](https://wiki.polkadot.network/docs/learn-DOT#getting-westies). 
+### How do I use Zigner with Prax?
 
-You can use test tokens in the same way you would use value-bearing tokens.
+1. In Zigner, export your Penumbra Full Viewing Key (FVK) as a QR code
+2. Import the FVK into Prax to create a watch-only wallet
+3. Construct transactions in Prax — it will display a QR code
+4. Scan the transaction QR with Zigner, review and approve
+5. Zigner displays a signature QR — scan it with Prax to broadcast
 
-For example with [PolkadotJS Apps](https://polkadot.js.org/apps/) you can create a transaction on behalf of your account, generate a signature with Vault and submit it to the network. All of this without keys ever leaving your offline device.
+### Does Zigner validate the Penumbra chain ID?
 
-## Networks
+Yes. Zigner validates the chain ID in every transaction plan to prevent cross-chain signing attacks.
 
-### What networks does Vault support?
+## Zcash
 
-From-the-shelf Polkadot Vault supports Polkadot, Kusama, and Westend networks. But it's not limited to these networks. More experienced users can generate metadata for any network to expand the capability of Polkadot Vault.
+### What Zcash operations can I sign?
 
-### How can I update metadata version for a network?
+- **Orchard (shielded)** — RedPallas signatures on the Pallas curve
+- **Transparent** — secp256k1 ECDSA signatures for legacy P2PKH inputs
+- **PCZT** — Partially Constructed Zcash Transactions for multi-party signing workflows
 
-Parity verifies and publishes recent metadata versions on [Metadata Update Portal](https://metadata.parity.io/). With off-the-shelf Vault you can scan one of the multipart QR-"movies" same way you scan transaction QR:\
-in Vault open scanner, scan the QR for the respective network and accept new metadata.
+### How do I use Zigner with Zafu or Zashi?
 
-Currently, [Metadata Update Portal](https://metadata.parity.io/) follows Polkadot, Kusama, and Westend network metadata updates. Parity is open to collaboration with participants of other networks and is currently exploring safe and more decentralized ways of publishing verified metadata.
+1. In Zigner, export your Unified Full Viewing Key (UFVK) as a QR code
+2. Import the UFVK into your hot wallet (Zafu or Zashi) to create a watch-only wallet
+3. Construct transactions in your hot wallet — it will display a QR code (UR-encoded)
+4. Scan the transaction QR with Zigner, review and approve
+5. Zigner displays a signature QR — scan it with your hot wallet to broadcast
 
-If you want to update networks that you've added manually, please follow the [Add Metadata](../tutorials/Add-New-Network.md#add-network-metadata) steps in [Add New Network](../tutorials/Add-New-Network.md) guide.
+### Does Zigner support both mainnet and testnet?
 
-### Why do I need to update network metadata versions at all?
+Yes. Zigner supports Zcash mainnet and testnet, with network detection built into the signing flow.
 
-It's a safety feature. Substrate-based blockchain networks can be updated and otherwise changed; without recent metadata version of a network Vault won't be able to parse a transaction correctly, and you won't be able to read it and verify what you sign. Given that Vault is an app for an air-gapped device, you have to update the network version by using camera.
+### What key derivation does Zigner use for Zcash?
 
-### How can I add a new network to Vault?
+- Orchard keys: ZIP-32 derivation at `m/32'/133'/account'`
+- Transparent keys: BIP-44 derivation at `m/44'/133'/account'/change/index`
+- Unified addresses and UFVKs per ZIP-316
 
-Parity verifies and publishes network specs on [Metadata Update Portal](https://metadata.parity.io/). To add one of the listed networks, in [Metadata Update Portal](https://metadata.parity.io/) click "Chain Specs", scan the network specs QR same way you scan transaction QR: in Vault open scanner, scan the QR and accept new network spec. Then scan the multipart QR-"movie" containing recent metadata for this network.
+## Substrate Networks
 
-### Can I add a network that does not have network specs and metadata QR published anywhere?
+### What Substrate networks does Zigner support?
 
-Yes. Follow the [Add New Network](../tutorials/Add-New-Network.md) step-by-step guide.
+Out of the box: Polkadot, Kusama, and Westend. Any Substrate-based network can be added by scanning network specs and metadata QR codes.
 
-Currently, the process requires you to have [rust](https://www.rust-lang.org/tools/install), [subkey](https://docs.substrate.io/v3/tools/subkey/#installation) and [parity-signer repository](https://github.com/paritytech/parity-signer) on your machine.
+### How can I update network metadata?
+
+Scan multipart metadata QR codes from [metadata.parity.io](https://metadata.parity.io/) or [metadata.rotko.net](https://metadata.rotko.net) for parachains.
+
+### How can I add a new network?
+
+Follow the [Add New Network](../tutorials/Add-New-Network.md) guide.
 
 ## Seeds and keys
-	
-### Can I import my keys from `polkadot{.js}` apps or extension to Polkadot Vault?
 
-Yes. Keys are compatible between `polkadot{.js}` and Polkadot Vault, except for the keys generated with Ledger (`BIP39`). To import seed keys into Polkadot Vault, you need to know:
-1. Seed phrase\
-_It should always be backed up in paper!_
-2. Network you are adding address to and whether Polkadot Vault installed on your device has metadata for the respective network.\
-_If (2) is not one of the default built-in networks, you will need to add network yourself or find a distribution center for adding networks._
-3. Derivation path\
-_Only if you are importing a derived key, usually keys generated with `polkadot{.js}` are seed keys._
+### Can I use the same seed for Penumbra, Zcash, and Substrate?
 
-In Polkadot Vault go to Keys, then press "Plus" icon in the top right of the screen, select "Recover seed", enter display name to identify your seed, press "Next", enter the seed phrase. Done, you've got your seed key imported!\
-If you are importing a derived key select the seed from which your key is derived, select account's network, press "Plus" icon next to "Derived keys", enter your derivation path.
+Yes. Zigner derives keys for each chain from the same seed phrase using chain-specific derivation paths (BIP-44 coin types), so keys are isolated per chain while sharing a single backup.
 
-### What is the difference between seed key and derived key? Why should I use derived keys?
+### What is the difference between seed key and derived key?
 
-A seed key is a single key pair generated from a seed phrase. You can “grow” as many derived keys from a single seed by adding derivation paths to your seed phrase.
+A seed key is generated directly from a seed phrase. Derived keys are "grown" from a seed by adding derivation paths. The main advantage: derived keys only need a derivation path backed up (alongside the seed phrase) for recovery.
 
-Learn more about types of derivation paths on [substrate.io](https://docs.substrate.io/v3/tools/subkey/#hd-key-derivation).
+### How can I rename a seed?
 
-Derivation path is sensitive information, but knowing the derivation path is not enough to recover a key. Derived keys cannot be backed up without both of the ingredients: seed phrase (can be shared between multiple keys) and a derivation path (unique for each of the keys “grown” from that seed).
-
-The main reason to use derived keys is how easy it is to back up (and restore from a backup) a derivation path compared to seed phrase.
-
-### What is an identicon, the image next to my keys?
-
-An identicon is a visual hash of a public key — a unique picture generated from your public key. The same public key should have the same identicon regardless of the application. It is a good tool to distinguish quickly between keys. However, when interacting with keys, i.g. verifying a recipient of a transaction, do not rely only on identicons, it is better to check the full public address.
-
-### How can I rename one of my seeds?
-
-Due to security considerations, you cannot rename a seed. Please back up the seed and derived keys, remove it and add the seed again with a new name instead.
+Due to security considerations, you cannot rename a seed. Back up the seed and derived keys, remove it, and add the seed again with a new name.

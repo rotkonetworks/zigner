@@ -1,15 +1,15 @@
-# Vault ecosystem
+# Zigner ecosystem
 
-Vault repository contains 3 tools that are part of Vault ecosystem
+The Zigner repository contains tools that are part of the Zigner ecosystem:
 
-- [Polkadot Vault app](https://github.com/paritytech/parity-signer)
-- [`generate_message` network data management tool](https://github.com/paritytech/parity-signer/tree/master/rust/generate_message)
-- [`qr_reader_pc` qr scanner app for PC](https://github.com/paritytech/parity-signer/tree/master/rust/generate_message)
+- [Zigner app](https://github.com/rotkonetworks/zigner) — air-gapped cold wallet for Penumbra, Zcash, and Substrate
+- [`generate_message` network data management tool](https://github.com/rotkonetworks/zigner/tree/master/rust/generate_message)
+- [`qr_reader_pc` QR scanner app for PC](https://github.com/rotkonetworks/zigner/tree/master/rust/qr_reader_pc)
 
-Greater Vault ecosystem:
+Compatible hot wallets:
 
-- [metadata portal](https://github.com/paritytech/metadata-portal)
-- [Signer companion](https://github.com/paritytech/parity-signer-companion)
-- [polkadot-js libraries for QR code data transfer](https://github.com/polkadot-js/apps)
-- [UOS interface specification](https://github.com/varovainen/parity-signer/blob/2022-05-25-uos/docs/src/development/UOS.md) - since no tools support original upstream specification, here is standard interpretation that is used in Vault.
-
+- [Prax](https://prax.fyi/) — Penumbra web wallet (FVK import, transaction signing)
+- [Zafu](https://zafu.io/) — Zcash wallet (UFVK import, transaction signing)
+- [Zashi](https://electriccoin.co/zashi/) — Zcash wallet (UFVK import, PCZT signing)
+- [Polkadot.js Apps](https://polkadot.js.org/apps/) — Substrate transaction signing
+- [Metadata Portal](https://metadata.parity.io/) — QR codes with the latest Substrate metadata
