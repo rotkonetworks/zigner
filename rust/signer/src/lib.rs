@@ -1793,7 +1793,7 @@ fn init_logging(tag: String) {
 fn init_logging(_tag: String) {
     use uniffi::deps::log::LevelFilter;
 
-    let _ = oslog::OsLogger::new("io.parity.signer")
+    let _ = oslog::OsLogger::new("net.rotko.zigner")
         .level_filter(LevelFilter::Warn)
         .category_level_filter("SIGNER", LevelFilter::Trace)
         .init();

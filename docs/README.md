@@ -1,5 +1,6 @@
 ### Read docs
-[paritytech.github.io/parity-signer](https://paritytech.github.io/parity-signer/)
+
+Docs are built with mdbook from the `docs/` directory.
 
 ### Run docs locally
 

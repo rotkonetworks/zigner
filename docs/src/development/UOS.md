@@ -1,8 +1,8 @@
 # Scope
 
-This document provides an interpretation of the UOS format used by Polkadot Vault. The upstream version of the published format has diverged significantly from the actual implementation, so this document represents the current state of the UOS format that is compatible with Polkadot Vault. It only applies to networks compatible with Polkadot Vault, i.e. Substrate-based networks. The document also describes special payloads used to maintain a Polkadot Vault instance.
+This document provides an interpretation of the UOS format used by Zigner for Substrate networks. The upstream version of the published format has diverged significantly from the actual implementation, so this document represents the current state of the UOS format that is compatible with Zigner. It only applies to Substrate-based networks. The document also describes special payloads used to maintain a Zigner instance.
 
-Therefore, this document effectively describes the input and output format for QR codes used by Polkadot Vault.
+Therefore, this document effectively describes the input and output format for Substrate QR codes used by Zigner. For Penumbra and Zcash QR formats, see the respective wallet integration documentation.
 
 # Terminology
 

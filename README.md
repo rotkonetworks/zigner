@@ -1,213 +1,136 @@
 <div align="center">
 
-![Logo Black](docs/src/res/logo-black.svg#gh-light-mode-only)
-![Logo White](docs/src/res/logo-white.svg#gh-dark-mode-only)
+# Zigner
+
+Air-gapped cold signer for Penumbra, Zcash, and Substrate chains
+
+Part of the [Zafu](https://github.com/rotkonetworks/zafu) ecosystem
 
 </div>
 
-<div align="center">
-    <br><br>
-    Air-gapped cold storage for your crypto keys
-    <br><br>
-</div>
+## Threat model
 
-<div align="center">
-    <a href="https://github.com/paritytech/parity-signer/releases"><img src="docs/src/res/github-badge.png" width="150"></a> <a href="https://play.google.com/store/apps/details?id=io.parity.signer"><img src="docs/src/res/google-play-badge.png" width="150"></a> <a href="https://itunes.apple.com/us/app/parity-signer/id1218174838"><img src="docs/src/res/app-store-badge.png" width="150"></a><br><br>
-</div>
+Zigner assumes the signing device is never connected to any network after
+initial setup. All key material is generated and stored on-device. Transaction
+payloads arrive as QR codes, get parsed and displayed for review, then signed
+and returned as QR codes. The only output channel is the screen.
 
-# Introduction
+The device MUST have WiFi, Bluetooth, NFC, and cellular disabled. Airplane
+mode is the minimum. Physically removing wireless hardware is better.
 
-Polkadot Vault is a mobile application that allows any smartphone to act as an air-gapped crypto wallet. This is also known as "cold storage".
+On devices with a secure element (Pixel 8+ Titan M2, Samsung Knox), seed
+encryption keys are generated and stored inside the hardware module via
+Android StrongBox. The key never exists in main memory. On iOS, seeds are
+Keychain-backed by the Secure Enclave. Zigner reports the detected security
+level in Settings.
 
-You can create accounts in Substrate-based networks, sign messages/transactions, and transfer funds to and from these accounts without any sort of connectivity enabled on the device.
+Recommended: Pixel 8+ running GrapheneOS. See
+[Security and Privacy](docs/src/about/Security-And-Privacy.md) for details.
 
-You must turn off or even physically remove the smartphone's Wifi, Mobile Network, and Bluetooth to ensure that the mobile phone containing these accounts will not be exposed to any online threat. Switching to airplane mode suffices in many cases.
+What Zigner does NOT protect against:
 
-☝️ **Disabling the mobile phone's networking abilities is a requirement for the app to be used as intended**
+- A compromised build toolchain (use reproducible builds and verify checksums)
+- Physical access to an unlocked device with no secure element
+- A user who approves a transaction without reading it
+- Side-channel attacks on the device hardware (partially mitigated by StrongBox)
 
-Any data transfer from or to the app happens using QR code. By doing so, the most sensitive piece of information, the private keys, will never leave the phone. The Polkadot Vault mobile app can be used to store any Substrate account, this includes Polkadot (DOT) and Kusama (KSM) networks.
+## Penumbra
 
-**Available for both iOS and Android.**
+Signs all transaction actions: shielded spends/outputs, DEX swaps, liquidity
+positions, delegate/undelegate/claim, delegator votes, Dutch auctions
+(schedule/end/withdraw), ICS20 withdrawals.
 
-![](docs/src/res/screens-for-readme.png)
+Chain ID is validated on every signing request to prevent cross-chain replay.
 
-# Links
+Full Viewing Key export (bech32m, UR) for import into [Prax](https://praxwallet.com).
 
-- [Official Website](https://vault.novasama.io/)
-- [Docs](https://docs.novawallet.io/nova-wallet-wiki/wallet-management/hardware-wallets/polkadot-vault) — auto-generated documentation for end users
-- [App Store](https://apps.apple.com/gb/app/polkadot-vault-parity-signer/id1218174838), [Google Play](https://play.google.com/store/apps/details?id=io.parity.signer&hl=en_GB&pli=1), [Github Releases](https://github.com/novasamatech/parity-signer/releases) — public builds
-- [Signer Companion](https://parity.link/signer-companion) — web extension to inject keys from Signer and sign transactions through the browser
-- [Metadata Portal](https://metadata.novasama.io) — QR codes with the latest metadata
-- [BananaSplit](https://bs.parity.io) — split your seed phrase for maximum security
-- [Legacy: last public release with React Native](https://github.com/novasamatech/parity-signer/tree/legacy-4.5.3)
+## Zcash
 
-# Features
+- Orchard: RedPallas signatures over shielded actions
+- Transparent: secp256k1 ECDSA for t-address inputs
+- PCZT: Partially Created Zcash Transactions for multi-party signing
+- Key derivation: ZIP-32 (`m/32'/133'/account'`), BIP-44 transparent
+- UFVK export per ZIP-316 for Zashi/Zafu import
 
-- Generate and store multiple private keys
-- Parse and sign transactions
-- Use derived keys to have multiple addresses with a single seed phrase
-- Backup and restore your accounts
-- View activity log to detect unauthorized access
-- Update [metadata](https://metadata.novasama.io/) without going online
-- Add new networks
+UR-encoded animated QR codes (Keystone wire format). Mainnet and testnet.
 
-# How to use
+## Substrate
 
-Please read our documentation before using Vault for the first time or before upgrading. It covers the main use-cases such as installing on a new phone, creating keys, upgrading and adding new networks:
+Polkadot, Kusama, Westend built-in. Any Substrate chain addable via QR
+metadata updates. Sr25519 and Ed25519 signing.
 
-👉 https://docs.novawallet.io/nova-wallet-wiki/wallet-management/hardware-wallets/polkadot-vault
+## Hot wallet pairing
 
-# Project Structure
+| Chain | Hot wallet | Wire format |
+|-------|-----------|-------------|
+| Penumbra | [Prax](https://praxwallet.com) | UR / CBOR |
+| Zcash | [Zafu](https://github.com/rotkonetworks/zafu), Zashi | UR / PCZT / ZIP-316 |
+| Substrate | Polkadot.js | UOS |
 
-Vault is a native app for iOS and Android. Native UI's are written on Swift and Kotlin and built on top of a universal Rust core library, which implements all the logic. Here's a rough folder structure of the project.
+The hot wallet holds only viewing keys. It constructs unsigned transactions,
+encodes them as QR, and scans back the signed response.
 
-- `android` - Android project. Builds by Android Studio automatically
-- `docker` - files for CI on gitlab
-- `docs` - official documentation. Built and published on each commit
-- `ios` - iOS project folder. Read how to build it in the "Build Process" section
-- `rust` - backend Rust code. Internals are listed below
-- `scripts` - mostly releasing scripts and `./build.sh` required for building iOS library
+## Architecture
 
-Since most of the application logic is concentrated in the `rust` folder, it makes sense to review it separately.
-
-There are 3 actual endpoints in `rust` folder: `signer`, which is source of library used for Vault itself; `generate_message`, which is used to update Vault repo with new built-in network information and to generate over-the-airgap updates; and `qr_reader_pc` which is a minimalistic app to parse qr codes that we had to write since there was no reasonably working alternative.
-
-Sub-folders of the `rust` folder:
-
-- `constants` — constant values defined for the whole workspace.
-- 🔥 `db_handling` — all database-related operations for Vault and `generate_message` tool. Most of the business logic is contained here.
-- `defaults` — built-in and test data for database
-- `definitions` — objects used across the workspace are defined here
-- `files` — contains test files and is used for build and update generation processes. Most contents are gitignored.
-- `generate_message` — tool to generate over-the-airgap updates and maintain network info database on hot side
-- 🔥 `navigator` — navigation for Vault app; it is realized in rust to unify app behavior across the platforms
-- `parser` - parses signable transactions. This is internal logic for `transaction_parsing` that is used when signable transaction is identified, but it could be used as a standalone lib for the same purpose.
-- `printing_balance` — small lib to render tokens with proper units
-- `qr_reader_pc` — small standalone PC app to parse QR codes in Vault ecosystem. Also is capable of parsing multiframe payloads (theoretically, in practice it is not feasible due to PC webcam low performance)
-- `qr_reader_phone` — logic to parse QR payloads in Vault
-- `qrcode_rtx` — multiframe erasure-encoded payload generator for signer update QR animation.
-- `qrcode_static` — generation of static qr codes used all over the workspace
-- 🔥 `signer` — FFI interface crate to generate bindings that bridge native code and rust backend
-- `transaction_parsing` — high-level parser for all QR payloads sent into Vault
-- `transaction_signing` — all operations that could be performed when user accepts payload parsed with transaction_parsing
-
-> 🔥 — this emoji means an important folder for the application logic
-
-# Build Process
-
-**1.** First and foremost, make sure you have the latest [Rust](https://www.rust-lang.org/tools/install) installed in your system. Nothing will work without Rust.
-
-If you get errors like `cargo: feature X is required`, it most likely means you have an old version of Rust. Update it by running `rustup update stable`.
-
-**2.** Install `uniffi-bindgen`. Version has to match the version of `uniffi` crates specified
-   in the project (currently it is `0.22.0`):
-
-   ```bash
-   cargo install uniffi_bindgen --version 0.22.0
-   ```
-
-**3.**  Ensure [opencv crate dependencies](https://crates.io/crates/opencv).
-
-## iOS
-
-**4.** You probably already have [Xcode](https://developer.apple.com/xcode/) installed if you are reading this. If not, go get it.
-
-**5.** Install dependencies
-Currently most of iOS tooling is integrated via [Homebrew](https://brew.sh) to avoid use of [CocoaPods](https://cocoapods.org).
-They will install on the first run, you should see installation confirmation in Xcode Build Log.
-
-**6.** Open the `PolkadotVault.xcodeproj` project from the `ios` folder in your Xcode. Project features three schemes:
-- `PolkadotVault` - used for deployments and running production-ready app on your devices
-- `PolkadotVault-Dev` - development scheme that can be used to simulate offline mode without turning off WiFi on your Mac if you are using simulator.
-- `PolkadotVault-QA` - scheme that is used for TestFlight distribution of QA builds
-
-To run project, select one of the schemes and click `Run` (Cmd+R)
-
-**Note:** If you are using `PolkadotVault` scheme, the first time you start the app, you will need to put your device into Airplane Mode. In the iOS simulator, you can do this by turning off WiFi on your Mac, hence use of `PolkadotVault-Dev` is recommended for both simulator and device development.
-
-However, we strongly recommend that you use a real device for development, as some important parts (e.g. camera) may not work in the simulator.
-
-## Android
-
-**4.** Install necessary rust targets (this set may vary depending on the target device architecture
-   you are building for):
-
-   ```bash
-    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-   ```
-Note - old x86 is not supported. Just use x86_64 emulator image.
-
-**5.** Download [Android Studio](https://developer.android.com/studio).
-
-**6.** Open the project from the root directory.
-
-**7.** Install NDK. Currently specific version 24.0.8215888 is required.
-
-Android Studio -> SDK Manager -> SDK Tools tab. Find NDK there.
-Enable "Show package details" checkmark to select specific version.
-
-**8.** Connect your device or create a virtual one. Open `Tools -> Device Manager` and create a new phone simulator with the latest Android.
-
-**9. (macOS)** : Specify path to `python` in `local.properties`.
-
-`rust.pythonCommand=python3`
-
-**10.** Run the project (`Ctrl+R`). It should build the Rust core library automatically.
-
-### Troubleshooting
-
-#### "no such file or directory" error when invoking cargo/rustc/uniffi-bindgen
-1. Ensure rust and uniffi-bindgen are installed
-2. Sometimes launching Android Studio from the Finder might result in Android Studio not seeing all env needed variables
-Try launching Studio from the shell (command assumes you are in the "Applications" folder)
-```shell
-./Android\ Studio.app/Contents/MacOS/studio
-```
-
-#### "build fails when runnning particular test"
-
-Try to enable features for the dependencies. For example,
+Native iOS (Swift) and Android (Kotlin/Compose) over a shared Rust core. All
+cryptography, key derivation, transaction parsing, and signing lives in Rust.
+The native layers handle UI, camera, and QR rendering.
 
 ```
-cargo test -p navigator export_import_substrate_and_ethereum_addrs --features db_handling/active
+rust/
+  transaction_signing/   Penumbra, Zcash, Substrate signers
+  transaction_parsing/   QR payload decoder
+  db_handling/           Key storage, metadata, seeds
+  navigator/             Screen state machine
+  signer/                UniFFI bridge to native
+  qrcode_rtx/            Animated QR encoder (fountain codes)
+  qr_reader_phone/       Camera frame QR decoder
+  generate_message/      Airgap metadata update generator
+  zcash-wasm/            Zcash Orchard derivation for browser wallets
+ios/                     Swift + SwiftUI
+android/                 Kotlin + Jetpack Compose
 ```
 
-# Release Android
+## Building
 
-- Create PR with new app version updated
-- After merging to master - and tag v* (example "v6.1.3")
-- Run android-release.yml  flow. It will build and sign apk and upload it to internal track in play store
-- Create github release with apk from release flow
-- Go to play store, promote internal track to production and update changes in play store
+Requires [Rust](https://www.rust-lang.org/tools/install) and uniffi-bindgen
+matching the project version:
 
-# Tests
+```
+cargo install uniffi_bindgen --version 0.22.0
+```
 
-Core Rust code is fully covered by tests, and they run in CI on each commit. To run tests on your machine:
+[opencv crate dependencies](https://crates.io/crates/opencv) must be present.
+
+### Android
+
+```
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+```
+
+Install [Android Studio](https://developer.android.com/studio) with NDK
+`24.0.8215888`. Open the project root and build.
+
+### iOS
+
+Open `ios/PolkadotVault.xcodeproj` in Xcode. Build and run.
+
+## Releasing (Android)
+
+1. Bump `versionName` in `android/build.gradle`
+2. Merge to master
+3. Tag `v*` (e.g. `v0.2.0`)
+
+`android-release.yml` runs: test, build in pinned container, sign (v2+v3+v4),
+checksum (SHA-256/SHA-512), SLSA provenance attestation, publish to GitHub
+Releases. Tags containing `-` (e.g. `v1.0.0-rc1`) publish as pre-releases.
+
+## Tests
 
 ```
 cd rust && cargo test --locked
 ```
 
-We don't have test for UIs for now (other than navigation which is handled on rust side), which means Swift and Kotlin are not covered. We plan to do it in the future.
+## License
 
-
-# Bugs and Feedback
-
-If you found a bug or want to propose an improvement, please open [an issue](https://github.com/novasamatech/parity-signer/issues).
-
-Try to create bug reports that are:
-
-- _Reproducible._ Include steps to reproduce the problem.
-- _Specific._ Include as much detail as possible: which version, what phone, OS, etc.
-- _Unique._ Do not duplicate existing opened issues.
-- _Scoped to a Single Bug._ One bug per report.
-
-Official team email for direct inquiries: support@novawallet.io
-
-# Contributing
-
-Our contribution guidelines are still in development. Until then, you're welcome to participate in discussions and send PRs with small bugfixes, we'd love it. Each PR must be reviewed by at least two project maintainers.
-
-# License
-
-Polkadot-Vault is [GPL 3.0 licensed](LICENSE).
+[GPL-3.0](LICENSE)

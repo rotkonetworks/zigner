@@ -1,8 +1,8 @@
-//! Definitions and common methods for types used in [Vault](https://github.com/paritytech/parity-signer)
-//! and Vault-supporting ecosystem.
+//! Definitions and common methods for types used in [Zigner](https://github.com/rotkonetworks/zigner)
+//! and Zigner-supporting ecosystem.
 //!
 //! ## Features
-//! Feature `"signer"` corresponds to everything related to Vault air-gapped
+//! Feature `"signer"` corresponds to everything related to the Zigner air-gapped
 //! device.
 //!
 //! Feature `"active"` corresponds to all Vault-related things happening

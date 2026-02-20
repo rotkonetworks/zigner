@@ -63,6 +63,10 @@ struct SettingsView: View {
     @ViewBuilder
     func detailView(_ item: SettingsItem?) -> some View {
         switch item {
+        case .penumbraFvkExport:
+            PenumbraFvkExportView(viewModel: .init())
+        case .zcashFvkExport:
+            ZcashFvkExportView(viewModel: .init())
         case .logs:
             LogsListView(viewModel: .init())
         case .networks:
@@ -102,6 +106,12 @@ extension SettingsView {
 
         func onTapAction(_ item: SettingsItem) {
             switch item {
+            case .penumbraFvkExport:
+                detailScreen = .penumbraFvkExport
+                isDetailsPresented = true
+            case .zcashFvkExport:
+                detailScreen = .zcashFvkExport
+                isDetailsPresented = true
             case .logs:
                 detailScreen = .logs
                 isDetailsPresented = true

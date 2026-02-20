@@ -1,98 +1,128 @@
 # FAQ
 
-- [About](#about)
-- [Networks](#networks)
+- [Security](#security)
+- [Penumbra](#penumbra)
+- [Zcash](#zcash)
+- [Substrate](#substrate)
 - [Seeds and keys](#seeds-and-keys)
 
-## About
+## Security
 
-### What is Vault?
+### What is Zigner?
 
-Vault is an app for an air-gapped device, it turns an offline device — usually a smartphone — into a secure hardware wallet. Vault offers you a way to securely generate, store, manage and use your blockchain credentials.
+An air-gapped cold signer. It holds private keys on an offline phone and
+signs transactions presented as QR codes. It never touches a network.
 
-### Should I use Vault?
+### What does it protect against?
 
-Vault is optimized for the highest security requirements. If you already manage many accounts on multiple networks, Vault is great for you. If you have little experience with blockchain networks but still want good security affordances, you might find the learning curve steep. We strive to make Vault as intuitive as possible; get in touch via [signer@parity.io](mailto:signer@parity.io) or [GitHub Issues](https://github.com/paritytech/parity-signer/issues) if you can help us get there!
+A compromised hot wallet. Even if Prax, Zafu, or Polkadot.js is backdoored,
+the attacker cannot extract your spending key because it never leaves the
+signing device. They can present a malicious transaction, but Zigner displays
+the decoded contents for you to review before signing.
 
-### How does an offline device communicate with the outside world?
+### What does it NOT protect against?
 
-Communication happens through scanning and generating QR codes. Scanned with Vault input-QRs interact with keys stored in Vault to, generate response-QRs on behalf of those keys. Usually, input-QR is a blockchain transaction, and a response-QR is a signature for this transaction. There are tried and true cryptographic algorithms that power these QR codes, as well as some smart engineering that make your dedicated device safe to use.
+- You approving a transaction you didn't read
+- Physical access to the unlocked device
+- A supply chain attack on Zigner itself (verify reproducible builds)
+- Side channels on the phone hardware (EM, power analysis)
 
-### How do I keep my keys secure?
+### How does the device communicate?
 
-Vault is a safe way to use your keys. However, that alone won't be enough to keep your keys secure. Devices break and get lost. This is why we always recommend backing up your seed phrases and derivation paths on paper. We are such big fans of paper backups that we even support a special tool to power your paper backup game by splitting your backups into shards called [Banana Split](https://bs.parity.io/).
+QR codes only. The hot wallet encodes an unsigned transaction as a QR code.
+Zigner scans it, displays the parsed contents, signs if approved, and shows
+a signature QR code. The hot wallet scans that and broadcasts. No bytes
+traverse any network interface on the signing device.
 
-### How do I know I am not interacting with malicious apps or actors?
+### What if I accidentally enable WiFi?
 
-The Vault does not interact with a network. The app itself does not have a way to check if an app or an account you're interacting with is malicious. 
-If you use Vault with PolkadotJS Browser Extension, PolkadotJS Apps, or Signer Component Browser Extension they will rely on a community-driven curated list of potentially less-than-honest operators: [<https://polkadot.js.org/phishing/#>](https://polkadot.js.org/phishing/#) to prevent you from interacting with certain sites and addresses. However, there are no limitations on the use of Vault with other tools.
+Zigner detects connectivity changes and warns you. But the fundamental
+guarantee is gone: any malware on the device could have exfiltrated keys
+during the window the radio was active. Treat it as a compromise.
 
-### I want to play with Vault to get a better feeling of how it works. Is there a way to do it without spending valuable tokens?
+## Penumbra
 
-Yes. In Vault, you should add a key for an address on Westend network and request test tokens for that address, see the step-by-step guide on [Polkadot Network Wiki](https://wiki.polkadot.network/docs/learn-DOT#getting-westies). 
+### What can I sign?
 
-You can use test tokens in the same way you would use value-bearing tokens.
+All transaction actions: spends, outputs, swaps, liquidity positions,
+delegate/undelegate/claim, delegator votes, Dutch auctions, ICS20
+withdrawals.
 
-For example with [PolkadotJS Apps](https://polkadot.js.org/apps/) you can create a transaction on behalf of your account, generate a signature with Vault and submit it to the network. All of this without keys ever leaving your offline device.
+### How does Prax pairing work?
 
-## Networks
+1. Export your Full Viewing Key (FVK) from Zigner as a QR code
+2. Import into Prax (watch-only)
+3. Prax constructs transactions and shows QR codes
+4. Scan with Zigner, review, approve
+5. Scan the signature QR back into Prax to broadcast
 
-### What networks does Vault support?
+### Is the chain ID validated?
 
-From-the-shelf Polkadot Vault supports Polkadot, Kusama, and Westend networks. But it's not limited to these networks. More experienced users can generate metadata for any network to expand the capability of Polkadot Vault.
+Yes. Every signing request includes a chain ID. Zigner rejects requests
+where the chain ID doesn't match what the transaction plan specifies. This
+prevents cross-chain replay and mainnet/testnet confusion.
 
-### How can I update metadata version for a network?
+## Zcash
 
-Parity verifies and publishes recent metadata versions on [Metadata Update Portal](https://metadata.parity.io/). With off-the-shelf Vault you can scan one of the multipart QR-"movies" same way you scan transaction QR:\
-in Vault open scanner, scan the QR for the respective network and accept new metadata.
+### What can I sign?
 
-Currently, [Metadata Update Portal](https://metadata.parity.io/) follows Polkadot, Kusama, and Westend network metadata updates. Parity is open to collaboration with participants of other networks and is currently exploring safe and more decentralized ways of publishing verified metadata.
+- Orchard shielded actions (RedPallas on Pallas)
+- Transparent inputs (secp256k1 ECDSA, P2PKH)
+- PCZT (Partially Created Zcash Transactions) for multi-party flows
 
-If you want to update networks that you've added manually, please follow the [Add Metadata](../tutorials/Add-New-Network.md#add-network-metadata) steps in [Add New Network](../tutorials/Add-New-Network.md) guide.
+### How does Zafu/Zashi pairing work?
 
-### Why do I need to update network metadata versions at all?
+Same flow as Penumbra: export a Unified Full Viewing Key (UFVK) per ZIP-316,
+import into your hot wallet as watch-only, then scan transaction QRs back
+and forth. Wire format is UR-encoded (Keystone SDK compatible).
 
-It's a safety feature. Substrate-based blockchain networks can be updated and otherwise changed; without recent metadata version of a network Vault won't be able to parse a transaction correctly, and you won't be able to read it and verify what you sign. Given that Vault is an app for an air-gapped device, you have to update the network version by using camera.
+### What key derivation is used?
 
-### How can I add a new network to Vault?
+- Orchard: ZIP-32 at `m/32'/133'/account'`
+- Transparent: BIP-44 at `m/44'/133'/account'/change/index`
+- Unified addresses and UFVKs per ZIP-316
 
-Parity verifies and publishes network specs on [Metadata Update Portal](https://metadata.parity.io/). To add one of the listed networks, in [Metadata Update Portal](https://metadata.parity.io/) click "Chain Specs", scan the network specs QR same way you scan transaction QR: in Vault open scanner, scan the QR and accept new network spec. Then scan the multipart QR-"movie" containing recent metadata for this network.
+### Mainnet and testnet?
 
-### Can I add a network that does not have network specs and metadata QR published anywhere?
+Both supported. Network detection is built into the signing flow.
 
-Yes. Follow the [Add New Network](../tutorials/Add-New-Network.md) step-by-step guide.
+## Substrate
 
-Currently, the process requires you to have [rust](https://www.rust-lang.org/tools/install), [subkey](https://docs.substrate.io/v3/tools/subkey/#installation) and [parity-signer repository](https://github.com/paritytech/parity-signer) on your machine.
+### What networks are supported?
+
+Polkadot, Kusama, and Westend ship built-in. Any Substrate chain can be
+added by scanning its network specs and metadata as QR codes from
+[metadata.parity.io](https://metadata.parity.io/) or
+[metadata.rotko.net](https://metadata.rotko.net).
+
+### How do I update metadata?
+
+Scan the multipart metadata QR from the portal for your network. Zigner
+validates the metadata signature against the verifier certificate before
+accepting it.
 
 ## Seeds and keys
-	
-### Can I import my keys from `polkadot{.js}` apps or extension to Polkadot Vault?
 
-Yes. Keys are compatible between `polkadot{.js}` and Polkadot Vault, except for the keys generated with Ledger (`BIP39`). To import seed keys into Polkadot Vault, you need to know:
-1. Seed phrase\
-_It should always be backed up in paper!_
-2. Network you are adding address to and whether Polkadot Vault installed on your device has metadata for the respective network.\
-_If (2) is not one of the default built-in networks, you will need to add network yourself or find a distribution center for adding networks._
-3. Derivation path\
-_Only if you are importing a derived key, usually keys generated with `polkadot{.js}` are seed keys._
+### Can I use one seed for Penumbra, Zcash, and Substrate?
 
-In Polkadot Vault go to Keys, then press "Plus" icon in the top right of the screen, select "Recover seed", enter display name to identify your seed, press "Next", enter the seed phrase. Done, you've got your seed key imported!\
-If you are importing a derived key select the seed from which your key is derived, select account's network, press "Plus" icon next to "Derived keys", enter your derivation path.
+Yes. Each chain derives keys from the same BIP-39 seed using distinct
+derivation paths (different BIP-44 coin types), so keys are cryptographically
+isolated per chain.
 
-### What is the difference between seed key and derived key? Why should I use derived keys?
+### What is a derived key?
 
-A seed key is a single key pair generated from a seed phrase. You can “grow” as many derived keys from a single seed by adding derivation paths to your seed phrase.
+A key produced by applying a derivation path to a seed. Recovery requires
+only the seed phrase and the path, not the derived key itself.
 
-Learn more about types of derivation paths on [substrate.io](https://docs.substrate.io/v3/tools/subkey/#hd-key-derivation).
+### Can I rename a seed?
 
-Derivation path is sensitive information, but knowing the derivation path is not enough to recover a key. Derived keys cannot be backed up without both of the ingredients: seed phrase (can be shared between multiple keys) and a derivation path (unique for each of the keys “grown” from that seed).
+No. Seed names are bound at creation time as a security invariant. To change
+a name: back up the seed phrase, remove the key set, re-add it with the new
+name.
 
-The main reason to use derived keys is how easy it is to back up (and restore from a backup) a derivation path compared to seed phrase.
+### What is Banana Split?
 
-### What is an identicon, the image next to my keys?
-
-An identicon is a visual hash of a public key — a unique picture generated from your public key. The same public key should have the same identicon regardless of the application. It is a good tool to distinguish quickly between keys. However, when interacting with keys, i.g. verifying a recipient of a transaction, do not rely only on identicons, it is better to check the full public address.
-
-### How can I rename one of my seeds?
-
-Due to security considerations, you cannot rename a seed. Please back up the seed and derived keys, remove it and add the seed again with a new name instead.
+Shamir Secret Sharing for seed phrases. Splits a seed into N QR code shards
+with a threshold of K required to reconstruct. No single shard reveals
+anything about the seed. Uses [bs.parity.io](https://bs.parity.io/) for
+shard encoding.
