@@ -4,6 +4,8 @@
 
 Air-gapped cold signer for Penumbra, Zcash, and Substrate chains
 
+Part of the [Zafu](https://github.com/rotkonetworks/zafu) ecosystem
+
 </div>
 
 ## Threat model
@@ -40,7 +42,7 @@ positions, delegate/undelegate/claim, delegator votes, Dutch auctions
 
 Chain ID is validated on every signing request to prevent cross-chain replay.
 
-Full Viewing Key export (bech32m, UR) for import into Prax.
+Full Viewing Key export (bech32m, UR) for import into [Prax](https://praxwallet.com).
 
 ## Zcash
 
@@ -61,8 +63,8 @@ metadata updates. Sr25519 and Ed25519 signing.
 
 | Chain | Hot wallet | Wire format |
 |-------|-----------|-------------|
-| Penumbra | Prax | UR / CBOR |
-| Zcash | Zafu, Zashi | UR / PCZT / ZIP-316 |
+| Penumbra | [Prax](https://praxwallet.com) | UR / CBOR |
+| Zcash | [Zafu](https://github.com/rotkonetworks/zafu), Zashi | UR / PCZT / ZIP-316 |
 | Substrate | Polkadot.js | UOS |
 
 The hot wallet holds only viewing keys. It constructs unsigned transactions,
