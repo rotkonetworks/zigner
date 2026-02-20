@@ -1,5 +1,5 @@
-//! This crate is intended to support the
-//! [Vault](https://github.com/paritytech/parity-signer) from the active
+//! This crate is intended to support
+//! [Zigner](https://github.com/rotkonetworks/zigner) from the active
 //! (non air-gapped) side.
 //!
 //! This crate is mainly used to:

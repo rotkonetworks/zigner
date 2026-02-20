@@ -1,6 +1,6 @@
-# Polkadot Vault Accounts Management
+# Zigner Accounts Management
 
-Polkadot Vault `v4` has introduced the Hierarchical Deterministic Key Derivation (HDKD) feature for Substrate networks. This article explains how to use this feature.
+Zigner supports Hierarchical Deterministic Key Derivation (HDKD) for Substrate networks, as well as chain-specific derivation for Penumbra (BIP-44 coin type 6532) and Zcash (ZIP-32 / BIP-44 coin type 133). This article explains how HDKD works for Substrate keys.
 
 * Notice: The UI may be variant for different versions, but the functionalities are the same in `v4` version.
 
@@ -32,9 +32,7 @@ Users are able to create any combination of hard derivation with `//` and/or sof
 
 The encoded string are limited to 32 Bytes.
 
-For technical information about the soft and hard derivations on Substrate, please refer to introduction [here](https://github.com/paritytech/parity-signer/wiki/HDKD-on-Parity-Signer#hdkd-general-on-substrate).
-
-Path also could contain optional **password**; in Subkey standard password is prefixed with `///`. However, for convenience, Vault device has separate password entry field with password confirmation, thus do not add `///` to derivation field, it will result in error - instead omit `///` and type password into its' special field. It will not be stored on the device and will be required for any operation that requires private key of the account. There is no way to restore this password if it is lost so please back it up carefully.
+Path also could contain optional **password**; in Subkey standard password is prefixed with `///`. However, for convenience, Zigner has a separate password entry field with password confirmation, thus do not add `///` to derivation field, it will result in error - instead omit `///` and type password into its' special field. It will not be stored on the device and will be required for any operation that requires private key of the account. There is no way to restore this password if it is lost so please back it up carefully.
 
 ### Further notes
 

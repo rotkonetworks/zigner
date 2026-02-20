@@ -21,7 +21,7 @@ This captures anything that should be addressed before merging PR
 -->
 ## TODOs
 <!--
-- [ ] Discuss and update [README](https://github.com/paritytech/parity-signer/blob/master/README.md) if needed
+- [ ] Discuss and update [README](https://github.com/rotkonetworks/zigner/blob/master/README.md) if needed
 - [ ] Make sure that this doesn't break feature ABC before merging
 -->
 

@@ -333,6 +333,8 @@
 "Settings.Label.Terms" = "Terms of Service";
 "Settings.Label.Version" = "App version %@";
 "Settings.Label.Wipe" = "Wipe all Data";
+"Settings.Label.PenumbraFvkExport" = "Penumbra FVK Export";
+"Settings.Label.ZcashFvkExport" = "Zcash FVK Export";
 "Settings.Action.Cancel" = "Cancel";
 "Settings.Networks.Label.Title" = "Networks";
 "Settings.Networks.Action.Add" = "Add new network";

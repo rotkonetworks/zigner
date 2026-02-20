@@ -12,7 +12,7 @@ use parity_scale_codec::Decode;
 
 use clap::{Args, Parser, Subcommand};
 
-/// Polkadot Vault data manipulation tool.
+/// Zigner data manipulation tool.
 #[derive(Debug, Parser)]
 pub struct Cli {
     #[clap(subcommand)]

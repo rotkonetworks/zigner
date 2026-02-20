@@ -3,20 +3,28 @@ plugins {
 	id 'kotlin-android'
 	id 'org.mozilla.rust-android-gradle.rust-android'
 	id 'idea'
-	// Google services disabled for Zigner - can be re-enabled with new Firebase project
-	// id 'com.google.gms.google-services'
 }
 
 apply plugin: 'kotlin-android'
-// apply plugin: 'com.google.gms.google-services'
+
+// Derive versionCode from versionName: "1.2.3" -> 1_002_003
+static int computeVersionCode(String name) {
+	def parts = name.tokenize('.-')
+	def major = parts[0] as int
+	def minor = parts[1] as int
+	def patch = parts[2] as int
+	return major * 1_000_000 + minor * 1_000 + patch
+}
+
+def appVersionName = "0.1.0"
 
 android {
 	defaultConfig {
 		applicationId "net.rotko.zigner"
 		minSdk 23
 		targetSdk 34
-		versionCode 1000
-		versionName "0.1.0"
+		versionCode computeVersionCode(appVersionName)
+		versionName appVersionName
 		ndk {
 			abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
 		}
@@ -134,8 +142,6 @@ dependencies {
 	androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 	androidTestImplementation "androidx.compose.ui:ui-test-junit4:$compose_libs_version"
 	debugImplementation "androidx.compose.ui:ui-tooling:$compose_libs_version"
-	// Firebase disabled for Zigner - can be re-enabled with new Firebase project
-	// implementation platform('com.google.firebase:firebase-bom:33.12.0')
 }
 
 preBuild.dependsOn "cargoBuild","buildDB"
