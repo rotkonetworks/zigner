@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ghcr.io/${{ github.repository }}/opencv-builder:4.11.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
     outputs:
       build-tool-version: ${{ steps.read-build-tool-version.outputs.build-tool-version }}
     steps:
