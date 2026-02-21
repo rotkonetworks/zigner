@@ -31,7 +31,6 @@ jobs:
       - name: Install Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.84.0
           components: clippy
 
       - name: Install uniffi_bindgen
