@@ -4,19 +4,36 @@ lane :load_asc_api_key do
   require 'tempfile'
 
   # ruby's openssl 3.x bindings on macos can't parse apple .p8 keys
-  # (PKCS8 EC format) — both EC.new and PKey.read fail with "invalid curve name".
-  # convert PKCS8 → SEC1 EC format using the openssl CLI which handles it fine.
+  # (PKCS8 EC format) — EC.new fails with "invalid curve name".
+  # convert PKCS8 → SEC1 EC format using the openssl CLI.
   raw = Base64.decode64(ENV["ASC_KEY_BASE64"])
 
-  pkcs8 = Tempfile.new(['asc_key', '.p8'])
-  pkcs8.binmode
-  pkcs8.write(raw)
-  pkcs8.close
+  keyfile = Tempfile.new(['asc_key', '.p8'])
+  keyfile.binmode
+  keyfile.write(raw)
+  keyfile.close
 
-  ec_pem = `openssl ec -in #{pkcs8.path} 2>/dev/null`
-  pkcs8.unlink
+  is_pem = raw.start_with?("-----")
+  inform = is_pem ? "PEM" : "DER"
+  UI.message("ASC key format: #{inform}, size: #{raw.size} bytes")
 
-  UI.user_error!("failed to convert ASC API key from PKCS8 to EC format") if ec_pem.strip.empty?
+  # try openssl ec, then openssl pkey as fallback
+  ec_pem = `openssl ec -in #{keyfile.path} -inform #{inform} 2>&1`
+  if !$?.success?
+    UI.message("openssl ec failed: #{ec_pem.lines.first}")
+    ec_pem = `openssl pkey -in #{keyfile.path} -inform #{inform} 2>&1`
+    if !$?.success?
+      UI.message("openssl pkey also failed: #{ec_pem.lines.first}")
+      # last resort: try to use ruby's openssl with the raw key directly
+      keyfile.unlink
+      UI.user_error!("cannot convert ASC API key — check ASC_KEY_BASE64 secret format")
+    end
+  end
+
+  keyfile.unlink
+
+  # strip any stderr noise (e.g. "read EC key")
+  ec_pem = ec_pem.lines.select { |l| l.match?(/^-----|\A[A-Za-z0-9+\/=]/) }.join
 
   app_store_connect_api_key(
     key_id: ENV["ASC_KEY_ID"],
