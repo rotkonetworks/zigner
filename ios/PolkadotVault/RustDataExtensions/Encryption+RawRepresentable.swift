@@ -15,6 +15,13 @@ extension Encryption: RawRepresentable {
         case ed25519
         case sr25519
         case ethereum
+        case penumbra
+        case zcash
+        case ledgerEd25519
+        case cosmos
+        case bitcoin
+        case nostr
+        case atProtocol
     }
 
     public init?(rawValue: String) {
@@ -27,6 +34,20 @@ extension Encryption: RawRepresentable {
             self = .sr25519
         case EncryptionValues.ethereum.rawValue:
             self = .ethereum
+        case EncryptionValues.penumbra.rawValue:
+            self = .penumbra
+        case EncryptionValues.zcash.rawValue:
+            self = .zcash
+        case EncryptionValues.ledgerEd25519.rawValue:
+            self = .ledgerEd25519
+        case EncryptionValues.cosmos.rawValue:
+            self = .cosmos
+        case EncryptionValues.bitcoin.rawValue:
+            self = .bitcoin
+        case EncryptionValues.nostr.rawValue:
+            self = .nostr
+        case EncryptionValues.atProtocol.rawValue:
+            self = .atProtocol
         default:
             return nil
         }
@@ -42,6 +63,20 @@ extension Encryption: RawRepresentable {
             EncryptionValues.sr25519.rawValue
         case .ethereum:
             EncryptionValues.ethereum.rawValue
+        case .penumbra:
+            EncryptionValues.penumbra.rawValue
+        case .zcash:
+            EncryptionValues.zcash.rawValue
+        case .ledgerEd25519:
+            EncryptionValues.ledgerEd25519.rawValue
+        case .cosmos:
+            EncryptionValues.cosmos.rawValue
+        case .bitcoin:
+            EncryptionValues.bitcoin.rawValue
+        case .nostr:
+            EncryptionValues.nostr.rawValue
+        case .atProtocol:
+            EncryptionValues.atProtocol.rawValue
         }
     }
 }

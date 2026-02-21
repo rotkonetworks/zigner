@@ -9,7 +9,6 @@ runs:
       with:
         ruby-version: "3.3"
         bundler-cache: false
-
     - name: Setup - Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:

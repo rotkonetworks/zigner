@@ -86,6 +86,7 @@ jobs:
         uses: baptiste0928/cargo-install@1cd874a5478fdca35d868ccc74640c5aabbb8f1b # v3.0.0
         with:
           crate: mdbook-mermaid
+          version: "0.14.1"
 
       - name: Build user-docs
         # docs source dir ./docs/book/html/
