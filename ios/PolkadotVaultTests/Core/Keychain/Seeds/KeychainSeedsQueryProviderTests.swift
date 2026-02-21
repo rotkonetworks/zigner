@@ -29,8 +29,8 @@ final class KeychainSeedsQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, expectedSecClass)
-        XCTAssertEqual(result[kSecMatchLimit] as! CFString, expectedMatchLimit)
+        XCTAssertEqual(result[kSecClass] as CFString, expectedSecClass)
+        XCTAssertEqual(result[kSecMatchLimit] as CFString, expectedMatchLimit)
         XCTAssertEqual(result[kSecReturnAttributes] as! Bool, expectedReturnAttributes)
         XCTAssertEqual(result[kSecReturnData] as! Bool, expectedReturnData)
     }
@@ -44,7 +44,7 @@ final class KeychainSeedsQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, expectedSecClass)
+        XCTAssertEqual(result[kSecClass] as CFString, expectedSecClass)
     }
 
     func test_query_check_returnsExpectedValues() {
@@ -58,8 +58,8 @@ final class KeychainSeedsQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, expectedSecClass)
-        XCTAssertEqual(result[kSecMatchLimit] as! CFString, expectedMatchLimit)
+        XCTAssertEqual(result[kSecClass] as CFString, expectedSecClass)
+        XCTAssertEqual(result[kSecMatchLimit] as CFString, expectedMatchLimit)
         XCTAssertEqual(result[kSecReturnData] as! Bool, expectedReturnData)
     }
 
@@ -75,8 +75,8 @@ final class KeychainSeedsQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, expectedSecClass)
-        XCTAssertEqual(result[kSecMatchLimit] as! CFString, expectedMatchLimit)
+        XCTAssertEqual(result[kSecClass] as CFString, expectedSecClass)
+        XCTAssertEqual(result[kSecMatchLimit] as CFString, expectedMatchLimit)
         XCTAssertEqual(result[kSecAttrAccount] as! String, seedName)
         XCTAssertEqual(result[kSecReturnData] as! Bool, expectedReturnData)
     }
@@ -91,7 +91,7 @@ final class KeychainSeedsQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, expectedSecClass)
+        XCTAssertEqual(result[kSecClass] as CFString, expectedSecClass)
         XCTAssertEqual(result[kSecAttrAccount] as! String, seedName)
     }
 
@@ -112,8 +112,8 @@ final class KeychainSeedsQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, expectedSecClass)
-        XCTAssertTrue(result[kSecAttrAccessControl] as! SecAccessControl === expectedAccessControl)
+        XCTAssertEqual(result[kSecClass] as CFString, expectedSecClass)
+        XCTAssertTrue(result[kSecAttrAccessControl] as SecAccessControl === expectedAccessControl)
         XCTAssertEqual(result[kSecAttrAccount] as! String, seedName)
         XCTAssertEqual(result[kSecValueData] as? Data, finalSeedPhrase)
         XCTAssertEqual(result[kSecReturnData] as! Bool, expectedReturnData)
