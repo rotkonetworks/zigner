@@ -717,10 +717,10 @@
 //! - Key `--verifier` (can be entered only if the `--crypto` argument was
 //!   `ed25519`, `sr25519`, or `ecdsa`), followed by:
 //!    - `Alice` to generate messages "verified" by
-//!       [Alice seed phrase](constants::ALICE_SEED_PHRASE) with derivation `//Alice`
+//!      [Alice seed phrase](constants::ALICE_SEED_PHRASE) with derivation `//Alice`
 //!    - `-hex` followed by hex public key
 //!    - `-file` followed by the path in dedicated [`FOLDER`](constants::FOLDER)
-//!       for file with public key as raw bytes
+//!      for file with public key as raw bytes
 //!
 //! - Key `--payload` followed by file path in dedicated
 //!   [`FOLDER`](constants::FOLDER) containing already generated payload as
@@ -731,7 +731,7 @@
 //!   followed by:
 //!    - `-hex` followed by hex signature
 //!    - `-file` followed by the path in dedicated [`FOLDER`](constants::FOLDER)
-//!       for file with signature as raw bytes
+//!      for file with signature as raw bytes
 //!
 //! - Optional key `-name` followed by path override for export file in
 //!   dedicated [`EXPORT_FOLDER`](constants::EXPORT_FOLDER)
@@ -749,10 +749,10 @@
 //!
 //! - Key `-sufficient` followed by:
 //!    - `-hex` followed by hexadecimal string with contents of Vault-produced
-//!       `SufficientCrypto` QR code
+//!      `SufficientCrypto` QR code
 //!    - `-file` followed by file path in dedicated
-//!       [`FOLDER`](constants::FOLDER) for raw bytes file with contents of
-//!       Vault-produced `SufficientCrypto` QR code
+//!      [`FOLDER`](constants::FOLDER) for raw bytes file with contents of
+//!      Vault-produced `SufficientCrypto` QR code
 //!
 //! - Key `-msg` followed by message type:
 //!    - `load-types`

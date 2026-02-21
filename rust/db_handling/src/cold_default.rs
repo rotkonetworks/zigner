@@ -73,9 +73,9 @@ use crate::Result;
 
 /// Cold database generation purpose, determining the metadata to be loaded.
 ///
-/// Default metadata is loaded into the cold database for default networks:
-/// Polkadot, Kusama, Westend. `Purpose` determines the metadata source folder
-/// and the versions to be loaded.
+/// Default metadata is loaded into the cold database for default networks.
+/// `Purpose` determines the metadata source folder and the versions to be
+/// loaded.
 #[cfg(feature = "active")]
 enum Purpose {
     /// Two (or fewer) latest released versions of the metadata for each of the

@@ -221,10 +221,7 @@ fn default_types() -> HashMap<String, TypeDefinition> {
 
 /// Create the default schema with all known Penumbra actions
 pub fn default_penumbra_schema() -> PenumbraActionSchema {
-    let mut schema = PenumbraActionSchema::new(
-        "penumbra-1".to_string(),
-        "2.1.0".to_string(),
-    );
+    let mut schema = PenumbraActionSchema::new("penumbra-1".to_string(), "2.1.0".to_string());
 
     // Field 1: Spend
     schema.add_action(
@@ -232,8 +229,16 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         ActionDefinition::new("ActionSpend", "Spend")
             .with_description("Spend a note from your wallet")
             .with_signature()
-            .with_field(FieldDefinition::new("note.value.amount", "Amount", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("note.value.asset_id", "Asset", FieldType::AssetId)),
+            .with_field(FieldDefinition::new(
+                "note.value.amount",
+                "Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "note.value.asset_id",
+                "Asset",
+                FieldType::AssetId,
+            )),
     );
 
     // Field 2: Output
@@ -241,9 +246,21 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         2,
         ActionDefinition::new("ActionOutput", "Output")
             .with_description("Create an output note")
-            .with_field(FieldDefinition::new("value.amount", "Amount", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("value.asset_id", "Asset", FieldType::AssetId))
-            .with_field(FieldDefinition::new("dest_address", "To", FieldType::Address)),
+            .with_field(FieldDefinition::new(
+                "value.amount",
+                "Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "value.asset_id",
+                "Asset",
+                FieldType::AssetId,
+            ))
+            .with_field(FieldDefinition::new(
+                "dest_address",
+                "To",
+                FieldType::Address,
+            )),
     );
 
     // Field 3: Swap
@@ -251,9 +268,21 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         3,
         ActionDefinition::new("ActionSwap", "Swap")
             .with_description("Swap assets via DEX")
-            .with_field(FieldDefinition::new("swap_plaintext.delta_1_i", "Input Amount", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("swap_plaintext.trading_pair.asset_1", "From Asset", FieldType::AssetId))
-            .with_field(FieldDefinition::new("swap_plaintext.trading_pair.asset_2", "To Asset", FieldType::AssetId)),
+            .with_field(FieldDefinition::new(
+                "swap_plaintext.delta_1_i",
+                "Input Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "swap_plaintext.trading_pair.asset_1",
+                "From Asset",
+                FieldType::AssetId,
+            ))
+            .with_field(FieldDefinition::new(
+                "swap_plaintext.trading_pair.asset_2",
+                "To Asset",
+                FieldType::AssetId,
+            )),
     );
 
     // Field 4: SwapClaim
@@ -268,8 +297,16 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         16,
         ActionDefinition::new("ActionDelegate", "Delegate")
             .with_description("Delegate stake to a validator")
-            .with_field(FieldDefinition::new("unbonded_amount", "Amount", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("validator_identity", "Validator", FieldType::IdentityKey)),
+            .with_field(FieldDefinition::new(
+                "unbonded_amount",
+                "Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "validator_identity",
+                "Validator",
+                FieldType::IdentityKey,
+            )),
     );
 
     // Field 17: Undelegate
@@ -277,8 +314,16 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         17,
         ActionDefinition::new("ActionUndelegate", "Undelegate")
             .with_description("Undelegate stake from a validator")
-            .with_field(FieldDefinition::new("delegation_amount", "Amount", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("validator_identity", "Validator", FieldType::IdentityKey)),
+            .with_field(FieldDefinition::new(
+                "delegation_amount",
+                "Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "validator_identity",
+                "Validator",
+                FieldType::IdentityKey,
+            )),
     );
 
     // Field 18: UndelegateClaim
@@ -295,13 +340,17 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
             .with_description("Vote on a governance proposal")
             .with_signature()
             .with_field(FieldDefinition::new("proposal", "Proposal", FieldType::U64))
-            .with_field(FieldDefinition::new("vote.vote", "Vote", FieldType::Enum {
-                variants: vec![
-                    (0, "Abstain".to_string()),
-                    (1, "Yes".to_string()),
-                    (2, "No".to_string()),
-                ],
-            })),
+            .with_field(FieldDefinition::new(
+                "vote.vote",
+                "Vote",
+                FieldType::Enum {
+                    variants: vec![
+                        (0, "Abstain".to_string()),
+                        (1, "Yes".to_string()),
+                        (2, "No".to_string()),
+                    ],
+                },
+            )),
     );
 
     // Field 30: PositionOpen
@@ -330,11 +379,31 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         53,
         ActionDefinition::new("ActionDutchAuctionSchedule", "Schedule Auction")
             .with_description("Schedule a Dutch auction")
-            .with_field(FieldDefinition::new("description.input.amount", "Input Amount", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("description.input.asset_id", "Selling", FieldType::AssetId))
-            .with_field(FieldDefinition::new("description.output_id", "For Asset", FieldType::AssetId))
-            .with_field(FieldDefinition::new("description.max_output", "Min Price", FieldType::Amount { decimals: 6 }))
-            .with_field(FieldDefinition::new("description.min_output", "Max Price", FieldType::Amount { decimals: 6 })),
+            .with_field(FieldDefinition::new(
+                "description.input.amount",
+                "Input Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "description.input.asset_id",
+                "Selling",
+                FieldType::AssetId,
+            ))
+            .with_field(FieldDefinition::new(
+                "description.output_id",
+                "For Asset",
+                FieldType::AssetId,
+            ))
+            .with_field(FieldDefinition::new(
+                "description.max_output",
+                "Min Price",
+                FieldType::Amount { decimals: 6 },
+            ))
+            .with_field(FieldDefinition::new(
+                "description.min_output",
+                "Max Price",
+                FieldType::Amount { decimals: 6 },
+            )),
     );
 
     // Field 54: DutchAuctionEnd
@@ -356,12 +425,32 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         61,
         ActionDefinition::new("ActionTokenFactoryCreate", "Create Token")
             .with_description("Create a new token via Token Factory")
-            .with_field(FieldDefinition::new("nonce.inner", "Token ID", FieldType::Bytes).with_priority(10))
-            .with_field(FieldDefinition::new("metadata.name", "Name", FieldType::String).with_priority(1))
-            .with_field(FieldDefinition::new("metadata.symbol", "Symbol", FieldType::String).with_priority(2))
-            .with_field(FieldDefinition::new("metadata.description", "Description", FieldType::String).with_priority(5))
-            .with_field(FieldDefinition::new("initial_supply", "Initial Supply", FieldType::Amount { decimals: 6 }).with_priority(3))
-            .with_field(FieldDefinition::new("enable_mint", "Minting Enabled", FieldType::Bool).with_priority(4)),
+            .with_field(
+                FieldDefinition::new("nonce.inner", "Token ID", FieldType::Bytes).with_priority(10),
+            )
+            .with_field(
+                FieldDefinition::new("metadata.name", "Name", FieldType::String).with_priority(1),
+            )
+            .with_field(
+                FieldDefinition::new("metadata.symbol", "Symbol", FieldType::String)
+                    .with_priority(2),
+            )
+            .with_field(
+                FieldDefinition::new("metadata.description", "Description", FieldType::String)
+                    .with_priority(5),
+            )
+            .with_field(
+                FieldDefinition::new(
+                    "initial_supply",
+                    "Initial Supply",
+                    FieldType::Amount { decimals: 6 },
+                )
+                .with_priority(3),
+            )
+            .with_field(
+                FieldDefinition::new("enable_mint", "Minting Enabled", FieldType::Bool)
+                    .with_priority(4),
+            ),
     );
 
     // Field 62: TokenFactoryMint (NEW!)
@@ -369,9 +458,21 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         62,
         ActionDefinition::new("ActionTokenFactoryMint", "Mint Tokens")
             .with_description("Mint additional tokens using mint capability")
-            .with_field(FieldDefinition::new("token_id.inner", "Token ID", FieldType::Bytes).with_priority(1))
-            .with_field(FieldDefinition::new("current_seq", "Sequence", FieldType::U64).with_priority(3))
-            .with_field(FieldDefinition::new("amount", "Amount to Mint", FieldType::Amount { decimals: 6 }).with_priority(2)),
+            .with_field(
+                FieldDefinition::new("token_id.inner", "Token ID", FieldType::Bytes)
+                    .with_priority(1),
+            )
+            .with_field(
+                FieldDefinition::new("current_seq", "Sequence", FieldType::U64).with_priority(3),
+            )
+            .with_field(
+                FieldDefinition::new(
+                    "amount",
+                    "Amount to Mint",
+                    FieldType::Amount { decimals: 6 },
+                )
+                .with_priority(2),
+            ),
     );
 
     // Field 63: LiquidityTournamentVote
@@ -380,7 +481,11 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         ActionDefinition::new("ActionLiquidityTournamentVote", "LQT Vote")
             .with_description("Vote in liquidity tournament")
             .with_signature()
-            .with_field(FieldDefinition::new("body.incentivized_asset", "Vote For", FieldType::AssetId)),
+            .with_field(FieldDefinition::new(
+                "body.incentivized_asset",
+                "Vote For",
+                FieldType::AssetId,
+            )),
     );
 
     // IBC actions (field 17 for Ics20Withdrawal in some versions)
@@ -388,9 +493,17 @@ pub fn default_penumbra_schema() -> PenumbraActionSchema {
         200,
         ActionDefinition::new("ActionIcs20Withdrawal", "IBC Transfer Out")
             .with_description("Transfer assets via IBC")
-            .with_field(FieldDefinition::new("amount", "Amount", FieldType::Amount { decimals: 6 }))
+            .with_field(FieldDefinition::new(
+                "amount",
+                "Amount",
+                FieldType::Amount { decimals: 6 },
+            ))
             .with_field(FieldDefinition::new("denom", "Asset", FieldType::String))
-            .with_field(FieldDefinition::new("destination_chain_address", "To", FieldType::String)),
+            .with_field(FieldDefinition::new(
+                "destination_chain_address",
+                "To",
+                FieldType::String,
+            )),
     );
 
     schema
@@ -403,7 +516,11 @@ pub enum ParsedValue {
     Bool(bool),
     U32(u32),
     U64(u64),
-    Amount { raw: u128, decimals: u8, formatted: String },
+    Amount {
+        raw: u128,
+        decimals: u8,
+        formatted: String,
+    },
     Address(String),
     AssetId(String),
     Bytes(Vec<u8>),
@@ -415,7 +532,13 @@ impl ParsedValue {
     pub fn display(&self) -> String {
         match self {
             ParsedValue::String(s) => s.clone(),
-            ParsedValue::Bool(b) => if *b { "Yes".to_string() } else { "No".to_string() },
+            ParsedValue::Bool(b) => {
+                if *b {
+                    "Yes".to_string()
+                } else {
+                    "No".to_string()
+                }
+            }
             ParsedValue::U32(n) => n.to_string(),
             ParsedValue::U64(n) => n.to_string(),
             ParsedValue::Amount { formatted, .. } => formatted.clone(),
@@ -509,7 +632,10 @@ pub struct RegistryDigest {
 impl RegistryDigest {
     /// Get merkle root as hex string (first 16 bytes for display)
     pub fn root_hex(&self) -> String {
-        self.asset_tree_root[..16].iter().map(|b| format!("{:02x}", b)).collect()
+        self.asset_tree_root[..16]
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect()
     }
 }
 
@@ -531,7 +657,10 @@ pub struct SchemaDigest {
 impl SchemaDigest {
     /// Get merkle root as hex string
     pub fn root_hex(&self) -> String {
-        self.action_tree_root.iter().map(|b| format!("{:02x}", b)).collect()
+        self.action_tree_root
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect()
     }
 }
 
@@ -631,8 +760,9 @@ pub fn decode_schema_digest_qr(data: &[u8]) -> Result<SchemaDigest, String> {
 
     let proto_len_idx = 8 + chain_len;
     let proto_len = data[proto_len_idx] as usize;
-    let protocol_version = String::from_utf8(data[proto_len_idx + 1..proto_len_idx + 1 + proto_len].to_vec())
-        .map_err(|e| format!("Invalid protocol_version: {}", e))?;
+    let protocol_version =
+        String::from_utf8(data[proto_len_idx + 1..proto_len_idx + 1 + proto_len].to_vec())
+            .map_err(|e| format!("Invalid protocol_version: {}", e))?;
 
     let hash_start = proto_len_idx + 1 + proto_len;
     if data.len() < hash_start + 32 + 4 {
@@ -683,7 +813,8 @@ mod tests {
     fn test_schema_serialization() {
         let schema = default_penumbra_schema();
         let json = serde_json::to_string(&schema).expect("Should serialize");
-        let restored: PenumbraActionSchema = serde_json::from_str(&json).expect("Should deserialize");
+        let restored: PenumbraActionSchema =
+            serde_json::from_str(&json).expect("Should deserialize");
         assert_eq!(schema, restored);
     }
 

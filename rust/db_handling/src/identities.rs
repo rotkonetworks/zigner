@@ -362,7 +362,10 @@ pub fn import_all_addrs(
 /// Path format: m/44'/6532'/account'/... (BIP44 style)
 /// Returns (MultiSigner, bech32m_address)
 #[cfg(all(feature = "active", feature = "penumbra"))]
-fn penumbra_derive_multisigner_and_address(seed_phrase: &str, path: &str) -> Result<(MultiSigner, String)> {
+fn penumbra_derive_multisigner_and_address(
+    seed_phrase: &str,
+    path: &str,
+) -> Result<(MultiSigner, String)> {
     use crate::penumbra;
 
     // Parse account number from path (m/44'/6532'/account'/...)
@@ -416,7 +419,9 @@ fn ledger_derive_multisigner(seed_phrase: &str, path: &str) -> Result<MultiSigne
     let key_pair = ledger_ed25519::derive_ledger_key(seed_phrase, slip0044, account, 0, 0)
         .map_err(|e| Error::Other(anyhow::anyhow!("Ledger key derivation failed: {}", e)))?;
 
-    Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(key_pair.public_key)))
+    Ok(MultiSigner::Ed25519(ed25519::Public::from_raw(
+        key_pair.public_key,
+    )))
 }
 
 /// Parse Ledger BIP44 path to extract SLIP-0044 coin type and account number
@@ -436,7 +441,7 @@ fn ledger_derive_multisigner(seed_phrase: &str, path: &str) -> Result<MultiSigne
 /// - `m/44'/354'/0'/0'/0'` → coin 354, account 0
 #[cfg(all(feature = "active", feature = "ledger"))]
 fn parse_ledger_path(path: &str) -> Result<(u32, u32)> {
-    use crate::ledger_ed25519::{SLIP0044_POLKADOT, SLIP0044_KUSAMA};
+    use crate::ledger_ed25519::{SLIP0044_KUSAMA, SLIP0044_POLKADOT};
 
     // SLIP-0044 coin types for supported networks (legacy per-network mode)
     // See: https://github.com/satoshilabs/slips/blob/master/slip-0044.md
@@ -453,9 +458,11 @@ fn parse_ledger_path(path: &str) -> Result<(u32, u32)> {
             let slip0044_str = parts[1].trim_end_matches('\'');
             let account_str = parts[2].trim_end_matches('\'');
 
-            let slip0044 = slip0044_str.parse::<u32>()
+            let slip0044 = slip0044_str
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let account = account_str.parse::<u32>()
+            let account = account_str
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
 
             return Ok((slip0044, account));
@@ -466,18 +473,20 @@ fn parse_ledger_path(path: &str) -> Result<(u32, u32)> {
 
     // Extract account number - find the last numeric part after //
     let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
-    let account = parts.iter()
+    let account = parts
+        .iter()
         .filter_map(|p| p.parse::<u32>().ok())
-        .last()
+        .next_back()
         .unwrap_or(0);
 
     // Universal mode: //ledger//0 (no network prefix)
     // Uses Polkadot coin type (354) for all networks - same key everywhere
-    if path_lower.contains("ledger") &&
-       !path_lower.contains("polkadot") &&
-       !path_lower.contains("kusama") &&
-       !path_lower.contains("astar") &&
-       !path_lower.contains("acala") {
+    if path_lower.contains("ledger")
+        && !path_lower.contains("polkadot")
+        && !path_lower.contains("kusama")
+        && !path_lower.contains("astar")
+        && !path_lower.contains("acala")
+    {
         return Ok((SLIP0044_POLKADOT, account));
     }
 
@@ -521,7 +530,8 @@ fn cosmos_derive_multisigner_and_address(
         .unwrap_or("cosmos");
 
     // Generate bech32 address
-    let bech32_address = key_pair.bech32_address(prefix)
+    let bech32_address = key_pair
+        .bech32_address(prefix)
         .map_err(|e| Error::Other(anyhow::anyhow!("Bech32 encoding failed: {}", e)))?;
 
     // Store as Ecdsa since Cosmos uses secp256k1
@@ -792,7 +802,10 @@ pub fn dynamic_derivations_response(
 
         // Skip non-substrate encryption types - they use their own derivation schemes
         match derivation_request.encryption {
-            Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos => {
+            Encryption::Penumbra
+            | Encryption::Zcash
+            | Encryption::LedgerEd25519
+            | Encryption::Cosmos => {
                 // These encryption types don't support dynamic derivations via substrate paths
                 // Return an error for these - they should use their specific derivation endpoints
                 return Err(Error::Other(anyhow::anyhow!(
@@ -903,7 +916,10 @@ pub fn inject_derivations_has_pwd(
             // Skip non-substrate encryption types - they don't support substrate-style password derivation
             // Penumbra, Zcash, LedgerEd25519, and Cosmos use their own derivation schemes
             match derived_key.encryption {
-                Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos => {
+                Encryption::Penumbra
+                | Encryption::Zcash
+                | Encryption::LedgerEd25519
+                | Encryption::Cosmos => {
                     derived_key.has_pwd = Some(false);
                     continue;
                 }
@@ -1146,7 +1162,8 @@ pub(crate) fn create_address(
     let multisigner = if encryption == Encryption::Penumbra {
         #[cfg(feature = "penumbra")]
         {
-            let (multisigner, bech32m_address) = penumbra_derive_multisigner_and_address(seed_phrase, path)?;
+            let (multisigner, bech32m_address) =
+                penumbra_derive_multisigner_and_address(seed_phrase, path)?;
             // Store the bech32m address for later retrieval
             let ak_hex = hex::encode(multisigner_to_public(&multisigner));
             crate::penumbra::store_penumbra_address(database, &ak_hex, &bech32m_address)?;
@@ -1170,7 +1187,8 @@ pub(crate) fn create_address(
         // Cosmos uses BIP44 secp256k1 derivation
         #[cfg(feature = "cosmos")]
         {
-            let (multisigner, bech32_address) = cosmos_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
+            let (multisigner, bech32_address) =
+                cosmos_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
             // Store the bech32 address for later retrieval
             let pubkey_hex = hex::encode(multisigner_to_public(&multisigner));
             crate::cosmos::store_cosmos_address(database, &pubkey_hex, &bech32_address)?;
@@ -1184,7 +1202,8 @@ pub(crate) fn create_address(
         // Zcash uses ZIP-32 Orchard derivation
         #[cfg(feature = "zcash")]
         {
-            let (multisigner, unified_address) = zcash_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
+            let (multisigner, unified_address) =
+                zcash_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
             // Store the unified address for later retrieval
             let pubkey_hex = hex::encode(multisigner_to_public(&multisigner));
             crate::zcash::store_zcash_address(database, &pubkey_hex, &unified_address)?;

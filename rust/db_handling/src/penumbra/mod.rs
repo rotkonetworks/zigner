@@ -20,11 +20,15 @@ pub use keys::*;
 
 pub use schema::*;
 
-use constants::PENUMBRA_ADDRS;
 use crate::error::Result;
+use constants::PENUMBRA_ADDRS;
 
 /// Store a Penumbra bech32m address for a given spend verification key (ak)
-pub fn store_penumbra_address(database: &sled::Db, ak_hex: &str, bech32m_address: &str) -> Result<()> {
+pub fn store_penumbra_address(
+    database: &sled::Db,
+    ak_hex: &str,
+    bech32m_address: &str,
+) -> Result<()> {
     let tree = database.open_tree(PENUMBRA_ADDRS)?;
     tree.insert(ak_hex.as_bytes(), bech32m_address.as_bytes())?;
     Ok(())

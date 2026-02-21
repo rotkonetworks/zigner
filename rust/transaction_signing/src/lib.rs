@@ -24,10 +24,10 @@ pub use error::{Error, Result};
 pub mod penumbra;
 #[cfg(feature = "penumbra")]
 pub use penumbra::{
-    derive_spend_auth_key as penumbra_derive_spend_auth_key,
-    sign_spend as penumbra_sign_spend, sign_transaction as penumbra_sign_transaction,
-    EffectHash as PenumbraEffectHash, PenumbraAuthorizationData,
-    SpendKeyBytes as PenumbraSpendKeyBytes, PENUMBRA_BIP44_PATH, PENUMBRA_COIN_TYPE,
+    derive_spend_auth_key as penumbra_derive_spend_auth_key, sign_spend as penumbra_sign_spend,
+    sign_transaction as penumbra_sign_transaction, EffectHash as PenumbraEffectHash,
+    PenumbraAuthorizationData, SpendKeyBytes as PenumbraSpendKeyBytes, PENUMBRA_BIP44_PATH,
+    PENUMBRA_COIN_TYPE,
 };
 
 // zcash signing module
@@ -35,19 +35,14 @@ pub use penumbra::{
 pub mod zcash;
 #[cfg(feature = "zcash")]
 pub use zcash::{
-    sign_transparent as zcash_sign_transparent,
-    sign_orchard_action as zcash_sign_orchard,
-    sign_pczt as zcash_sign_pczt,
-    derive_transparent_address as zcash_derive_transparent_address,
     derive_orchard_fvk as zcash_derive_orchard_fvk,
-    TransparentSpendingKey as ZcashTransparentKey,
-    OrchardSpendingKey as ZcashOrchardKey,
-    OrchardFullViewingKey as ZcashOrchardFvk,
-    ZcashAuthorizationData, ZcashFvkExportData,
-    ZcashSignRequest, ZcashSignatureResponse,
-    PcztSignerInput, PcztSignerOutput,
-    ZCASH_COIN_TYPE,
-    QR_TYPE_ZCASH_FVK_EXPORT, QR_TYPE_ZCASH_SIGN_REQUEST, QR_TYPE_ZCASH_SIGNATURES,
+    derive_transparent_address as zcash_derive_transparent_address,
+    sign_orchard_action as zcash_sign_orchard, sign_pczt as zcash_sign_pczt,
+    sign_transparent as zcash_sign_transparent, OrchardFullViewingKey as ZcashOrchardFvk,
+    OrchardSpendingKey as ZcashOrchardKey, PcztSignerInput, PcztSignerOutput,
+    TransparentSpendingKey as ZcashTransparentKey, ZcashAuthorizationData, ZcashFvkExportData,
+    ZcashSignRequest, ZcashSignatureResponse, QR_TYPE_ZCASH_FVK_EXPORT, QR_TYPE_ZCASH_SIGNATURES,
+    QR_TYPE_ZCASH_SIGN_REQUEST, ZCASH_COIN_TYPE,
 };
 
 pub use sign_transaction::{create_signature, SignatureAndChecksum, SignatureType};

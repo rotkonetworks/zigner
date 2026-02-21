@@ -1,8 +1,8 @@
 //! Penumbra key types and derivation
 //! Based on ledger-penumbra implementation
 
-use crate::error::{Error, Result};
 use super::prf;
+use crate::error::{Error, Result};
 use decaf377::{Fq, Fr};
 use decaf377_rdsa::{SigningKey, SpendAuth, VerificationKey};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -175,7 +175,10 @@ impl AddressIndex {
             .hash_length(12)
             .hash(&randomizer);
         randomizer.copy_from_slice(&hash.as_bytes()[0..12]);
-        Self { account, randomizer }
+        Self {
+            account,
+            randomizer,
+        }
     }
 
     pub fn is_ephemeral(&self) -> bool {
@@ -342,7 +345,7 @@ mod tests {
         let fvk_bytes = fvk.to_bytes();
         assert_eq!(fvk_bytes.len(), 64);
 
-        println!("FVK bytes: {}", hex::encode(&fvk_bytes));
+        println!("FVK bytes: {}", hex::encode(fvk_bytes));
     }
 
     #[test]
@@ -356,13 +359,13 @@ mod tests {
         let addr0 = fvk.get_address(0).unwrap();
         let addr0_bytes = addr0.to_bytes();
         assert_eq!(addr0_bytes.len(), 80);
-        println!("Address 0 bytes: {}", hex::encode(&addr0_bytes));
+        println!("Address 0 bytes: {}", hex::encode(addr0_bytes));
 
         // Derive address for account 1
         let addr1 = fvk.get_address(1).unwrap();
         let addr1_bytes = addr1.to_bytes();
         assert_eq!(addr1_bytes.len(), 80);
-        println!("Address 1 bytes: {}", hex::encode(&addr1_bytes));
+        println!("Address 1 bytes: {}", hex::encode(addr1_bytes));
 
         // Addresses should be different
         assert_ne!(addr0_bytes, addr1_bytes);
@@ -396,7 +399,10 @@ mod tests {
         let ephemeral2 = fvk.get_ephemeral_address(0).unwrap();
         assert_ne!(ephemeral.to_bytes(), ephemeral2.to_bytes());
 
-        println!("Ephemeral address bech32m: {}", ephemeral.to_bech32m().unwrap());
+        println!(
+            "Ephemeral address bech32m: {}",
+            ephemeral.to_bech32m().unwrap()
+        );
     }
 
     #[test]

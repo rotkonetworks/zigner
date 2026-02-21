@@ -12,7 +12,11 @@ const ZCASH_COIN_TYPE: u32 = 133;
 ///
 /// returns unified address (u1...) containing orchard receiver
 #[wasm_bindgen]
-pub fn derive_zcash_address(mnemonic: &str, account: u32, mainnet: bool) -> Result<String, JsError> {
+pub fn derive_zcash_address(
+    mnemonic: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<String, JsError> {
     let sk = derive_spending_key(mnemonic, account)?;
     let address = get_address(&sk, mainnet);
     Ok(address)
@@ -55,8 +59,8 @@ fn derive_spending_key(mnemonic: &str, account: u32) -> Result<SpendingKeyBytes,
     let seed = mnemonic.to_seed("");
     let seed_bytes: &[u8] = seed.as_bytes();
 
-    let account_id = AccountId::try_from(account)
-        .map_err(|_| JsError::new("invalid account index"))?;
+    let account_id =
+        AccountId::try_from(account).map_err(|_| JsError::new("invalid account index"))?;
 
     let sk = SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
         .map_err(|e| JsError::new(&format!("key derivation failed: {:?}", e)))?;
@@ -75,7 +79,7 @@ fn get_fvk_bytes(sk: &SpendingKeyBytes) -> [u8; 96] {
 
 fn get_address(sk: &SpendingKeyBytes, mainnet: bool) -> String {
     use orchard::keys::FullViewingKey;
-    use zcash_address::unified::{Address as UnifiedAddress, Receiver, Encoding};
+    use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
     use zcash_address::Network;
 
     let orchard_sk = orchard::keys::SpendingKey::from_bytes(sk.0)

@@ -63,9 +63,12 @@ impl SpendKeyBytes {
 
         // derive child key from bip44 path
         let path = format!("m/44'/{}'/{}'", PENUMBRA_COIN_TYPE, account);
-        let child_key = XPrv::derive_from_path(&seed_bytes, &path.parse().map_err(|e| {
-            Error::PenumbraKeyDerivation(format!("invalid derivation path: {e}"))
-        })?)
+        let child_key = XPrv::derive_from_path(
+            seed_bytes,
+            &path.parse().map_err(|e| {
+                Error::PenumbraKeyDerivation(format!("invalid derivation path: {e}"))
+            })?,
+        )
         .map_err(|e| Error::PenumbraKeyDerivation(format!("key derivation failed: {e}")))?;
 
         // extract 32-byte private key
@@ -255,8 +258,7 @@ pub mod personalization {
     pub const POSITION_WITHDRAW: &str = "/penumbra.core.component.dex.v1.PositionWithdraw";
     pub const DUTCH_AUCTION_SCHEDULE: &str =
         "/penumbra.core.component.auction.v1.ActionDutchAuctionSchedule";
-    pub const DUTCH_AUCTION_END: &str =
-        "/penumbra.core.component.auction.v1.ActionDutchAuctionEnd";
+    pub const DUTCH_AUCTION_END: &str = "/penumbra.core.component.auction.v1.ActionDutchAuctionEnd";
     pub const DUTCH_AUCTION_WITHDRAW: &str =
         "/penumbra.core.component.auction.v1.ActionDutchAuctionWithdraw";
 }
@@ -327,14 +329,22 @@ impl EffectHash {
 
         // hash memo (or zeros if not present)
         match memo_hash {
-            Some(h) => { state.update(h); }
-            None => { state.update(&[0u8; 64]); }
+            Some(h) => {
+                state.update(h);
+            }
+            None => {
+                state.update(&[0u8; 64]);
+            }
         }
 
         // hash detection data (or zeros if not present)
         match detection_data_hash {
-            Some(h) => { state.update(h); }
-            None => { state.update(&[0u8; 64]); }
+            Some(h) => {
+                state.update(h);
+            }
+            None => {
+                state.update(&[0u8; 64]);
+            }
         }
 
         // hash action count
@@ -614,7 +624,9 @@ impl FvkExportData {
     pub fn decode_qr(data: &[u8]) -> Result<Self> {
         // minimum size: 3 (prelude) + 4 (account) + 1 (label len) + 64 (fvk) + 32 (wallet_id) = 104
         if data.len() < 104 {
-            return Err(Error::PenumbraKeyDerivation("QR data too short".to_string()));
+            return Err(Error::PenumbraKeyDerivation(
+                "QR data too short".to_string(),
+            ));
         }
 
         // validate prelude
@@ -636,7 +648,9 @@ impl FvkExportData {
 
         let label = if label_len > 0 {
             if offset + label_len > data.len() {
-                return Err(Error::PenumbraKeyDerivation("label extends beyond data".to_string()));
+                return Err(Error::PenumbraKeyDerivation(
+                    "label extends beyond data".to_string(),
+                ));
             }
             let label_bytes = &data[offset..offset + label_len];
             offset += label_len;
@@ -647,14 +661,18 @@ impl FvkExportData {
 
         // fvk bytes
         if offset + 64 > data.len() {
-            return Err(Error::PenumbraKeyDerivation("FVK data too short".to_string()));
+            return Err(Error::PenumbraKeyDerivation(
+                "FVK data too short".to_string(),
+            ));
         }
         let fvk_bytes: [u8; 64] = data[offset..offset + 64].try_into().unwrap();
         offset += 64;
 
         // wallet id
         if offset + 32 > data.len() {
-            return Err(Error::PenumbraKeyDerivation("wallet_id data too short".to_string()));
+            return Err(Error::PenumbraKeyDerivation(
+                "wallet_id data too short".to_string(),
+            ));
         }
         let wallet_id: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
 
@@ -755,12 +773,8 @@ mod tests {
         assert_eq!(hash.as_bytes().len(), 64);
 
         // without memo should be different
-        let hash2 = EffectHash::compute_transaction_effect_hash(
-            &params_hash,
-            None,
-            None,
-            &action_hashes,
-        );
+        let hash2 =
+            EffectHash::compute_transaction_effect_hash(&params_hash, None, None, &action_hashes);
         assert_ne!(hash.as_bytes(), hash2.as_bytes());
     }
 
@@ -877,11 +891,9 @@ mod tests {
     #[test]
     fn test_fvk_export_data_encode_decode() {
         let spend_key_bytes = SpendKeyBytes::from_bytes([42u8; 32]);
-        let export_data = FvkExportData::from_spend_key(
-            &spend_key_bytes,
-            0,
-            Some("My Wallet".to_string()),
-        ).unwrap();
+        let export_data =
+            FvkExportData::from_spend_key(&spend_key_bytes, 0, Some("My Wallet".to_string()))
+                .unwrap();
 
         // encode to QR bytes
         let encoded = export_data.encode_qr();
@@ -902,11 +914,7 @@ mod tests {
     #[test]
     fn test_fvk_export_data_no_label() {
         let spend_key_bytes = SpendKeyBytes::from_bytes([42u8; 32]);
-        let export_data = FvkExportData::from_spend_key(
-            &spend_key_bytes,
-            5,
-            None,
-        ).unwrap();
+        let export_data = FvkExportData::from_spend_key(&spend_key_bytes, 5, None).unwrap();
 
         let encoded = export_data.encode_qr();
         let decoded = FvkExportData::decode_qr(&encoded).unwrap();
@@ -918,11 +926,8 @@ mod tests {
     #[test]
     fn test_fvk_export_data_hex_roundtrip() {
         let spend_key_bytes = SpendKeyBytes::from_bytes([42u8; 32]);
-        let export_data = FvkExportData::from_spend_key(
-            &spend_key_bytes,
-            0,
-            Some("Test".to_string()),
-        ).unwrap();
+        let export_data =
+            FvkExportData::from_spend_key(&spend_key_bytes, 0, Some("Test".to_string())).unwrap();
 
         let hex = export_data.encode_qr_hex();
         let decoded = FvkExportData::decode_qr_hex(&hex).unwrap();

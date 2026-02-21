@@ -4,11 +4,11 @@
 //! from the sled database. Schemas define how to parse and display transaction
 //! actions, while registries provide asset metadata for display.
 
+use crate::error::Error;
+use anyhow::anyhow;
 use definitions::penumbra_schema::{
     default_penumbra_schema, PenumbraActionSchema, RegistryDigest, SchemaDigest,
 };
-use crate::error::Error;
-use anyhow::anyhow;
 
 /// Database tree name for Penumbra schemas
 const PENUMBRA_SCHEMA_TREE: &str = "penumbra_schema";
@@ -71,7 +71,11 @@ pub fn get_schema_version(db: &sled::Db) -> Result<Option<(u32, String, String)>
         Some(bytes) => {
             let schema: PenumbraActionSchema = serde_json::from_slice(&bytes)
                 .map_err(|e| Error::Other(anyhow!("Failed to deserialize schema: {}", e)))?;
-            Ok(Some((schema.version, schema.chain_id, schema.protocol_version)))
+            Ok(Some((
+                schema.version,
+                schema.chain_id,
+                schema.protocol_version,
+            )))
         }
         None => Ok(None),
     }
@@ -145,8 +149,9 @@ pub fn get_registry_digest(db: &sled::Db) -> Result<Option<RegistryDigest>, Erro
 
     match tree.get(CURRENT_REGISTRY_KEY)? {
         Some(bytes) => {
-            let digest: RegistryDigest = serde_json::from_slice(&bytes)
-                .map_err(|e| Error::Other(anyhow!("Failed to deserialize registry digest: {}", e)))?;
+            let digest: RegistryDigest = serde_json::from_slice(&bytes).map_err(|e| {
+                Error::Other(anyhow!("Failed to deserialize registry digest: {}", e))
+            })?;
             Ok(Some(digest))
         }
         None => Ok(None),
@@ -182,8 +187,9 @@ pub fn get_registry_for_chain(
 
     match tree.get(key.as_bytes())? {
         Some(bytes) => {
-            let digest: RegistryDigest = serde_json::from_slice(&bytes)
-                .map_err(|e| Error::Other(anyhow!("Failed to deserialize registry digest: {}", e)))?;
+            let digest: RegistryDigest = serde_json::from_slice(&bytes).map_err(|e| {
+                Error::Other(anyhow!("Failed to deserialize registry digest: {}", e))
+            })?;
             Ok(Some(digest))
         }
         None => Ok(None),
@@ -228,7 +234,7 @@ pub fn get_penumbra_metadata_info(db: &sled::Db) -> Result<PenumbraMetadataInfo,
     let schema_digest = get_schema_digest(db)?;
 
     Ok(PenumbraMetadataInfo {
-        schema_version: schema_version.map(|(v, c, p)| (v, c, p)),
+        schema_version,
         schema_digest_root: schema_digest.map(|d| d.root_hex()),
         registry_chain_id: registry_digest.as_ref().map(|d| d.chain_id.clone()),
         registry_asset_count: registry_digest.as_ref().map(|d| d.asset_count),

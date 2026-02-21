@@ -106,7 +106,8 @@ fn parse_fields(
 
     // Build a map of proto path -> field definition
     // For now, we'll do simple first-level matching
-    let mut field_values: std::collections::HashMap<u32, Vec<u8>> = std::collections::HashMap::new();
+    let mut field_values: std::collections::HashMap<u32, Vec<u8>> =
+        std::collections::HashMap::new();
 
     while offset < msg_bytes.len() {
         let (tag, new_offset) = read_varint(msg_bytes, offset)?;
@@ -203,12 +204,10 @@ fn path_to_field_number(path: &str) -> Option<u32> {
 /// Parse a value according to its type
 fn parse_value(bytes: &[u8], field_type: &FieldType, asset_names: &[String]) -> ParsedValue {
     match field_type {
-        FieldType::String => {
-            match String::from_utf8(bytes.to_vec()) {
-                Ok(s) => ParsedValue::String(s),
-                Err(_) => ParsedValue::Bytes(bytes.to_vec()),
-            }
-        }
+        FieldType::String => match String::from_utf8(bytes.to_vec()) {
+            Ok(s) => ParsedValue::String(s),
+            Err(_) => ParsedValue::Bytes(bytes.to_vec()),
+        },
         FieldType::Bool => {
             let val = bytes.first().copied().unwrap_or(0) != 0;
             ParsedValue::Bool(val)
@@ -226,13 +225,12 @@ fn parse_value(bytes: &[u8], field_type: &FieldType, asset_names: &[String]) -> 
         FieldType::U64 => {
             if bytes.len() >= 8 {
                 let val = u64::from_le_bytes([
-                    bytes[0], bytes[1], bytes[2], bytes[3],
-                    bytes[4], bytes[5], bytes[6], bytes[7],
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
                 ]);
                 ParsedValue::U64(val)
             } else {
                 let (val, _) = read_varint(bytes, 0).unwrap_or((0, 0));
-                ParsedValue::U64(val as u64)
+                ParsedValue::U64(val)
             }
         }
         FieldType::Amount { decimals } => {
@@ -265,9 +263,7 @@ fn parse_value(bytes: &[u8], field_type: &FieldType, asset_names: &[String]) -> 
             let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
             ParsedValue::String(format!("penumbravalid1{}", &hex[..24.min(hex.len())]))
         }
-        FieldType::Bytes => {
-            ParsedValue::Bytes(bytes.to_vec())
-        }
+        FieldType::Bytes => ParsedValue::Bytes(bytes.to_vec()),
         FieldType::Message { .. } => {
             // Nested message - would need recursive parsing
             ParsedValue::Bytes(bytes.to_vec())
@@ -312,8 +308,8 @@ fn parse_amount_message(bytes: &[u8]) -> (u64, u64) {
         offset = new_offset;
 
         match field_num {
-            1 => lo = val as u64,
-            2 => hi = val as u64,
+            1 => lo = val,
+            2 => hi = val,
             _ => {}
         }
     }
@@ -342,7 +338,9 @@ fn read_varint(bytes: &[u8], offset: usize) -> Result<(u64, usize)> {
 
     loop {
         if pos >= bytes.len() {
-            return Err(Error::PenumbraParseError("varint extends past end".to_string()));
+            return Err(Error::PenumbraParseError(
+                "varint extends past end".to_string(),
+            ));
         }
 
         let byte = bytes[pos];

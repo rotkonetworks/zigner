@@ -133,11 +133,11 @@ impl Encryption {
         match self {
             Encryption::Ethereum => IdenticonStyle::Blockies,
             Encryption::Penumbra => IdenticonStyle::Dots, // using dots for now
-            Encryption::Zcash => IdenticonStyle::Dots, // using dots for now
+            Encryption::Zcash => IdenticonStyle::Dots,    // using dots for now
             Encryption::LedgerEd25519 => IdenticonStyle::Dots,
             Encryption::Cosmos => IdenticonStyle::Dots, // could use blockies since same curve as ETH
             Encryption::Bitcoin => IdenticonStyle::Dots, // Bitcoin addresses
-            Encryption::Nostr => IdenticonStyle::Dots, // Nostr npub
+            Encryption::Nostr => IdenticonStyle::Dots,  // Nostr npub
             Encryption::AtProtocol => IdenticonStyle::Dots, // AT Protocol did:plc
             _ => IdenticonStyle::Dots,
         }

@@ -16,10 +16,9 @@ pub fn store_zcash_address(database: &sled::Db, pubkey_hex: &str, address: &str)
 pub fn get_zcash_address(database: &sled::Db, pubkey_hex: &str) -> Result<Option<String>> {
     let addresses = database.open_tree(ZCASH_ADDRESS_TREE)?;
     match addresses.get(pubkey_hex.as_bytes())? {
-        Some(bytes) => Ok(Some(
-            String::from_utf8(bytes.to_vec())
-                .map_err(|e| Error::Other(anyhow::anyhow!("Invalid UTF-8 in stored address: {}", e)))?
-        )),
+        Some(bytes) => Ok(Some(String::from_utf8(bytes.to_vec()).map_err(|e| {
+            Error::Other(anyhow::anyhow!("Invalid UTF-8 in stored address: {}", e))
+        })?)),
         None => Ok(None),
     }
 }
@@ -27,13 +26,17 @@ pub fn get_zcash_address(database: &sled::Db, pubkey_hex: &str) -> Result<Option
 /// Derive Zcash keys from seed phrase
 /// Path format: m/32'/133'/account' (ZIP-32 for Orchard)
 /// Returns (32-byte public key for MultiSigner, unified address string)
-pub fn derive_zcash_keys(seed_phrase: &str, path: &str, mainnet: bool) -> Result<([u8; 32], String)> {
+pub fn derive_zcash_keys(
+    seed_phrase: &str,
+    path: &str,
+    mainnet: bool,
+) -> Result<([u8; 32], String)> {
     // Parse account from path (format: m/32'/133'/account' or just account number)
     let account = parse_account_from_path(path)?;
 
     // Use the orchard crate for ZIP-32 key derivation
-    use orchard::keys::SpendingKey;
     use bip32::Mnemonic;
+    use orchard::keys::SpendingKey;
     use zip32::AccountId;
 
     // Parse mnemonic
@@ -60,11 +63,15 @@ pub fn derive_zcash_keys(seed_phrase: &str, path: &str, mainnet: bool) -> Result
     let address = fvk.address_at(0u32, orchard::keys::Scope::External);
 
     // Build unified address with Orchard receiver
-    use zcash_address::unified::{Address as UnifiedAddress, Receiver, Encoding};
+    use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
     use zcash_address::Network;
 
     let orchard_receiver = Receiver::Orchard(address.to_raw_address_bytes());
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
 
     let unified_address = UnifiedAddress::try_from_items(vec![orchard_receiver])
         .map_err(|e| Error::Other(anyhow::anyhow!("Failed to create unified address: {e}")))?
@@ -101,7 +108,8 @@ fn parse_account_from_path(path: &str) -> Result<u32> {
     for (i, part) in parts.iter().enumerate() {
         if *part == "133'" && i + 1 < parts.len() {
             let account_str = parts[i + 1].trim_end_matches('\'');
-            return account_str.parse::<u32>()
+            return account_str
+                .parse::<u32>()
                 .map_err(|_| Error::Other(anyhow::anyhow!("Invalid account in path: {}", path)));
         }
     }
@@ -132,9 +140,9 @@ mod tests {
         let (pubkey, address) = derive_zcash_keys(test_mnemonic, "m/32'/133'/0'", true).unwrap();
 
         assert_eq!(pubkey.len(), 32);
-        assert!(address.starts_with("u1"));  // Unified address prefix
+        assert!(address.starts_with("u1")); // Unified address prefix
 
-        println!("Zcash pubkey: {}", hex::encode(&pubkey));
+        println!("Zcash pubkey: {}", hex::encode(pubkey));
         println!("Zcash address: {}", address);
     }
 

@@ -997,54 +997,142 @@ pub struct ZcashSignatureResponse {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Card {
-    AuthorCard { f: MAddressCard },
-    AuthorPlainCard { f: MSCId },
-    AuthorPublicKeyCard { f: MVerifierDetails },
-    BalanceCard { f: MSCCurrency },
-    BitVecCard { f: String },
-    BlockHashCard { f: String },
-    CallCard { f: MSCCall },
-    DefaultCard { f: String },
-    DerivationsCard { f: Vec<SeedKeysPreview> },
-    EnumVariantNameCard { f: MSCEnumVariantName },
+    AuthorCard {
+        f: MAddressCard,
+    },
+    AuthorPlainCard {
+        f: MSCId,
+    },
+    AuthorPublicKeyCard {
+        f: MVerifierDetails,
+    },
+    BalanceCard {
+        f: MSCCurrency,
+    },
+    BitVecCard {
+        f: String,
+    },
+    BlockHashCard {
+        f: String,
+    },
+    CallCard {
+        f: MSCCall,
+    },
+    DefaultCard {
+        f: String,
+    },
+    DerivationsCard {
+        f: Vec<SeedKeysPreview>,
+    },
+    EnumVariantNameCard {
+        f: MSCEnumVariantName,
+    },
     EraImmortalCard,
-    EraMortalCard { f: MSCEraMortal },
-    ErrorCard { f: String },
-    FieldNameCard { f: MSCFieldName },
-    FieldNumberCard { f: MSCFieldNumber },
-    IdCard { f: MSCId },
-    IdentityFieldCard { f: String },
-    MetaCard { f: MMetadataRecord },
-    NameVersionCard { f: MSCNameVersion },
-    NetworkGenesisHashCard { f: String },
-    NetworkNameCard { f: String },
-    NetworkInfoCard { f: MSCNetworkInfo },
-    NewSpecsCard { f: NetworkSpecs },
-    NonceCard { f: String },
+    EraMortalCard {
+        f: MSCEraMortal,
+    },
+    ErrorCard {
+        f: String,
+    },
+    FieldNameCard {
+        f: MSCFieldName,
+    },
+    FieldNumberCard {
+        f: MSCFieldNumber,
+    },
+    IdCard {
+        f: MSCId,
+    },
+    IdentityFieldCard {
+        f: String,
+    },
+    MetaCard {
+        f: MMetadataRecord,
+    },
+    NameVersionCard {
+        f: MSCNameVersion,
+    },
+    NetworkGenesisHashCard {
+        f: String,
+    },
+    NetworkNameCard {
+        f: String,
+    },
+    NetworkInfoCard {
+        f: MSCNetworkInfo,
+    },
+    NewSpecsCard {
+        f: NetworkSpecs,
+    },
+    NonceCard {
+        f: String,
+    },
     NoneCard,
-    PalletCard { f: String },
-    TextCard { f: String },
-    TipCard { f: MSCCurrency },
-    TipPlainCard { f: String },
-    TxSpecCard { f: String },
-    TxSpecPlainCard { f: MSCTxSpecPlain },
-    TypesInfoCard { f: MTypesInfo },
-    VarNameCard { f: String },
-    VerifierCard { f: MVerifierDetails },
-    WarningCard { f: String },
+    PalletCard {
+        f: String,
+    },
+    TextCard {
+        f: String,
+    },
+    TipCard {
+        f: MSCCurrency,
+    },
+    TipPlainCard {
+        f: String,
+    },
+    TxSpecCard {
+        f: String,
+    },
+    TxSpecPlainCard {
+        f: MSCTxSpecPlain,
+    },
+    TypesInfoCard {
+        f: MTypesInfo,
+    },
+    VarNameCard {
+        f: String,
+    },
+    VerifierCard {
+        f: MVerifierDetails,
+    },
+    WarningCard {
+        f: String,
+    },
     // penumbra cards
-    PenumbraSummaryCard { f: PenumbraTransactionSummary },
-    PenumbraSpendCard { f: PenumbraSpendAction },
-    PenumbraOutputCard { f: PenumbraOutputAction },
-    PenumbraSwapCard { f: PenumbraSwapAction },
-    PenumbraDelegateCard { f: PenumbraDelegateAction },
-    PenumbraVoteCard { f: PenumbraVoteAction },
+    PenumbraSummaryCard {
+        f: PenumbraTransactionSummary,
+    },
+    PenumbraSpendCard {
+        f: PenumbraSpendAction,
+    },
+    PenumbraOutputCard {
+        f: PenumbraOutputAction,
+    },
+    PenumbraSwapCard {
+        f: PenumbraSwapAction,
+    },
+    PenumbraDelegateCard {
+        f: PenumbraDelegateAction,
+    },
+    PenumbraVoteCard {
+        f: PenumbraVoteAction,
+    },
     /// Generic action card - displays any action parsed via schema
-    PenumbraGenericActionCard { f: PenumbraGenericAction },
+    PenumbraGenericActionCard {
+        f: PenumbraGenericAction,
+    },
     /// Schema update info card
-    PenumbraSchemaCard { f: PenumbraSchemaInfo },
+    PenumbraSchemaCard {
+        f: PenumbraSchemaInfo,
+    },
     // zcash cards
-    ZcashSummaryCard { f: ZcashTransactionSummary },
-    ZcashOrchardSpendCard { f: ZcashOrchardSpend },
-    ZcashOrchardOutputCard { f: ZcashOrchardOutput },
+    ZcashSummaryCard {
+        f: ZcashTransactionSummary,
+    },
+    ZcashOrchardSpendCard {
+        f: ZcashOrchardSpend,
+    },
+    ZcashOrchardOutputCard {
+        f: ZcashOrchardOutput,
+    },
 }

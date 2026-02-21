@@ -17,7 +17,11 @@ use crate::error::{Error, Result};
 const COSMOS_ADDRS: &str = "cosmos_addresses";
 
 /// Store a Cosmos bech32 address for a given public key hex
-pub fn store_cosmos_address(database: &sled::Db, pubkey_hex: &str, bech32_address: &str) -> Result<()> {
+pub fn store_cosmos_address(
+    database: &sled::Db,
+    pubkey_hex: &str,
+    bech32_address: &str,
+) -> Result<()> {
     let tree = database.open_tree(COSMOS_ADDRS)?;
     tree.insert(pubkey_hex.as_bytes(), bech32_address.as_bytes())?;
     Ok(())
@@ -41,14 +45,14 @@ use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// SLIP-0044 coin types for popular Cosmos chains
-pub const SLIP0044_COSMOS: u32 = 118;     // Cosmos Hub (ATOM)
-pub const SLIP0044_OSMOSIS: u32 = 118;    // Osmosis uses Cosmos coin type
-pub const SLIP0044_NOBLE: u32 = 118;      // Noble uses Cosmos coin type
-pub const SLIP0044_CELESTIA: u32 = 118;   // Celestia uses Cosmos coin type
-pub const SLIP0044_TERRA: u32 = 330;      // Terra
-pub const SLIP0044_KAVA: u32 = 459;       // Kava
-pub const SLIP0044_SECRET: u32 = 529;     // Secret Network
-pub const SLIP0044_INJECTIVE: u32 = 60;   // Injective uses Ethereum coin type
+pub const SLIP0044_COSMOS: u32 = 118; // Cosmos Hub (ATOM)
+pub const SLIP0044_OSMOSIS: u32 = 118; // Osmosis uses Cosmos coin type
+pub const SLIP0044_NOBLE: u32 = 118; // Noble uses Cosmos coin type
+pub const SLIP0044_CELESTIA: u32 = 118; // Celestia uses Cosmos coin type
+pub const SLIP0044_TERRA: u32 = 330; // Terra
+pub const SLIP0044_KAVA: u32 = 459; // Kava
+pub const SLIP0044_SECRET: u32 = 529; // Secret Network
+pub const SLIP0044_INJECTIVE: u32 = 60; // Injective uses Ethereum coin type
 
 /// Common bech32 address prefixes for Cosmos chains
 pub const PREFIX_COSMOS: &str = "cosmos";
@@ -124,7 +128,8 @@ pub fn derive_cosmos_key(
 
     // Build derivation path: m/44'/coin_type'/account'/0/address_index
     let path_str = format!("m/44'/{}'/{}'/0/{}", coin_type, account, address_index);
-    let path: DerivationPath = path_str.parse()
+    let path: DerivationPath = path_str
+        .parse()
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid derivation path: {}", e)))?;
 
     // Derive extended private key
@@ -143,8 +148,8 @@ pub fn derive_cosmos_key(
     public_key.copy_from_slice(&public_key_bytes);
 
     // Derive address: RIPEMD160(SHA256(pubkey))
-    let sha256_hash = Sha256::digest(&public_key);
-    let ripemd160_hash = Ripemd160::digest(&sha256_hash);
+    let sha256_hash = Sha256::digest(public_key);
+    let ripemd160_hash = Ripemd160::digest(sha256_hash);
 
     let mut address_bytes = [0u8; 20];
     address_bytes.copy_from_slice(&ripemd160_hash);
@@ -197,11 +202,14 @@ pub fn parse_cosmos_path(path: &str) -> Result<(u32, u32, u32)> {
             let account_str = parts[2].trim_end_matches('\'');
             let index_str = parts[4].trim_end_matches('\'');
 
-            let coin_type = coin_type_str.parse::<u32>()
+            let coin_type = coin_type_str
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let account = account_str.parse::<u32>()
+            let account = account_str
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let index = index_str.parse::<u32>()
+            let index = index_str
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
 
             return Ok((coin_type, account, index));
@@ -212,7 +220,8 @@ pub fn parse_cosmos_path(path: &str) -> Result<(u32, u32, u32)> {
     let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
 
     // Extract numeric values from path
-    let account = parts.iter()
+    let account = parts
+        .iter()
         .filter_map(|p| p.parse::<u32>().ok())
         .next()
         .unwrap_or(0);
@@ -247,9 +256,18 @@ mod tests {
 
         println!("Public key: {}", hex::encode(&key.public_key));
         println!("Address bytes: {}", hex::encode(&key.address_bytes));
-        println!("Cosmos address: {}", key.bech32_address(PREFIX_COSMOS).unwrap());
-        println!("Osmosis address: {}", key.bech32_address(PREFIX_OSMOSIS).unwrap());
-        println!("Celestia address: {}", key.bech32_address(PREFIX_CELESTIA).unwrap());
+        println!(
+            "Cosmos address: {}",
+            key.bech32_address(PREFIX_COSMOS).unwrap()
+        );
+        println!(
+            "Osmosis address: {}",
+            key.bech32_address(PREFIX_OSMOSIS).unwrap()
+        );
+        println!(
+            "Celestia address: {}",
+            key.bech32_address(PREFIX_CELESTIA).unwrap()
+        );
 
         // The public key should be deterministic
         assert_eq!(key.public_key.len(), 33);

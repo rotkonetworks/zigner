@@ -223,7 +223,10 @@ pub fn print_multisigner_as_base58_or_eth_address(
             MultiSigner::Ed25519(pubkey) => {
                 format!("penumbra_ak:{}", hex::encode(pubkey.0))
             }
-            _ => format!("penumbra_key:{}", hex::encode(multisigner_to_public(multi_signer))),
+            _ => format!(
+                "penumbra_key:{}",
+                hex::encode(multisigner_to_public(multi_signer))
+            ),
         };
     }
 
