@@ -386,7 +386,7 @@ pub struct NullifierKey(pub Fq);
 #[cfg(feature = "penumbra")]
 impl NullifierKey {
     /// derive nullifier key from spend key bytes
-    /// nk = expand_ff("Penumbra_ExpndSd", spend_key_bytes, [1])
+    /// `nk = expand_ff("Penumbra_ExpndSd", spend_key_bytes, [1])`
     pub fn derive_from(spend_key_bytes: &SpendKeyBytes) -> Result<Self> {
         let nk = expand_fq(SPEND_AUTH_EXPAND_LABEL, &spend_key_bytes.0, &[1u8])?;
         Ok(Self(nk))

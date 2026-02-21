@@ -113,17 +113,17 @@ fn parse_asset_metadata(data: &[u8]) -> Result<(Vec<String>, usize)> {
 /// parse a penumbra transaction from QR payload
 ///
 /// payload format v2 (extended with chain_id for security):
-/// [0x53][0x03][0x10]             - prelude (3 bytes)
-/// [chain_id_len:1]               - length of chain_id (0 = not provided)
-/// [chain_id: chain_id_len bytes] - chain_id string (e.g., "penumbra-1")
-/// [metadata]                     - asset names
-/// [plan_bytes_len:4 LE]          - length of plan bytes
-/// [plan_bytes]                   - raw protobuf plan
-/// [effect_hash:64]               - computed effect hash
-/// [spend_count:2 LE]             - number of spend randomizers
-/// [spend_randomizers:32 each]    - randomizer for each spend
-/// [vote_count:2 LE]              - number of vote randomizers
-/// [vote_randomizers:32 each]     - randomizer for each vote
+/// `[0x53][0x03][0x10]`             - prelude (3 bytes)
+/// `[chain_id_len:1]`               - length of chain_id (0 = not provided)
+/// `[chain_id: chain_id_len bytes]` - chain_id string (e.g., "penumbra-1")
+/// `[metadata]`                     - asset names
+/// `[plan_bytes_len:4 LE]`          - length of plan bytes
+/// `[plan_bytes]`                   - raw protobuf plan
+/// `[effect_hash:64]`               - computed effect hash
+/// `[spend_count:2 LE]`             - number of spend randomizers
+/// `[spend_randomizers:32 each]`    - randomizer for each spend
+/// `[vote_count:2 LE]`              - number of vote randomizers
+/// `[vote_randomizers:32 each]`     - randomizer for each vote
 ///
 /// SECURITY: chain_id is required for safe signing. If not provided,
 /// a warning will be displayed to the user.

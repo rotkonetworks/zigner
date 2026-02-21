@@ -43,7 +43,7 @@ pub fn multisigner_to_public(m: &MultiSigner) -> Vec<u8> {
     }
 }
 
-/// Get [`Encryption`](crate::crypto::Encryption) from
+/// Get [`Encryption`] from
 /// [`MultiSigner`](https://docs.rs/sp-runtime/6.0.0/sp_runtime/enum.MultiSigner.html)  
 pub fn multisigner_to_encryption(m: &MultiSigner) -> Encryption {
     match m {

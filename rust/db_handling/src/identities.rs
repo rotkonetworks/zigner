@@ -10,15 +10,15 @@
 //!   never stored in Rust database)
 //! - derivation path (`/soft//hard///password`); password part, i.e. whatever
 //!   follows `///` is not stored in Rust database and must be zeroized after use
-//! - [`NetworkSpecsKey`](definitions::keyring::NetworkSpecsKey)
+//! - [`NetworkSpecsKey`]
 //!
 //! The combination of seed phrase and derivation path allows to generate key
 //! pair using the encryption algorithm supported by the network, for which the
 //! address is generated.
 //!
 //! Vault stores only the public key, it is used together with encryption
-//! algorithm [`Encryption`](definitions::crypto::Encryption) to generate
-//! [`AddressKey`](definitions::keyring::AddressKey).
+//! algorithm [`Encryption`] to generate
+//! [`AddressKey`].
 //!
 //! Same `AddressKey` could correspond to more than one network if the addresses
 //! were produced for same seed phrase and derivation path, and networks use
@@ -28,8 +28,8 @@
 //! Vault interface shows those addresses as separate entities.
 //!
 //! Non-secret data associated with `AddressKey` is stored in
-//! [`ADDRTREE`](constants::ADDRTREE) tree of the cold database as SCALE-encoded
-//! [`AddressDetails`](definitions::users::AddressDetails).
+//! [`ADDRTREE`] tree of the cold database as SCALE-encoded
+//! [`AddressDetails`].
 use bip39::{Language, Mnemonic, MnemonicType};
 use lazy_static::lazy_static;
 use parity_scale_codec::Decode;

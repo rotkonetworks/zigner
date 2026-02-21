@@ -600,6 +600,7 @@ impl ZcashSignRequest {
     /// Parse from QR bytes
     ///
     /// Format v2 (with network flag):
+    /// ```text
     /// [0x53][0x04][0x02]           - prelude
     /// [flags: 1 byte]              - bit 0: mainnet
     /// [account_index: 4 bytes LE]
@@ -608,6 +609,7 @@ impl ZcashSignRequest {
     /// [alphas: 32 bytes each]
     /// [summary_len: 2 bytes LE]
     /// [summary: summary_len bytes]
+    /// ```
     pub fn from_qr_bytes(data: &[u8]) -> Result<Self> {
         // Validate prelude: [0x53][0x04][0x02]
         if data.len() < 42 {

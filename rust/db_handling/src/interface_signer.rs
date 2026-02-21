@@ -68,7 +68,7 @@ fn get_display_address(
 ///
 /// If the same seed has more than one seed key in the database, i.e. it has
 /// been used to create seed keys with more than one
-/// [`Encryption`](definitions::crypto::Encryption) algorithm, only one
+/// [`Encryption`] algorithm, only one
 /// identicon is selected, in order of preference: `Sr25519`, `Ed25519`,
 /// `Ecdsa`.
 pub fn get_all_seed_names_with_identicons(
@@ -139,7 +139,7 @@ pub fn get_all_seed_names_with_identicons(
 ///
 /// Function is used to show users all possible addresses, when selecting the
 /// address to generate
-/// [`SufficientCrypto`](definitions::crypto::SufficientCrypto) for signing
+/// `SufficientCrypto` for signing
 /// updates with the Vault.
 pub fn print_all_identities(database: &sled::Db) -> Result<Vec<MRawKey>> {
     Ok(get_all_addresses(database)?
@@ -319,7 +319,7 @@ pub fn first_network(database: &sled::Db) -> Result<Option<OrderedNetworkSpecs>>
 /// `substrate:{address as base58}:0x{network genesis hash}`
 /// `ethereum:{address as hex}:0x{network genesis hash}`
 /// transformed into bytes, to be compatible with `polkadot-js` interface.
-/// Note that no [`Encryption`](definitions::crypto::Encryption) algorithm
+/// Note that no [`Encryption`] algorithm
 /// information is contained in the QR code. If there are multiple `Encryption`
 /// algorithms supported by the network, the only visible difference in exports
 /// would be the identicon.
