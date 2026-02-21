@@ -24,7 +24,7 @@ pub const SLIP0044_KUSAMA: u32 = 434;
 const HARDENED: u32 = 0x80000000;
 
 /// Generate Ledger master key from seed using Cardano-style derivation
-/// Returns (extended_secret[64], chain_code[32]) = 96 bytes total
+/// Returns `(extended_secret[64], chain_code[32])` = 96 bytes total
 /// This matches the polkadot-js ledgerMaster implementation
 fn ledger_master(seed: &[u8]) -> ([u8; 64], [u8; 32]) {
     // Chain code: HMAC-SHA256 with key "ed25519 seed", data = [1, ...seed]

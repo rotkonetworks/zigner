@@ -3,7 +3,7 @@
 //! Parses schema update QR codes and validates them.
 //!
 //! QR Types:
-//! - 0x12: Full schema [0x53][0x03][0x12][version:4LE][checksum:32][schema_json]
+//! - `0x12`: Full schema `[0x53][0x03][0x12][version:4LE][checksum:32][schema_json]`
 //! - 0x13: Merkle schema digest (compact)
 //! - 0x14: Asset registry digest (compact)
 
