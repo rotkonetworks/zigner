@@ -753,8 +753,9 @@ namespace signer {
     PenumbraFvkExport export_penumbra_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
 
     // Cosmos accounts export - generate addresses QR for Zafu import
+    // network_name filters to a single chain (e.g. "noble"), empty string exports all
     [Throws=ErrorDisplayed]
-    CosmosAccountExport export_cosmos_accounts([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
+    CosmosAccountExport export_cosmos_accounts([ByRef] string seed_phrase, u32 account_index, [ByRef] string label, [ByRef] string network_name);
 
     // ========================================================================
     // Cosmos cold signing functions

@@ -1042,15 +1042,16 @@ fn export_penumbra_fvk(
 // Cosmos account export
 // ============================================================================
 
-/// Export Cosmos chain addresses (Osmosis, Noble, Celestia) from a seed phrase.
+/// Export Cosmos chain addresses from a seed phrase.
 ///
 /// Derives a secp256k1 key using BIP44 path m/44'/118'/account'/0/0
-/// and generates bech32 addresses for each supported Cosmos chain.
+/// and generates bech32 addresses for the specified chain (or all if network_name is empty).
 /// The QR data encodes a simple JSON payload for Zafu to import.
 fn export_cosmos_accounts(
     seed_phrase: &str,
     account_index: u32,
     label: &str,
+    network_name: &str,
 ) -> Result<CosmosAccountExport, ErrorDisplayed> {
     use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS, PREFIX_OSMOSIS, PREFIX_NOBLE, PREFIX_CELESTIA};
 
@@ -1061,12 +1062,19 @@ fn export_cosmos_accounts(
 
     let pubkey_hex = hex::encode(&key.public_key);
 
-    // Generate addresses for supported chains
-    let chains: Vec<(&str, &str)> = vec![
+    // Generate addresses for supported chains (filter by network_name if specified)
+    let all_chains: Vec<(&str, &str)> = vec![
         ("osmosis", PREFIX_OSMOSIS),
         ("noble", PREFIX_NOBLE),
         ("celestia", PREFIX_CELESTIA),
     ];
+
+    let chains: Vec<(&str, &str)> = if network_name.is_empty() {
+        all_chains
+    } else {
+        let name = network_name.to_lowercase();
+        all_chains.into_iter().filter(|(id, _)| *id == name).collect()
+    };
 
     let mut addresses = Vec::new();
     for (chain_id, prefix) in &chains {
