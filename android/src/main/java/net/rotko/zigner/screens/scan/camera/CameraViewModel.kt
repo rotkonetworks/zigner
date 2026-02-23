@@ -41,6 +41,11 @@ class CameraViewModel() : ViewModel() {
 	val penumbraSignRequestPayload: StateFlow<String?> =
 		_penumbraSignRequestPayload.asStateFlow()
 
+	// Cosmos sign request payload (detected by 530510 prefix)
+	private val _cosmosSignRequestPayload = MutableStateFlow<String?>(null)
+	val cosmosSignRequestPayload: StateFlow<String?> =
+		_cosmosSignRequestPayload.asStateFlow()
+
 	// UR backup frames (multipart UR QR codes starting with "ur:")
 	private val _urBackupFrames = MutableStateFlow<List<String>>(emptyList())
 	val urBackupFrames: StateFlow<List<String>> = _urBackupFrames.asStateFlow()
@@ -159,6 +164,12 @@ class CameraViewModel() : ViewModel() {
 				return
 			}
 
+			if (isCosmosSignRequest(firstPayload)) {
+				resetScanValues()
+				_cosmosSignRequestPayload.value = firstPayload
+				return
+			}
+
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
@@ -211,6 +222,13 @@ class CameraViewModel() : ViewModel() {
 	 */
 	private fun isPenumbraTransaction(hexPayload: String): Boolean {
 		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530310", ignoreCase = true)
+	}
+
+	/**
+	 * Check if hex payload is a Cosmos sign request (prefix 530510)
+	 */
+	private fun isCosmosSignRequest(hexPayload: String): Boolean {
+		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530510", ignoreCase = true)
 	}
 
 	/**
@@ -293,5 +311,9 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetPenumbraSignRequest() {
 		_penumbraSignRequestPayload.value = null
+	}
+
+	fun resetCosmosSignRequest() {
+		_cosmosSignRequestPayload.value = null
 	}
 }

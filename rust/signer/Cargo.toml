@@ -32,7 +32,7 @@ definitions = { path = "../definitions", default-features = false }
 navigator = { path = "../navigator", default-features = false }
 qr_reader_phone = { path = "../qr_reader_phone" }
 transaction_parsing = { path = "../transaction_parsing", features = ["penumbra"] }
-transaction_signing = { path = "../transaction_signing", features = ["penumbra", "zcash"] }
+transaction_signing = { path = "../transaction_signing", features = ["penumbra", "zcash", "cosmos"] }
 parser = { path = "../parser" }
 qrcode_static = { path = "../qrcode_static" }
 

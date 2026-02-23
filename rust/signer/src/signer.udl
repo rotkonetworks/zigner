@@ -757,6 +757,18 @@ namespace signer {
     CosmosAccountExport export_cosmos_accounts([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
 
     // ========================================================================
+    // Cosmos cold signing functions
+    // ========================================================================
+
+    // Parse Cosmos sign request from QR hex data
+    [Throws=ErrorDisplayed]
+    CosmosSignRequest parse_cosmos_sign_request([ByRef] string qr_hex);
+
+    // Sign Cosmos transaction and return 64-byte signature
+    [Throws=ErrorDisplayed]
+    sequence<u8> sign_cosmos_transaction([ByRef] string seed_phrase, CosmosSignRequest request);
+
+    // ========================================================================
     // Penumbra cold signing functions
     // ========================================================================
 
@@ -1086,6 +1098,19 @@ dictionary CosmosChainAddress {
     string chain_id;
     string address;
     string prefix;
+};
+
+// Cosmos sign request parsed from QR
+dictionary CosmosSignRequest {
+    u32 account_index;
+    string chain_name;
+    string chain_id;
+    string msg_type;
+    string recipient;
+    string amount;
+    string fee;
+    string memo;
+    string raw_qr_hex;
 };
 
 // Penumbra sign request parsed from QR

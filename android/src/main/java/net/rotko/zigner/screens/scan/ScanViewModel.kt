@@ -46,6 +46,9 @@ import io.parity.signer.uniffi.encodeZcashSignatureQr
 import io.parity.signer.uniffi.PenumbraSignRequest
 import io.parity.signer.uniffi.parsePenumbraSignRequest
 import io.parity.signer.uniffi.signPenumbraTransaction as uniffiSignPenumbraTransaction
+import io.parity.signer.uniffi.CosmosSignRequest
+import io.parity.signer.uniffi.parseCosmosSignRequest
+import io.parity.signer.uniffi.signCosmosTransaction as uniffiSignCosmosTransaction
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -86,6 +89,10 @@ class ScanViewModel : ViewModel() {
 	// Penumbra signing state
 	var penumbraSignRequest: MutableStateFlow<PenumbraSignRequest?> = MutableStateFlow(null)
 	var penumbraSignatureQr: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
+
+	// Cosmos signing state
+	var cosmosSignRequest: MutableStateFlow<CosmosSignRequest?> = MutableStateFlow(null)
+	var cosmosSignatureQr: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
 
 	// UR backup restore state
 	var urBackupFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
@@ -374,7 +381,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || urBackupFrames.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null) {
 			clearState()
 			true
 		} else {
@@ -395,6 +402,8 @@ class ScanViewModel : ViewModel() {
 		zcashSignatureQr.value = null
 		penumbraSignRequest.value = null
 		penumbraSignatureQr.value = null
+		cosmosSignRequest.value = null
+		cosmosSignatureQr.value = null
 		urBackupFrames.value = null
 	}
 
@@ -611,5 +620,69 @@ class ScanViewModel : ViewModel() {
 	fun clearPenumbraState() {
 		penumbraSignRequest.value = null
 		penumbraSignatureQr.value = null
+	}
+
+	/**
+	 * Parse Cosmos sign request from QR hex and set it for display
+	 */
+	fun performCosmosSignRequest(qrHex: String, context: Context) {
+		try {
+			val request = parseCosmosSignRequest(qrHex)
+			cosmosSignRequest.value = request
+		} catch (e: Exception) {
+			Timber.e(e, "Failed to parse Cosmos sign request")
+			transactionError.value = LocalErrorSheetModel(
+				title = context.getString(R.string.scan_screen_error_bad_format_title),
+				subtitle = e.message ?: "Failed to parse Cosmos transaction"
+			)
+		}
+	}
+
+	/**
+	 * Sign Cosmos transaction and generate 64-byte signature
+	 */
+	fun signCosmosTransaction(context: Context) {
+		val request = cosmosSignRequest.value ?: return
+
+		viewModelScope.launch {
+			try {
+				when (val seeds = seedRepository.getAllSeeds()) {
+					is RepoResult.Failure -> {
+						Timber.e(TAG, "Failed to get seeds for Cosmos signing: ${seeds.error}")
+						transactionError.value = LocalErrorSheetModel(
+							title = "Signing Error",
+							subtitle = "Could not access seed phrases"
+						)
+					}
+					is RepoResult.Success -> {
+						val seedPhrase = seeds.result.values.firstOrNull()
+						if (seedPhrase == null) {
+							transactionError.value = LocalErrorSheetModel(
+								title = "No Seed Found",
+								subtitle = "No seed phrase available for signing"
+							)
+							return@launch
+						}
+
+						val signatureBytes = uniffiSignCosmosTransaction(seedPhrase, request)
+						cosmosSignatureQr.value = signatureBytes.map { it.toByte() }.toByteArray()
+					}
+				}
+			} catch (e: Exception) {
+				Timber.e(e, "Failed to sign Cosmos transaction")
+				transactionError.value = LocalErrorSheetModel(
+					title = "Signing Failed",
+					subtitle = e.message ?: "Unknown error during signing"
+				)
+			}
+		}
+	}
+
+	/**
+	 * Clear Cosmos signing state
+	 */
+	fun clearCosmosState() {
+		cosmosSignRequest.value = null
+		cosmosSignatureQr.value = null
 	}
 }

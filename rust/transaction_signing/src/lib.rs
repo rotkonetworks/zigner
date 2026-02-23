@@ -30,6 +30,15 @@ pub use penumbra::{
     SpendKeyBytes as PenumbraSpendKeyBytes, PENUMBRA_BIP44_PATH, PENUMBRA_COIN_TYPE,
 };
 
+// cosmos signing module
+#[cfg(feature = "cosmos")]
+pub mod cosmos;
+#[cfg(feature = "cosmos")]
+pub use cosmos::{
+    sign_cosmos_amino,
+    CosmosSignRequest, CosmosSignDocDisplay,
+};
+
 // zcash signing module
 #[cfg(feature = "zcash")]
 pub mod zcash;

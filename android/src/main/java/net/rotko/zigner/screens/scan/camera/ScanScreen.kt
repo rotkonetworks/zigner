@@ -40,6 +40,7 @@ fun ScanScreen(
 	onDynamicDerivationsTransactions: suspend (List<String>) -> Unit,
 	onZcashSignRequest: (String) -> Unit = {},
 	onPenumbraSignRequest: (String) -> Unit = {},
+	onCosmosSignRequest: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
@@ -55,6 +56,7 @@ fun ScanScreen(
 	)
 	val currentOnZcashSignRequest by rememberUpdatedState(onZcashSignRequest)
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
+	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 
 	LaunchedEffect(viewModel) {
@@ -117,6 +119,17 @@ fun ScanScreen(
 				.collect { qrData ->
 					currentOnPenumbraSignRequest(qrData)
 					viewModel.resetPenumbraSignRequest()
+				}
+		}
+
+		// Cosmos sign request handler
+		launch {
+			viewModel.cosmosSignRequestPayload
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { qrData ->
+					currentOnCosmosSignRequest(qrData)
+					viewModel.resetCosmosSignRequest()
 				}
 		}
 

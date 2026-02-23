@@ -893,6 +893,28 @@ pub struct CosmosChainAddress {
     pub prefix: String,
 }
 
+/// Cosmos sign request parsed from QR
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosSignRequest {
+    pub account_index: u32,
+    /// chain name from QR (e.g. "noble", "osmosis")
+    pub chain_name: String,
+    /// chain_id from amino JSON (e.g. "noble-1", "osmosis-1")
+    pub chain_id: String,
+    /// message type (e.g. "Send", "IBC Transfer")
+    pub msg_type: String,
+    /// recipient address
+    pub recipient: String,
+    /// amount string
+    pub amount: String,
+    /// fee string
+    pub fee: String,
+    /// memo
+    pub memo: String,
+    /// raw QR hex for re-parsing during signing
+    pub raw_qr_hex: String,
+}
+
 /// String pair for FFI compatibility
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StringPair {

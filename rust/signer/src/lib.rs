@@ -1114,6 +1114,62 @@ fn export_cosmos_accounts(
 }
 
 // ============================================================================
+// Cosmos cold signing functions
+// ============================================================================
+
+/// Parse a Cosmos sign request from QR hex data (amino JSON sign doc)
+fn parse_cosmos_sign_request(qr_hex: &str) -> Result<CosmosSignRequest, ErrorDisplayed> {
+    use transaction_signing::cosmos::{
+        CosmosSignRequest as InternalRequest,
+        CosmosSignDocDisplay,
+    };
+
+    let req = InternalRequest::from_qr_hex(qr_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse Cosmos QR: {e}") })?;
+
+    let display = CosmosSignDocDisplay::from_json(&req.sign_doc_bytes)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse sign doc: {e}") })?;
+
+    Ok(CosmosSignRequest {
+        account_index: req.account_index,
+        chain_name: req.chain_name,
+        chain_id: display.chain_id,
+        msg_type: display.msg_type,
+        recipient: display.recipient,
+        amount: display.amount,
+        fee: display.fee,
+        memo: display.memo,
+        raw_qr_hex: qr_hex.to_string(),
+    })
+}
+
+/// Sign a Cosmos transaction and return 64-byte compact signature
+fn sign_cosmos_transaction(
+    seed_phrase: &str,
+    request: CosmosSignRequest,
+) -> Result<Vec<u8>, ErrorDisplayed> {
+    use transaction_signing::cosmos::{
+        CosmosSignRequest as InternalRequest,
+        sign_cosmos_amino,
+    };
+    use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS};
+
+    // re-parse the QR to get the sign doc bytes
+    let req = InternalRequest::from_qr_hex(&request.raw_qr_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to re-parse QR: {e}") })?;
+
+    // derive the cosmos key from seed phrase
+    let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, request.account_index, 0)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Key derivation failed: {e}") })?;
+
+    // sign with SHA256 prehash (NOT blake2b)
+    let signature = sign_cosmos_amino(&key.secret_key, &req.sign_doc_bytes)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("Signing failed: {e}") })?;
+
+    Ok(signature.to_vec())
+}
+
+// ============================================================================
 // Penumbra cold signing functions
 // ============================================================================
 
