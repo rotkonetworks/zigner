@@ -63,14 +63,12 @@ impl AddressDetails {
         let ms_encryption = multisigner_to_encryption(&multisigner);
         let is_ecdsa_ethereum = ms_encryption == Encryption::Ecdsa
             && address_details.encryption == Encryption::Ethereum;
-        let is_ecdsa_cosmos = ms_encryption == Encryption::Ecdsa
-            && address_details.encryption == Encryption::Cosmos;
+        let is_ecdsa_cosmos =
+            ms_encryption == Encryption::Ecdsa && address_details.encryption == Encryption::Cosmos;
         let is_ed25519_non_substrate = ms_encryption == Encryption::Ed25519
             && matches!(
                 address_details.encryption,
-                Encryption::Penumbra
-                    | Encryption::Zcash
-                    | Encryption::LedgerEd25519
+                Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519
             );
         if ms_encryption != address_details.encryption
             && !is_ecdsa_ethereum

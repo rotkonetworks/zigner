@@ -1101,12 +1101,15 @@ fn export_cosmos_accounts(
     label: &str,
     network_name: &str,
 ) -> Result<CosmosAccountExport, ErrorDisplayed> {
-    use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS, PREFIX_OSMOSIS, PREFIX_NOBLE, PREFIX_CELESTIA};
+    use db_handling::cosmos::{
+        derive_cosmos_key, PREFIX_CELESTIA, PREFIX_NOBLE, PREFIX_OSMOSIS, SLIP0044_COSMOS,
+    };
 
-    let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account_index, 0)
-        .map_err(|e| ErrorDisplayed::Str {
+    let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account_index, 0).map_err(|e| {
+        ErrorDisplayed::Str {
             s: format!("Failed to derive Cosmos key: {e}"),
-        })?;
+        }
+    })?;
 
     let pubkey_hex = hex::encode(&key.public_key);
 
@@ -1121,12 +1124,16 @@ fn export_cosmos_accounts(
         all_chains
     } else {
         let name = network_name.to_lowercase();
-        all_chains.into_iter().filter(|(id, _)| *id == name).collect()
+        all_chains
+            .into_iter()
+            .filter(|(id, _)| *id == name)
+            .collect()
     };
 
     let mut addresses = Vec::new();
     for (chain_id, prefix) in &chains {
-        let addr = key.bech32_address(prefix)
+        let addr = key
+            .bech32_address(prefix)
             .map_err(|e| ErrorDisplayed::Str {
                 s: format!("Failed to encode {chain_id} address: {e}"),
             })?;
@@ -1155,10 +1162,9 @@ fn export_cosmos_accounts(
     });
 
     let json_bytes = json.to_string().into_bytes();
-    let qr_data = encode_to_qr(&json_bytes, false)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to generate QR: {e}"),
-        })?;
+    let qr_data = encode_to_qr(&json_bytes, false).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to generate QR: {e}"),
+    })?;
 
     Ok(CosmosAccountExport {
         account_index,
@@ -1175,16 +1181,16 @@ fn export_cosmos_accounts(
 
 /// Parse a Cosmos sign request from QR hex data (amino JSON sign doc)
 fn parse_cosmos_sign_request(qr_hex: &str) -> Result<CosmosSignRequest, ErrorDisplayed> {
-    use transaction_signing::cosmos::{
-        CosmosSignRequest as InternalRequest,
-        CosmosSignDocDisplay,
-    };
+    use transaction_signing::cosmos::{CosmosSignDocDisplay, CosmosSignRequest as InternalRequest};
 
-    let req = InternalRequest::from_qr_hex(qr_hex)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse Cosmos QR: {e}") })?;
+    let req = InternalRequest::from_qr_hex(qr_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse Cosmos QR: {e}"),
+    })?;
 
-    let display = CosmosSignDocDisplay::from_json(&req.sign_doc_bytes)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse sign doc: {e}") })?;
+    let display =
+        CosmosSignDocDisplay::from_json(&req.sign_doc_bytes).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to parse sign doc: {e}"),
+        })?;
 
     Ok(CosmosSignRequest {
         account_index: req.account_index,
@@ -1204,23 +1210,29 @@ fn sign_cosmos_transaction(
     seed_phrase: &str,
     request: CosmosSignRequest,
 ) -> Result<Vec<u8>, ErrorDisplayed> {
-    use transaction_signing::cosmos::{
-        CosmosSignRequest as InternalRequest,
-        sign_cosmos_amino,
-    };
     use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS};
+    use transaction_signing::cosmos::{sign_cosmos_amino, CosmosSignRequest as InternalRequest};
 
     // re-parse the QR to get the sign doc bytes
-    let req = InternalRequest::from_qr_hex(&request.raw_qr_hex)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to re-parse QR: {e}") })?;
+    let req =
+        InternalRequest::from_qr_hex(&request.raw_qr_hex).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to re-parse QR: {e}"),
+        })?;
 
     // derive the cosmos key from seed phrase
-    let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, request.account_index, 0)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Key derivation failed: {e}") })?;
+    let key =
+        derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, request.account_index, 0).map_err(|e| {
+            ErrorDisplayed::Str {
+                s: format!("Key derivation failed: {e}"),
+            }
+        })?;
 
     // sign with SHA256 prehash (NOT blake2b)
-    let signature = sign_cosmos_amino(&key.secret_key, &req.sign_doc_bytes)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Signing failed: {e}") })?;
+    let signature = sign_cosmos_amino(&key.secret_key, &req.sign_doc_bytes).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Signing failed: {e}"),
+        }
+    })?;
 
     Ok(signature.to_vec())
 }
@@ -1278,8 +1290,11 @@ fn sign_penumbra_transaction(
     // SECURITY: Verify the effect hash from the QR matches what we compute
     // from the plan + our FVK. This prevents a compromised hot wallet from
     // tricking us into signing a different transaction.
-    verify_effect_hash(&plan.plan_bytes, &effect_hash, &spend_key)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Effect hash verification failed: {e}") })?;
+    verify_effect_hash(&plan.plan_bytes, &effect_hash, &spend_key).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Effect hash verification failed: {e}"),
+        }
+    })?;
 
     // Sign the transaction
     let auth_data = sign_transaction(

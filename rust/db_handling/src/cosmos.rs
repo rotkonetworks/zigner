@@ -30,7 +30,11 @@ pub fn store_cosmos_address(
 }
 
 /// Retrieve a Cosmos bech32 address for a given public key hex and genesis hash
-pub fn get_cosmos_address(database: &sled::Db, pubkey_hex: &str, genesis_hash: &str) -> Result<Option<String>> {
+pub fn get_cosmos_address(
+    database: &sled::Db,
+    pubkey_hex: &str,
+    genesis_hash: &str,
+) -> Result<Option<String>> {
     let tree = database.open_tree(COSMOS_ADDRS)?;
     let key = format!("{}_{}", pubkey_hex, genesis_hash);
     match tree.get(key.as_bytes())? {
@@ -67,7 +71,7 @@ pub fn pubkey_to_bech32_address(pubkey_bytes: &[u8], network_name: &str) -> Resu
 
     // RIPEMD160(SHA256(pubkey)) → 20 bytes address
     let sha256_hash = Sha256::digest(pubkey_bytes);
-    let ripemd160_hash = Ripemd160::digest(&sha256_hash);
+    let ripemd160_hash = Ripemd160::digest(sha256_hash);
 
     let hrp = Hrp::parse(prefix)
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid bech32 prefix: {}", e)))?;

@@ -48,8 +48,8 @@ impl CosmosSignRequest {
     /// [sign_doc_len: 4 LE]     4B
     /// [sign_doc_bytes: N]      NB  canonical amino JSON
     pub fn from_qr_hex(hex: &str) -> Result<Self> {
-        let bytes = hex::decode(hex)
-            .map_err(|e| Error::Other(anyhow::anyhow!("invalid hex: {e}")))?;
+        let bytes =
+            hex::decode(hex).map_err(|e| Error::Other(anyhow::anyhow!("invalid hex: {e}")))?;
 
         if bytes.len() < 12 {
             return Err(Error::Other(anyhow::anyhow!("QR data too short")));
@@ -59,7 +59,9 @@ impl CosmosSignRequest {
         if bytes[0..3] != COSMOS_PRELUDE {
             return Err(Error::Other(anyhow::anyhow!(
                 "invalid cosmos QR prelude: expected 530510, got {:02x}{:02x}{:02x}",
-                bytes[0], bytes[1], bytes[2]
+                bytes[0],
+                bytes[1],
+                bytes[2]
             )));
         }
 
@@ -67,8 +69,9 @@ impl CosmosSignRequest {
 
         // account index (4 bytes LE)
         let account_index = u32::from_le_bytes(
-            bytes[offset..offset + 4].try_into()
-                .map_err(|_| Error::Other(anyhow::anyhow!("failed to read account index")))?
+            bytes[offset..offset + 4]
+                .try_into()
+                .map_err(|_| Error::Other(anyhow::anyhow!("failed to read account index")))?,
         );
         offset += 4;
 
@@ -77,7 +80,9 @@ impl CosmosSignRequest {
         offset += 1;
 
         if offset + chain_name_len > bytes.len() {
-            return Err(Error::Other(anyhow::anyhow!("chain name extends past end of data")));
+            return Err(Error::Other(anyhow::anyhow!(
+                "chain name extends past end of data"
+            )));
         }
 
         let chain_name = String::from_utf8(bytes[offset..offset + chain_name_len].to_vec())
@@ -89,15 +94,17 @@ impl CosmosSignRequest {
             return Err(Error::Other(anyhow::anyhow!("missing sign doc length")));
         }
         let sign_doc_len = u32::from_le_bytes(
-            bytes[offset..offset + 4].try_into()
-                .map_err(|_| Error::Other(anyhow::anyhow!("failed to read sign doc length")))?
+            bytes[offset..offset + 4]
+                .try_into()
+                .map_err(|_| Error::Other(anyhow::anyhow!("failed to read sign doc length")))?,
         ) as usize;
         offset += 4;
 
         if offset + sign_doc_len > bytes.len() {
             return Err(Error::Other(anyhow::anyhow!(
                 "sign doc extends past end of data (need {}, have {})",
-                offset + sign_doc_len, bytes.len()
+                offset + sign_doc_len,
+                bytes.len()
             )));
         }
 
@@ -132,9 +139,7 @@ impl CosmosSignDocDisplay {
             .unwrap_or_else(|| "unknown".to_string());
 
         // parse first message
-        let msg = json["msgs"]
-            .as_array()
-            .and_then(|a| a.first());
+        let msg = json["msgs"].as_array().and_then(|a| a.first());
 
         let (msg_type, recipient, amount) = match msg {
             Some(m) => {
@@ -182,18 +187,15 @@ impl CosmosSignDocDisplay {
     }
 }
 
-/// sign cosmos amino sign doc bytes with secp256k1 ECDSA
+/// Sign Cosmos Amino sign doc bytes with `secp256k1` ECDSA.
 ///
-/// computes SHA256(sign_doc_bytes) then signs with the secret key.
-/// returns 64-byte compact signature (r || s).
+/// Computes `SHA256(sign_doc_bytes)` then signs with the secret key.
+/// Returns 64-byte compact signature (r || s).
 ///
-/// IMPORTANT: this does NOT use sp_core::ecdsa because that uses blake2b-256
-/// as prehash. cosmos amino requires SHA256.
+/// IMPORTANT: this does NOT use `sp_core::ecdsa` because that uses `blake2b-256`
+/// as pre-hash. Cosmos Amino requires `SHA256`.
 #[cfg(feature = "cosmos")]
-pub fn sign_cosmos_amino(
-    secret_key: &[u8; 32],
-    sign_doc_bytes: &[u8],
-) -> Result<[u8; 64]> {
+pub fn sign_cosmos_amino(secret_key: &[u8; 32], sign_doc_bytes: &[u8]) -> Result<[u8; 64]> {
     use secp256k1::{Message, Secp256k1, SecretKey};
     use sha2::{Digest, Sha256};
 

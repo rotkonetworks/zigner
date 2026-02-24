@@ -60,7 +60,9 @@ fn get_display_address(
     #[cfg(feature = "cosmos")]
     if encryption == Encryption::Cosmos {
         let pubkey_bytes = multisigner_to_public(multisigner);
-        if let Ok(address) = crate::cosmos::pubkey_to_bech32_address(&pubkey_bytes, network_name.unwrap_or("cosmos")) {
+        if let Ok(address) =
+            crate::cosmos::pubkey_to_bech32_address(&pubkey_bytes, network_name.unwrap_or("cosmos"))
+        {
             return address;
         }
     }

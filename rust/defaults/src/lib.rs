@@ -220,7 +220,7 @@ fn default_network_info() -> [DefaultNetworkInfo; 10] {
         // Cosmos networks
         DefaultNetworkInfo {
             address: String::from("https://rpc.osmosis.zone"),
-            base58prefix: 0, // Not used for Cosmos (uses bech32)
+            base58prefix: 0,                // Not used for Cosmos (uses bech32)
             color: String::from("#5E12A0"), // Osmosis purple
             decimals: 6,
             encryption: Encryption::Cosmos,
@@ -283,7 +283,7 @@ fn default_network_info() -> [DefaultNetworkInfo; 10] {
             encryption: Encryption::Cosmos,
             genesis_hash: H256::from_str(
                 "000000000000000000000000000000000000636f736d6f736875622d34000001",
-                )
+            )
             .expect("known value"),
             logo: String::from("cosmos"),
             name: String::from("cosmos"),

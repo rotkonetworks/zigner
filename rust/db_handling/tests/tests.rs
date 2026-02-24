@@ -222,6 +222,46 @@ fn print_show_all_networks_flag_westend() {
                 selected: false,
                 title: "Penumbra".to_string(),
             },
+            Network {
+                key: "0700000000000000000000000000000000000000006f736d6f7369732d31000001"
+                    .to_string(),
+                logo: "osmosis".to_string(),
+                order: 5,
+                selected: false,
+                title: "Osmosis".to_string(),
+            },
+            Network {
+                key: "07000000000000000000000000000000000000000000006e6f626c652d31000001"
+                    .to_string(),
+                logo: "noble".to_string(),
+                order: 6,
+                selected: false,
+                title: "Noble".to_string(),
+            },
+            Network {
+                key: "070000000000000000000000000000000000000063656c65737469610000000001"
+                    .to_string(),
+                logo: "celestia".to_string(),
+                order: 7,
+                selected: false,
+                title: "Celestia".to_string(),
+            },
+            Network {
+                key: "07000000000000000000000000000000000000636f736d6f736875622d34000001"
+                    .to_string(),
+                logo: "cosmos".to_string(),
+                order: 8,
+                selected: false,
+                title: "Cosmos Hub".to_string(),
+            },
+            Network {
+                key: "07000000000000000000000000000000000000000070686f656e69782d31000001"
+                    .to_string(),
+                logo: "terra".to_string(),
+                order: 9,
+                selected: false,
+                title: "Terra".to_string(),
+            },
         ],
     };
     assert_eq!(menu, expected_menu);
@@ -269,6 +309,41 @@ fn show_all_networks_no_flag() {
             logo: "penumbra".to_string(),
             order: 4,
             path_id: "m/44'/6532'/0'".to_string(),
+        },
+        MMNetwork {
+            key: "0700000000000000000000000000000000000000006f736d6f7369732d31000001".to_string(),
+            title: "osmosis".to_string(),
+            logo: "osmosis".to_string(),
+            order: 5,
+            path_id: "m/44'/118'/0'/0/0".to_string(),
+        },
+        MMNetwork {
+            key: "07000000000000000000000000000000000000000000006e6f626c652d31000001".to_string(),
+            title: "noble".to_string(),
+            logo: "noble".to_string(),
+            order: 6,
+            path_id: "m/44'/118'/0'/0/0".to_string(),
+        },
+        MMNetwork {
+            key: "070000000000000000000000000000000000000063656c65737469610000000001".to_string(),
+            title: "celestia".to_string(),
+            logo: "celestia".to_string(),
+            order: 7,
+            path_id: "m/44'/118'/0'/0/0".to_string(),
+        },
+        MMNetwork {
+            key: "07000000000000000000000000000000000000636f736d6f736875622d34000001".to_string(),
+            title: "cosmos".to_string(),
+            logo: "cosmos".to_string(),
+            order: 8,
+            path_id: "m/44'/118'/0'/0/0".to_string(),
+        },
+        MMNetwork {
+            key: "07000000000000000000000000000000000000000070686f656e69782d31000001".to_string(),
+            title: "terra".to_string(),
+            logo: "terra".to_string(),
+            order: 9,
+            path_id: "m/44'/330'/0'/0/0".to_string(),
         },
     ];
     assert_eq!(networks, expected_networks);

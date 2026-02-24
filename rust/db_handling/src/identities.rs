@@ -119,7 +119,9 @@ fn get_display_address(
     #[cfg(feature = "cosmos")]
     if encryption == Encryption::Cosmos {
         let pubkey_bytes = multisigner_to_public(multisigner);
-        if let Ok(address) = crate::cosmos::pubkey_to_bech32_address(&pubkey_bytes, network_name.unwrap_or("cosmos")) {
+        if let Ok(address) =
+            crate::cosmos::pubkey_to_bech32_address(&pubkey_bytes, network_name.unwrap_or("cosmos"))
+        {
             return address;
         }
     }
@@ -1210,7 +1212,12 @@ pub(crate) fn create_address(
             let genesis_hash_hex = network_specs
                 .map(|ns| hex::encode(ns.genesis_hash))
                 .unwrap_or_default();
-            crate::cosmos::store_cosmos_address(database, &pubkey_hex, &genesis_hash_hex, &bech32_address)?;
+            crate::cosmos::store_cosmos_address(
+                database,
+                &pubkey_hex,
+                &genesis_hash_hex,
+                &bech32_address,
+            )?;
             multisigner
         }
         #[cfg(not(feature = "cosmos"))]

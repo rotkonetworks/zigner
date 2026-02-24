@@ -171,8 +171,9 @@ pub fn parse_penumbra_transaction(data_hex: &str) -> Result<PenumbraTransactionP
 
             if offset + chain_id_len <= data.len() {
                 chain_id = Some(
-                    String::from_utf8(data[offset..offset + chain_id_len].to_vec())
-                        .map_err(|e| Error::PenumbraParseError(format!("invalid UTF-8 in chain_id: {e}")))?
+                    String::from_utf8(data[offset..offset + chain_id_len].to_vec()).map_err(
+                        |e| Error::PenumbraParseError(format!("invalid UTF-8 in chain_id: {e}")),
+                    )?,
                 );
                 offset += chain_id_len;
             }

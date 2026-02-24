@@ -175,30 +175,42 @@ impl PenumbraAuthorizationData {
     /// - lqt_vote_sigs: 64 bytes each
     pub fn encode(&self) -> Vec<u8> {
         // pre-allocate exact size
-        let capacity = 64 + 6
-            + (self.spend_auths.len() + self.delegator_vote_auths.len()
-                + self.lqt_vote_auths.len()) * 64;
+        let capacity = 64
+            + 6
+            + (self.spend_auths.len()
+                + self.delegator_vote_auths.len()
+                + self.lqt_vote_auths.len())
+                * 64;
         let mut output = Vec::with_capacity(capacity);
 
         // effect hash
         output.extend_from_slice(&self.effect_hash);
 
         // spend auths (bounds-checked to prevent silent u16 truncation)
-        assert!(self.spend_auths.len() <= u16::MAX as usize, "too many spend auths");
+        assert!(
+            self.spend_auths.len() <= u16::MAX as usize,
+            "too many spend auths"
+        );
         output.extend_from_slice(&(self.spend_auths.len() as u16).to_le_bytes());
         for sig in &self.spend_auths {
             output.extend_from_slice(sig);
         }
 
         // delegator vote auths
-        assert!(self.delegator_vote_auths.len() <= u16::MAX as usize, "too many vote auths");
+        assert!(
+            self.delegator_vote_auths.len() <= u16::MAX as usize,
+            "too many vote auths"
+        );
         output.extend_from_slice(&(self.delegator_vote_auths.len() as u16).to_le_bytes());
         for sig in &self.delegator_vote_auths {
             output.extend_from_slice(sig);
         }
 
         // lqt vote auths
-        assert!(self.lqt_vote_auths.len() <= u16::MAX as usize, "too many lqt vote auths");
+        assert!(
+            self.lqt_vote_auths.len() <= u16::MAX as usize,
+            "too many lqt vote auths"
+        );
         output.extend_from_slice(&(self.lqt_vote_auths.len() as u16).to_le_bytes());
         for sig in &self.lqt_vote_auths {
             output.extend_from_slice(sig);
@@ -263,10 +275,10 @@ pub fn verify_effect_hash(
     qr_effect_hash: &[u8; 64],
     spend_key_bytes: &SpendKeyBytes,
 ) -> Result<()> {
-    use penumbra_keys::keys::SpendKeyBytes as SdkSpendKeyBytes;
     use penumbra_keys::keys::SpendKey;
-    use penumbra_transaction::plan::TransactionPlan;
+    use penumbra_keys::keys::SpendKeyBytes as SdkSpendKeyBytes;
     use penumbra_proto::DomainType;
+    use penumbra_transaction::plan::TransactionPlan;
 
     // Construct the SDK's SpendKey from our raw 32-byte seed
     let sdk_spend_key: SpendKey = SdkSpendKeyBytes(spend_key_bytes.0).into();
@@ -277,7 +289,8 @@ pub fn verify_effect_hash(
         .map_err(|e| Error::PenumbraKeyDerivation(format!("failed to decode plan: {e}")))?;
 
     // Compute the correct effect hash
-    let computed_hash = plan.effect_hash(fvk)
+    let computed_hash = plan
+        .effect_hash(fvk)
         .map_err(|e| Error::PenumbraKeyDerivation(format!("failed to compute effect hash: {e}")))?;
 
     // Constant-time comparison to prevent timing side-channel attacks
@@ -285,7 +298,8 @@ pub fn verify_effect_hash(
     if computed_hash.as_bytes().ct_eq(qr_effect_hash).unwrap_u8() != 1 {
         return Err(Error::PenumbraKeyDerivation(
             "effect hash mismatch: QR hash does not match computed hash from plan. \
-             The hot wallet may be compromised.".to_string(),
+             The hot wallet may be compromised."
+                .to_string(),
         ));
     }
 
@@ -708,8 +722,9 @@ impl FvkExportData {
             }
             let label_bytes = &data[offset..offset + label_len];
             offset += label_len;
-            Some(String::from_utf8(label_bytes.to_vec())
-                .map_err(|e| Error::PenumbraKeyDerivation(format!("invalid UTF-8 in label: {e}")))?)
+            Some(String::from_utf8(label_bytes.to_vec()).map_err(|e| {
+                Error::PenumbraKeyDerivation(format!("invalid UTF-8 in label: {e}"))
+            })?)
         } else {
             None
         };

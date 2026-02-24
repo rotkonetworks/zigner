@@ -34,10 +34,7 @@ pub use penumbra::{
 #[cfg(feature = "cosmos")]
 pub mod cosmos;
 #[cfg(feature = "cosmos")]
-pub use cosmos::{
-    sign_cosmos_amino,
-    CosmosSignRequest, CosmosSignDocDisplay,
-};
+pub use cosmos::{sign_cosmos_amino, CosmosSignDocDisplay, CosmosSignRequest};
 
 // zcash signing module
 #[cfg(feature = "zcash")]

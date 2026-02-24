@@ -48,14 +48,17 @@ pub fn derive_zcash_fvk_bytes(mnemonic: &str, account: u32) -> Result<String, Js
 #[wasm_bindgen]
 pub fn address_from_ufvk(ufvk_str: &str) -> Result<String, JsError> {
     use orchard::keys::FullViewingKey;
-    use zcash_address::unified::{Address as UnifiedAddress, Container, Receiver, Encoding, Fvk, Ufvk};
+    use zcash_address::unified::{
+        Address as UnifiedAddress, Container, Encoding, Fvk, Receiver, Ufvk,
+    };
 
     // detect network from UFVK prefix
-    let (network, parsed) = Ufvk::decode(ufvk_str)
-        .map_err(|e| JsError::new(&format!("invalid ufvk: {}", e)))?;
+    let (network, parsed) =
+        Ufvk::decode(ufvk_str).map_err(|e| JsError::new(&format!("invalid ufvk: {}", e)))?;
 
     // extract orchard FVK bytes from the parsed UFVK
-    let orchard_fvk_bytes = parsed.items_as_parsed()
+    let orchard_fvk_bytes = parsed
+        .items_as_parsed()
         .iter()
         .find_map(|item| {
             if let Fvk::Orchard(bytes) = item {
