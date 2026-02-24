@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   run-tests:
@@ -52,10 +53,14 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
 
+      - name: Rename APK
+        run: |
+          mv "${{ steps.sign_app.outputs.signedReleaseFile }}" "app/zigner-${{ github.ref_name }}.apk"
+
       - name: Compute checksums
         run: |
-          cd $(dirname "${{ steps.sign_app.outputs.signedReleaseFile }}")
-          sha256sum $(basename "${{ steps.sign_app.outputs.signedReleaseFile }}") > SHA256SUMS
+          cd app
+          sha256sum "zigner-${{ github.ref_name }}.apk" > SHA256SUMS
 
       - name: Sign checksums
         run: |
@@ -97,6 +102,6 @@ jobs:
           body_path: release-notes.md
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           files: |
-            ${{ steps.sign_app.outputs.signedReleaseFile }}
+            app/zigner-${{ github.ref_name }}.apk
             app/SHA256SUMS
             app/SHA256SUMS.sig

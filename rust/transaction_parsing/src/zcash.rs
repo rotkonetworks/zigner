@@ -16,8 +16,8 @@
 
 use definitions::helpers::unhex;
 use definitions::navigation::{
-    Card, TransactionAction, TransactionCard, TransactionCardSet,
-    ZcashTransactionSummary, ZcashOrchardSpend,
+    Card, TransactionAction, TransactionCard, TransactionCardSet, ZcashOrchardSpend,
+    ZcashTransactionSummary,
 };
 
 use crate::{Error, Result};
@@ -53,7 +53,8 @@ impl ZcashSignRequestData {
     /// parse from QR bytes
     pub fn from_qr_bytes(data: &[u8]) -> Result<Self> {
         // validate prelude: [0x53][0x04][0x02]
-        if data.len() < 42 {  // minimum: 3 + 1 + 4 + 32 + 2 = 42
+        if data.len() < 42 {
+            // minimum: 3 + 1 + 4 + 32 + 2 = 42
             return Err(Error::ZcashParseError("QR data too short".to_string()));
         }
         if data[0] != 0x53 {
@@ -81,10 +82,15 @@ impl ZcashSignRequestData {
 
         // account index
         if offset + 4 > data.len() {
-            return Err(Error::ZcashParseError("account index truncated".to_string()));
+            return Err(Error::ZcashParseError(
+                "account index truncated".to_string(),
+            ));
         }
         let account_index = u32::from_le_bytes([
-            data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
         ]);
         offset += 4;
 
@@ -153,7 +159,7 @@ fn create_zcash_cards(request: &ZcashSignRequestData) -> TransactionCardSet {
                 fee: "see summary".to_string(),
                 spend_count: request.orchard_alphas.len() as u64,
                 output_count: 0, // not provided in sign request
-                sighash: hex::encode(&request.sighash),
+                sighash: hex::encode(request.sighash),
                 anchor: "provided by wallet".to_string(),
             },
         },
@@ -199,7 +205,11 @@ fn create_zcash_cards(request: &ZcashSignRequestData) -> TransactionCardSet {
                 "Account #{} · {} signature{} required",
                 request.account_index,
                 request.orchard_alphas.len(),
-                if request.orchard_alphas.len() == 1 { "" } else { "s" }
+                if request.orchard_alphas.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
             ),
         },
     });
@@ -240,6 +250,7 @@ pub fn is_zcash_transaction(data_hex: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::vec_init_then_push)]
 mod tests {
     use super::*;
 
@@ -443,7 +454,7 @@ mod tests {
     fn test_is_zcash_transaction_case_insensitive() {
         assert!(is_zcash_transaction("530402"));
         assert!(is_zcash_transaction("530402ABCDEF")); // uppercase
-        // Note: actual impl uses lowercase comparison
+                                                       // Note: actual impl uses lowercase comparison
     }
 
     #[test]

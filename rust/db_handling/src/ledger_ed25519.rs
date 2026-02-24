@@ -24,13 +24,13 @@ pub const SLIP0044_KUSAMA: u32 = 434;
 const HARDENED: u32 = 0x80000000;
 
 /// Generate Ledger master key from seed using Cardano-style derivation
-/// Returns (extended_secret[64], chain_code[32]) = 96 bytes total
+/// Returns `(extended_secret[64], chain_code[32])` = 96 bytes total
 /// This matches the polkadot-js ledgerMaster implementation
 fn ledger_master(seed: &[u8]) -> ([u8; 64], [u8; 32]) {
     // Chain code: HMAC-SHA256 with key "ed25519 seed", data = [1, ...seed]
     // Note: polkadot-js uses 256 bits (SHA256), not 512!
-    let mut cc_hmac = Hmac::<Sha256>::new_from_slice(b"ed25519 seed")
-        .expect("HMAC can take key of any size");
+    let mut cc_hmac =
+        Hmac::<Sha256>::new_from_slice(b"ed25519 seed").expect("HMAC can take key of any size");
     let mut cc_data = vec![1u8];
     cc_data.extend_from_slice(seed);
     cc_hmac.update(&cc_data);
@@ -44,8 +44,8 @@ fn ledger_master(seed: &[u8]) -> ([u8; 64], [u8; 32]) {
     let mut priv_key: [u8; 64];
 
     loop {
-        let mut hmac = Hmac::<Sha512>::new_from_slice(b"ed25519 seed")
-            .expect("HMAC can take key of any size");
+        let mut hmac =
+            Hmac::<Sha512>::new_from_slice(b"ed25519 seed").expect("HMAC can take key of any size");
 
         match &priv_data {
             Some(data) => hmac.update(data),
@@ -58,7 +58,7 @@ fn ledger_master(seed: &[u8]) -> ([u8; 64], [u8; 32]) {
         // Cardano validity check: third highest bit of byte 31 must be zero
         if (priv_key[31] & 0b0010_0000) == 0 {
             // Clamp the private key (Cardano-style)
-            priv_key[0] &= 0b1111_1000;  // Clear lowest 3 bits
+            priv_key[0] &= 0b1111_1000; // Clear lowest 3 bits
             priv_key[31] &= 0b0111_1111; // Clear bit 255
             priv_key[31] |= 0b0100_0000; // Set bit 254
 
@@ -151,8 +151,8 @@ fn ledger_derive_private(
     data1.extend_from_slice(kr);
     data1.extend_from_slice(&index.to_le_bytes());
 
-    let mut hmac1 = Hmac::<Sha512>::new_from_slice(chain_code)
-        .expect("HMAC can take key of any size");
+    let mut hmac1 =
+        Hmac::<Sha512>::new_from_slice(chain_code).expect("HMAC can take key of any size");
     hmac1.update(&data1);
     let z = hmac1.finalize().into_bytes();
 
@@ -162,8 +162,8 @@ fn ledger_derive_private(
     data2.extend_from_slice(kr);
     data2.extend_from_slice(&index.to_le_bytes());
 
-    let mut hmac2 = Hmac::<Sha512>::new_from_slice(chain_code)
-        .expect("HMAC can take key of any size");
+    let mut hmac2 =
+        Hmac::<Sha512>::new_from_slice(chain_code).expect("HMAC can take key of any size");
     hmac2.update(&data2);
     let cc_full = hmac2.finalize().into_bytes();
 
@@ -180,9 +180,9 @@ fn ledger_derive_private(
     zl_trunc[0..28].copy_from_slice(&zl[0..28]);
     // Multiply by 8 (shift left by 3)
     let mut carry = 0u16;
-    for i in 0..32 {
-        let val = (zl_trunc[i] as u16) * 8 + carry;
-        zl_trunc[i] = val as u8;
+    for byte in zl_trunc.iter_mut() {
+        let val = (*byte as u16) * 8 + carry;
+        *byte = val as u8;
         carry = val >> 8;
     }
 
@@ -226,8 +226,8 @@ pub struct LedgerKeyPair {
 impl LedgerKeyPair {
     /// Sign a message using Ed25519
     pub fn sign(&self, message: &[u8]) -> [u8; 64] {
-        let pair = sp_core::ed25519::Pair::from_seed_slice(&self.secret_key)
-            .expect("Valid 32-byte seed");
+        let pair =
+            sp_core::ed25519::Pair::from_seed_slice(&self.secret_key).expect("Valid 32-byte seed");
         pair.sign(message).0
     }
 
@@ -345,6 +345,6 @@ mod tests {
         let (extended, cc) = super::ledger_master(seed.as_bytes());
         println!("Master kL: {}", hex::encode(&extended[0..32]));
         println!("Master kR: {}", hex::encode(&extended[32..64]));
-        println!("Master CC: {}", hex::encode(&cc));
+        println!("Master CC: {}", hex::encode(cc));
     }
 }

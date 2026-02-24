@@ -9,8 +9,8 @@
 use crate::error::{Error, Result};
 use bip32::{DerivationPath, XPrv};
 use secp256k1::{Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey};
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// SLIP-0044 coin type for Nostr (NIP-06)
@@ -55,8 +55,8 @@ impl NostrKeyPair {
     pub fn npub(&self) -> Result<String> {
         use bech32::{Bech32, Hrp};
 
-        let hrp = Hrp::parse("npub")
-            .map_err(|e| Error::Other(anyhow::anyhow!("Invalid hrp: {}", e)))?;
+        let hrp =
+            Hrp::parse("npub").map_err(|e| Error::Other(anyhow::anyhow!("Invalid hrp: {}", e)))?;
 
         let npub = bech32::encode::<Bech32>(hrp, &self.public_key)
             .map_err(|e| Error::Other(anyhow::anyhow!("Bech32 encoding error: {}", e)))?;
@@ -68,8 +68,8 @@ impl NostrKeyPair {
     pub fn nsec(&self) -> Result<String> {
         use bech32::{Bech32, Hrp};
 
-        let hrp = Hrp::parse("nsec")
-            .map_err(|e| Error::Other(anyhow::anyhow!("Invalid hrp: {}", e)))?;
+        let hrp =
+            Hrp::parse("nsec").map_err(|e| Error::Other(anyhow::anyhow!("Invalid hrp: {}", e)))?;
 
         let nsec = bech32::encode::<Bech32>(hrp, &self.secret_key)
             .map_err(|e| Error::Other(anyhow::anyhow!("Bech32 encoding error: {}", e)))?;
@@ -79,7 +79,7 @@ impl NostrKeyPair {
 
     /// Get public key as hex string
     pub fn pubkey_hex(&self) -> String {
-        hex::encode(&self.public_key)
+        hex::encode(self.public_key)
     }
 
     /// Sign a Nostr event (returns 64-byte Schnorr signature)
@@ -88,13 +88,13 @@ impl NostrKeyPair {
         let sig = self.sign_schnorr(&id)?;
 
         Ok(SignedEvent {
-            id: hex::encode(&id),
+            id: hex::encode(id),
             pubkey: self.pubkey_hex(),
             created_at: event.created_at,
             kind: event.kind,
             tags: event.tags.clone(),
             content: event.content.clone(),
-            sig: hex::encode(&sig),
+            sig: hex::encode(sig),
         })
     }
 
@@ -149,7 +149,8 @@ impl UnsignedEvent {
             self.kind,
             &self.tags,
             &self.content,
-        )).expect("serialization should not fail");
+        ))
+        .expect("serialization should not fail");
 
         let mut hasher = Sha256::new();
         hasher.update(serialized.as_bytes());
@@ -221,7 +222,8 @@ pub fn derive_nostr_key(seed_phrase: &str, account: u32) -> Result<NostrKeyPair>
 
     // NIP-06 path: m/44'/1237'/account'/0/0
     let path_str = format!("m/44'/{}'/{}'/0/0", COIN_TYPE_NOSTR, account);
-    let path: DerivationPath = path_str.parse()
+    let path: DerivationPath = path_str
+        .parse()
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid derivation path: {}", e)))?;
 
     // Derive key
@@ -259,7 +261,9 @@ pub fn parse_nostr_path(path: &str) -> Result<u32> {
     if path.starts_with("m/44'/1237'/") {
         let parts: Vec<&str> = path.split('/').collect();
         if parts.len() >= 4 {
-            let account = parts[3].trim_end_matches('\'').parse::<u32>()
+            let account = parts[3]
+                .trim_end_matches('\'')
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
             return Ok(account);
         }
@@ -267,7 +271,8 @@ pub fn parse_nostr_path(path: &str) -> Result<u32> {
 
     // Simplified path: //nostr//0
     let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
-    let account = parts.iter()
+    let account = parts
+        .iter()
         .filter_map(|p| p.parse::<u32>().ok())
         .next()
         .unwrap_or(0);
@@ -278,10 +283,10 @@ pub fn parse_nostr_path(path: &str) -> Result<u32> {
 /// Event kinds that require explicit user confirmation
 pub fn requires_confirmation(kind: u32) -> bool {
     match kind {
-        0 => true,      // Metadata (profile) - identity change
-        3 => true,      // Contact list - social graph
-        10002 => true,  // Relay list - privacy implications
-        30023 => true,  // Long-form content - publishing
+        0 => true,     // Metadata (profile) - identity change
+        3 => true,     // Contact list - social graph
+        10002 => true, // Relay list - privacy implications
+        30023 => true, // Long-form content - publishing
         _ => false,
     }
 }
@@ -358,8 +363,8 @@ mod tests {
         // Sign the ID
         let sig = key.sign_schnorr(&id).unwrap();
 
-        println!("Event ID: {}", hex::encode(&id));
-        println!("Signature: {}", hex::encode(&sig));
+        println!("Event ID: {}", hex::encode(id));
+        println!("Signature: {}", hex::encode(sig));
 
         assert_eq!(sig.len(), 64);
     }
@@ -376,14 +381,9 @@ mod tests {
         let content = "Hello, Nostr!".to_string();
 
         // Compute ID
-        let serialized = serde_json::to_string(&(
-            0u8,
-            &key.pubkey_hex(),
-            created_at,
-            kind,
-            &tags,
-            &content,
-        )).unwrap();
+        let serialized =
+            serde_json::to_string(&(0u8, &key.pubkey_hex(), created_at, kind, &tags, &content))
+                .unwrap();
 
         let mut hasher = Sha256::new();
         hasher.update(serialized.as_bytes());
@@ -394,13 +394,13 @@ mod tests {
 
         // Create signed event
         let signed = SignedEvent {
-            id: hex::encode(&id),
+            id: hex::encode(id),
             pubkey: key.pubkey_hex(),
             created_at,
             kind,
             tags,
             content,
-            sig: hex::encode(&sig),
+            sig: hex::encode(sig),
         };
 
         // Verify

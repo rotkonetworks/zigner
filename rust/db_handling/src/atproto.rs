@@ -11,8 +11,8 @@
 use crate::error::{Error, Result};
 use bip32::{DerivationPath, XPrv};
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// SLIP-0044 coin type for AT Protocol (unofficial, commonly used)
@@ -55,7 +55,7 @@ pub struct AtProtoKeyPair {
 impl AtProtoKeyPair {
     /// Get public key as hex string
     pub fn pubkey_hex(&self) -> String {
-        hex::encode(&self.public_key)
+        hex::encode(self.public_key)
     }
 
     /// Get the did:key representation (multicodec + multibase encoded public key)
@@ -74,12 +74,12 @@ impl AtProtoKeyPair {
     ///
     /// did:plc is derived from SHA-256 hash of the genesis operation,
     /// truncated to 120 bits, base32 encoded (lowercase, no padding)
-    pub fn generate_did_plc(&self, handle: Option<&str>, pds_endpoint: &str) -> Result<(String, PlcOperation)> {
-        let genesis_op = PlcOperation::genesis(
-            &self.did_key(),
-            handle,
-            pds_endpoint,
-        );
+    pub fn generate_did_plc(
+        &self,
+        handle: Option<&str>,
+        pds_endpoint: &str,
+    ) -> Result<(String, PlcOperation)> {
+        let genesis_op = PlcOperation::genesis(&self.did_key(), handle, pds_endpoint);
 
         let did = genesis_op.compute_did()?;
         Ok((did, genesis_op))
@@ -112,7 +112,7 @@ impl AtProtoKeyPair {
             data: commit.data.clone(),
             rev: commit.rev.clone(),
             prev: commit.prev.clone(),
-            sig: hex::encode(&sig),
+            sig: hex::encode(sig),
         })
     }
 }
@@ -196,8 +196,7 @@ impl PlcOperation {
 
     /// Serialize to JSON string
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(self)
-            .map_err(|e| Error::Other(anyhow::anyhow!("JSON error: {}", e)))
+        serde_json::to_string(self).map_err(|e| Error::Other(anyhow::anyhow!("JSON error: {}", e)))
     }
 }
 
@@ -206,9 +205,9 @@ impl PlcOperation {
 pub struct UnsignedCommit {
     pub did: String,
     pub version: u32,
-    pub data: String,  // CID of MST root
-    pub rev: String,   // TID (timestamp ID)
-    pub prev: Option<String>,  // Previous commit CID
+    pub data: String,         // CID of MST root
+    pub rev: String,          // TID (timestamp ID)
+    pub prev: Option<String>, // Previous commit CID
 }
 
 impl UnsignedCommit {
@@ -241,7 +240,7 @@ pub struct SignedCommit {
     pub data: String,
     pub rev: String,
     pub prev: Option<String>,
-    pub sig: String,  // Hex-encoded ECDSA signature
+    pub sig: String, // Hex-encoded ECDSA signature
 }
 
 impl SignedCommit {
@@ -264,7 +263,8 @@ pub fn derive_atproto_key(seed_phrase: &str, account: u32) -> Result<AtProtoKeyP
 
     // BIP-44 path: m/44'/29'/account'/0/0
     let path_str = format!("m/44'/{}'/{}'/0/0", COIN_TYPE_ATPROTO, account);
-    let path: DerivationPath = path_str.parse()
+    let path: DerivationPath = path_str
+        .parse()
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid derivation path: {}", e)))?;
 
     // Derive key
@@ -301,7 +301,9 @@ pub fn parse_atproto_path(path: &str) -> Result<u32> {
     if path.starts_with("m/44'/29'/") {
         let parts: Vec<&str> = path.split('/').collect();
         if parts.len() >= 4 {
-            let account = parts[3].trim_end_matches('\'').parse::<u32>()
+            let account = parts[3]
+                .trim_end_matches('\'')
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
             return Ok(account);
         }
@@ -309,7 +311,8 @@ pub fn parse_atproto_path(path: &str) -> Result<u32> {
 
     // Simplified path: //atproto//0
     let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
-    let account = parts.iter()
+    let account = parts
+        .iter()
         .filter_map(|p| p.parse::<u32>().ok())
         .next()
         .unwrap_or(0);
@@ -457,10 +460,9 @@ mod tests {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let key = derive_atproto_key(mnemonic, 0).unwrap();
 
-        let (did, op) = key.generate_did_plc(
-            Some("test.bsky.social"),
-            "https://bsky.social"
-        ).unwrap();
+        let (did, op) = key
+            .generate_did_plc(Some("test.bsky.social"), "https://bsky.social")
+            .unwrap();
 
         println!("Generated did:plc: {}", did);
         println!("Genesis operation: {}", op.to_json().unwrap());
@@ -479,7 +481,7 @@ mod tests {
         let signature = key.sign_ecdsa(&message_hash).unwrap();
 
         assert_eq!(signature.len(), 64);
-        println!("ECDSA signature: {}", hex::encode(&signature));
+        println!("ECDSA signature: {}", hex::encode(signature));
     }
 
     #[test]
@@ -540,6 +542,8 @@ mod tests {
         println!("Base32 encoded: {}", encoded);
         assert!(!encoded.is_empty());
         // Should only contain lowercase letters and digits 2-7
-        assert!(encoded.chars().all(|c| c.is_ascii_lowercase() || ('2'..='7').contains(&c)));
+        assert!(encoded
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || ('2'..='7').contains(&c)));
     }
 }

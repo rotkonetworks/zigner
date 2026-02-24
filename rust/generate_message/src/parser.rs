@@ -877,7 +877,13 @@ fn into_sufficient(
             let signature = ecdsa::Signature::from_raw(into_sign);
             Ok(SufficientCrypto::Ecdsa { public, signature })
         }
-        Encryption::Penumbra | Encryption::Zcash | Encryption::LedgerEd25519 | Encryption::Cosmos | Encryption::Bitcoin | Encryption::Nostr | Encryption::AtProtocol => {
+        Encryption::Penumbra
+        | Encryption::Zcash
+        | Encryption::LedgerEd25519
+        | Encryption::Cosmos
+        | Encryption::Bitcoin
+        | Encryption::Nostr
+        | Encryption::AtProtocol => {
             // penumbra uses decaf377-rdsa, zcash uses ZIP-32, ledger/cosmos/bitcoin/nostr/atproto use different flow
             Err(Error::NotSupported)
         }

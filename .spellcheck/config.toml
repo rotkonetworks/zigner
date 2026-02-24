@@ -13,15 +13,33 @@ transform_regex = [
     # 5x
     # 10.7%
     "^[0-9_]+(?:\\.[0-9]*)?(x|%)$",
-    # Transforms'
-    "^(.*)'$",
+    # Transforms' and possessives Zigner's
+    "^(.*)'s?$",
     # backslashes
     "^\\+$",
     "^[0-9]*+k|MB|Mb|ms|Mbit|nd|th|rd$",
-    # single char `=` `>` `%` ..
-    "^=|>|<|%$",
+    # single chars and punctuation fragments
+    "^[=></%{}\\[\\]]+$",
     # 22_100
-    "^(?:[0-9]+_)+[0-9]+$"
+    "^(?:[0-9]+_)+[0-9]+$",
+    # hex values 0x12, 0x53 etc (with optional brackets/punctuation)
+    "^[\\[\\(]?0x[0-9a-fA-F]+[\\]\\)\\[]?$",
+    # BIP derivation path segments and fragments
+    "^m/[0-9/']+$",
+    "^[a-z_]*[0-9]*'/.*$",
+    "^[a-z_]*[0-9]*'$",
+    "^[0-9]+'/?$",
+    # arrow character
+    "^→$",
+    # units and operators
+    "^sat/[a-zA-Z]+$",
+    "^\\|\\|$",
+    # version strings v0, v1, v2 etc
+    "^v[0-9]+$",
+    # URLs
+    "^https?://.*$",
+    # unicode symbols and tilde
+    "^[✓~→←↑↓]$"
 ]
 
 allow_concatenation = true

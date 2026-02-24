@@ -24,10 +24,18 @@ use crate::{Error, Result};
 
 // re-export signing types for convenience
 pub use transaction_signing::penumbra::{
-    PenumbraAuthorizationData, SpendKeyBytes, sign_spend, sign_transaction,
-    EffectHash, PENUMBRA_COIN_TYPE,
+    sign_spend,
+    sign_transaction,
+    EffectHash,
     // FVK types
-    FullViewingKey, NullifierKey, WalletId, FvkExportData, QR_TYPE_FVK_EXPORT,
+    FullViewingKey,
+    FvkExportData,
+    NullifierKey,
+    PenumbraAuthorizationData,
+    SpendKeyBytes,
+    WalletId,
+    PENUMBRA_COIN_TYPE,
+    QR_TYPE_FVK_EXPORT,
 };
 
 /// penumbra chain identifier in QR prelude (0x03)
@@ -106,17 +114,17 @@ fn parse_asset_metadata(data: &[u8]) -> Result<(Vec<String>, usize)> {
 /// parse a penumbra transaction from QR payload
 ///
 /// payload format v2 (extended with chain_id for security):
-/// [0x53][0x03][0x10]             - prelude (3 bytes)
-/// [chain_id_len:1]               - length of chain_id (0 = not provided)
-/// [chain_id: chain_id_len bytes] - chain_id string (e.g., "penumbra-1")
-/// [metadata]                     - asset names
-/// [plan_bytes_len:4 LE]          - length of plan bytes
-/// [plan_bytes]                   - raw protobuf plan
-/// [effect_hash:64]               - computed effect hash
-/// [spend_count:2 LE]             - number of spend randomizers
-/// [spend_randomizers:32 each]    - randomizer for each spend
-/// [vote_count:2 LE]              - number of vote randomizers
-/// [vote_randomizers:32 each]     - randomizer for each vote
+/// `[0x53][0x03][0x10]`             - prelude (3 bytes)
+/// `[chain_id_len:1]`               - length of chain_id (0 = not provided)
+/// `[chain_id: chain_id_len bytes]` - chain_id string (e.g., "penumbra-1")
+/// `[metadata]`                     - asset names
+/// `[plan_bytes_len:4 LE]`          - length of plan bytes
+/// `[plan_bytes]`                   - raw protobuf plan
+/// `[effect_hash:64]`               - computed effect hash
+/// `[spend_count:2 LE]`             - number of spend randomizers
+/// `[spend_randomizers:32 each]`    - randomizer for each spend
+/// `[vote_count:2 LE]`              - number of vote randomizers
+/// `[vote_randomizers:32 each]`     - randomizer for each vote
 ///
 /// SECURITY: chain_id is required for safe signing. If not provided,
 /// a warning will be displayed to the user.
@@ -157,7 +165,7 @@ pub fn parse_penumbra_transaction(data_hex: &str) -> Result<PenumbraTransactionP
         let first_byte = data[offset];
         // v2 format detection: chain_id length between 8-50 is clearly v2
         // (asset names are typically short like "um" = 2 chars)
-        if first_byte >= 8 && first_byte <= 50 {
+        if (8..=50).contains(&first_byte) {
             let chain_id_len = first_byte as usize;
             offset += 1;
 
@@ -198,7 +206,9 @@ pub fn parse_penumbra_transaction(data_hex: &str) -> Result<PenumbraTransactionP
     if offset + plan_len > data.len() {
         return Err(Error::PenumbraParseError(format!(
             "plan length {} exceeds data (offset={}, len={})",
-            plan_len, offset, data.len()
+            plan_len,
+            offset,
+            data.len()
         )));
     }
 
@@ -313,7 +323,8 @@ fn create_penumbra_cards(
     }
 
     // format effect hash for display
-    let effect_hash_display = plan.effect_hash
+    let effect_hash_display = plan
+        .effect_hash
         .map(|h| format!("{}...", hex::encode(&h[..16])))
         .unwrap_or_else(|| "not provided".to_string());
 
@@ -336,7 +347,9 @@ fn create_penumbra_cards(
     index += 1;
 
     // Parse and display actions using schema
-    if let Ok(parsed_actions) = decode_transaction_plan(&plan.plan_bytes, schema, &plan.asset_metadata) {
+    if let Ok(parsed_actions) =
+        decode_transaction_plan(&plan.plan_bytes, schema, &plan.asset_metadata)
+    {
         // Add action header
         method_cards.push(TransactionCard {
             index,
@@ -363,7 +376,10 @@ fn create_penumbra_cards(
             index,
             indent: 0,
             card: Card::TextCard {
-                f: format!("Transaction plan: {} bytes (parsing failed)", plan.plan_bytes.len()),
+                f: format!(
+                    "Transaction plan: {} bytes (parsing failed)",
+                    plan.plan_bytes.len()
+                ),
             },
         });
         index += 1;
@@ -412,8 +428,8 @@ pub fn process_penumbra_transaction(
     let plan = parse_penumbra_transaction(data_hex)?;
 
     // Load schema from database or use default
-    let schema = db_handling::penumbra::get_schema(database)
-        .unwrap_or_else(|_| default_penumbra_schema());
+    let schema =
+        db_handling::penumbra::get_schema(database).unwrap_or_else(|_| default_penumbra_schema());
 
     // create display cards with schema-based action parsing
     let content = create_penumbra_cards(&plan, &schema);

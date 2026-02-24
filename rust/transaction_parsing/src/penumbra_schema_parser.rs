@@ -3,7 +3,7 @@
 //! Parses schema update QR codes and validates them.
 //!
 //! QR Types:
-//! - 0x12: Full schema [0x53][0x03][0x12][version:4LE][checksum:32][schema_json]
+//! - `0x12`: Full schema `[0x53][0x03][0x12][version:4LE][checksum:32][schema_json]`
 //! - 0x13: Merkle schema digest (compact)
 //! - 0x14: Asset registry digest (compact)
 
@@ -12,15 +12,17 @@ use definitions::navigation::{
     Card, PenumbraSchemaInfo, TransactionAction, TransactionCard, TransactionCardSet,
 };
 use definitions::penumbra_schema::{
-    PenumbraActionSchema, RegistryDigest, SchemaDigest,
-    PENUMBRA_SCHEMA_QR_TYPE, PENUMBRA_MERKLE_SCHEMA_QR_TYPE, PENUMBRA_REGISTRY_QR_TYPE,
-    decode_registry_qr, decode_schema_digest_qr,
+    decode_registry_qr, decode_schema_digest_qr, PenumbraActionSchema, RegistryDigest,
+    SchemaDigest, PENUMBRA_SCHEMA_QR_TYPE,
 };
 
 use crate::{Error, Result};
 
 /// Process a Penumbra schema update QR - entry point for router
-pub fn process_penumbra_schema_update(database: &sled::Db, data_hex: &str) -> Result<TransactionAction> {
+pub fn process_penumbra_schema_update(
+    database: &sled::Db,
+    data_hex: &str,
+) -> Result<TransactionAction> {
     let (schema, action) = parse_penumbra_schema_update(data_hex)?;
 
     // Store schema in database
@@ -31,7 +33,9 @@ pub fn process_penumbra_schema_update(database: &sled::Db, data_hex: &str) -> Re
 }
 
 /// Parse a Penumbra schema update QR
-pub fn parse_penumbra_schema_update(data_hex: &str) -> Result<(PenumbraActionSchema, TransactionAction)> {
+pub fn parse_penumbra_schema_update(
+    data_hex: &str,
+) -> Result<(PenumbraActionSchema, TransactionAction)> {
     let data = unhex(data_hex)?;
 
     // Verify prelude: [0x53][crypto_type][tx_type]
@@ -61,9 +65,7 @@ pub fn parse_penumbra_schema_update(data_hex: &str) -> Result<(PenumbraActionSch
 
     if data.len() < 39 {
         // 3 (prelude) + 4 (version) + 32 (checksum) = 39 minimum
-        return Err(Error::PenumbraParseError(
-            "schema QR too short".to_string(),
-        ));
+        return Err(Error::PenumbraParseError("schema QR too short".to_string()));
     }
 
     // Parse version (4 bytes little-endian)
@@ -74,9 +76,8 @@ pub fn parse_penumbra_schema_update(data_hex: &str) -> Result<(PenumbraActionSch
 
     // Parse schema JSON
     let schema_bytes = &data[39..];
-    let schema: PenumbraActionSchema = serde_json::from_slice(schema_bytes).map_err(|e| {
-        Error::PenumbraParseError(format!("failed to parse schema JSON: {}", e))
-    })?;
+    let schema: PenumbraActionSchema = serde_json::from_slice(schema_bytes)
+        .map_err(|e| Error::PenumbraParseError(format!("failed to parse schema JSON: {}", e)))?;
 
     // Verify version matches
     if schema.version != version {
@@ -89,9 +90,7 @@ pub fn parse_penumbra_schema_update(data_hex: &str) -> Result<(PenumbraActionSch
     // Create display cards
     let cards = create_schema_cards(&schema);
     // Use Read action to display schema info before storing
-    let action = TransactionAction::Read {
-        r: Box::new(cards),
-    };
+    let action = TransactionAction::Read { r: Box::new(cards) };
 
     Ok((schema, action))
 }
@@ -194,12 +193,14 @@ fn simple_checksum(data: &[u8]) -> [u8; 32] {
 // =============================================================================
 
 /// Process a Penumbra schema digest QR (compact merkleized format)
-pub fn process_penumbra_schema_digest(database: &sled::Db, data_hex: &str) -> Result<TransactionAction> {
+pub fn process_penumbra_schema_digest(
+    database: &sled::Db,
+    data_hex: &str,
+) -> Result<TransactionAction> {
     let data = unhex(data_hex)?;
 
     // Decode using the binary format decoder
-    let digest = decode_schema_digest_qr(&data)
-        .map_err(|e| Error::PenumbraParseError(e))?;
+    let digest = decode_schema_digest_qr(&data).map_err(Error::PenumbraParseError)?;
 
     // Store in database
     db_handling::penumbra::store_schema_digest(database, &digest)
@@ -207,9 +208,7 @@ pub fn process_penumbra_schema_digest(database: &sled::Db, data_hex: &str) -> Re
 
     // Create display cards
     let cards = create_schema_digest_cards(&digest);
-    Ok(TransactionAction::Read {
-        r: Box::new(cards),
-    })
+    Ok(TransactionAction::Read { r: Box::new(cards) })
 }
 
 /// Create display cards for schema digest
@@ -252,7 +251,10 @@ fn create_schema_digest_cards(digest: &SchemaDigest) -> TransactionCardSet {
         index: 4,
         indent: 0,
         card: Card::TextCard {
-            f: format!("Merkle Root: {}...", &digest.root_hex()[..32.min(digest.root_hex().len())]),
+            f: format!(
+                "Merkle Root: {}...",
+                &digest.root_hex()[..32.min(digest.root_hex().len())]
+            ),
         },
     });
 
@@ -271,21 +273,19 @@ pub fn process_penumbra_registry(database: &sled::Db, data_hex: &str) -> Result<
     let data = unhex(data_hex)?;
 
     // Decode using the binary format decoder
-    let digest = decode_registry_qr(&data)
-        .map_err(|e| Error::PenumbraParseError(e))?;
+    let digest = decode_registry_qr(&data).map_err(Error::PenumbraParseError)?;
 
     // Store in database (both as current and by chain_id)
     db_handling::penumbra::store_registry_digest(database, &digest)
         .map_err(|e| Error::PenumbraParseError(format!("failed to store registry: {}", e)))?;
 
-    db_handling::penumbra::store_registry_for_chain(database, &digest.chain_id, &digest)
-        .map_err(|e| Error::PenumbraParseError(format!("failed to store registry for chain: {}", e)))?;
+    db_handling::penumbra::store_registry_for_chain(database, &digest.chain_id, &digest).map_err(
+        |e| Error::PenumbraParseError(format!("failed to store registry for chain: {}", e)),
+    )?;
 
     // Create display cards
     let cards = create_registry_cards(&digest);
-    Ok(TransactionAction::Read {
-        r: Box::new(cards),
-    })
+    Ok(TransactionAction::Read { r: Box::new(cards) })
 }
 
 /// Create display cards for registry digest
@@ -358,7 +358,10 @@ mod tests {
     fn test_encode_decode_roundtrip() {
         let schema = default_penumbra_schema();
         let encoded = encode_schema_to_qr(&schema).unwrap();
-        let hex = encoded.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let hex = encoded
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
 
         let (decoded, _) = parse_penumbra_schema_update(&hex).unwrap();
         assert_eq!(schema, decoded);

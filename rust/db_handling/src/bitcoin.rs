@@ -9,20 +9,20 @@
 
 use crate::error::{Error, Result};
 use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
-use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
-use bitcoin::secp256k1::PublicKey as Secp256k1PublicKey;
-use bitcoin::{Address, CompressedPublicKey, Network, PublicKey, Transaction};
-use bitcoin::psbt::Psbt;
-use bitcoin::sighash::{SighashCache, TapSighashType, EcdsaSighashType};
-use bitcoin::taproot::Signature as TaprootSignature;
 use bitcoin::ecdsa::Signature as EcdsaSignature;
 use bitcoin::hashes::Hash;
+use bitcoin::psbt::Psbt;
+use bitcoin::secp256k1::PublicKey as Secp256k1PublicKey;
+use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
+use bitcoin::sighash::{EcdsaSighashType, SighashCache, TapSighashType};
+use bitcoin::taproot::Signature as TaprootSignature;
+use bitcoin::{Address, CompressedPublicKey, Network, PublicKey, Transaction};
 use zeroize::Zeroize;
 
 /// BIP-44 purpose constants
-pub const PURPOSE_LEGACY: u32 = 44;      // P2PKH
-pub const PURPOSE_SEGWIT: u32 = 84;      // P2WPKH (native segwit)
-pub const PURPOSE_TAPROOT: u32 = 86;     // P2TR (taproot)
+pub const PURPOSE_LEGACY: u32 = 44; // P2PKH
+pub const PURPOSE_SEGWIT: u32 = 84; // P2WPKH (native segwit)
+pub const PURPOSE_TAPROOT: u32 = 86; // P2TR (taproot)
 
 /// SLIP-0044 coin types
 pub const COIN_TYPE_MAINNET: u32 = 0;
@@ -86,7 +86,7 @@ impl BitcoinKeyPair {
         let secp_pubkey = Secp256k1PublicKey::from_slice(&self.public_key)
             .map_err(|e| Error::Other(anyhow::anyhow!("Invalid public key: {}", e)))?;
 
-        let compressed = CompressedPublicKey(secp_pubkey.into());
+        let compressed = CompressedPublicKey(secp_pubkey);
 
         let address = match self.purpose {
             PURPOSE_LEGACY => {
@@ -102,7 +102,12 @@ impl BitcoinKeyPair {
                 let (xonly, _parity) = secp_pubkey.x_only_public_key();
                 Address::p2tr(&secp, xonly, None, self.network)
             }
-            _ => return Err(Error::Other(anyhow::anyhow!("Unknown purpose: {}", self.purpose))),
+            _ => {
+                return Err(Error::Other(anyhow::anyhow!(
+                    "Unknown purpose: {}",
+                    self.purpose
+                )))
+            }
         };
 
         Ok(address.to_string())
@@ -110,8 +115,8 @@ impl BitcoinKeyPair {
 
     /// Get the x-only public key (for taproot/schnorr)
     pub fn x_only_pubkey(&self) -> [u8; 32] {
-        let secp_pubkey = Secp256k1PublicKey::from_slice(&self.public_key)
-            .expect("Valid public key");
+        let secp_pubkey =
+            Secp256k1PublicKey::from_slice(&self.public_key).expect("Valid public key");
         let (xonly, _parity) = secp_pubkey.x_only_public_key();
         xonly.serialize()
     }
@@ -178,8 +183,12 @@ pub fn derive_bitcoin_key(
     };
 
     // Build derivation path
-    let path_str = format!("m/{}'/{}'/{}'/{}/{}", purpose, coin_type, account, change, address_index);
-    let path: DerivationPath = path_str.parse()
+    let path_str = format!(
+        "m/{}'/{}'/{}'/{}/{}",
+        purpose, coin_type, account, change, address_index
+    );
+    let path: DerivationPath = path_str
+        .parse()
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid derivation path: {}", e)))?;
 
     // Derive master key
@@ -188,7 +197,8 @@ pub fn derive_bitcoin_key(
         .map_err(|e| Error::Other(anyhow::anyhow!("Master key derivation failed: {}", e)))?;
 
     // Derive child key
-    let derived = master.derive_priv(&secp, &path)
+    let derived = master
+        .derive_priv(&secp, &path)
         .map_err(|e| Error::Other(anyhow::anyhow!("Key derivation failed: {}", e)))?;
 
     // Extract keys
@@ -217,7 +227,11 @@ pub fn derive_segwit_key(
     change: u32,
     index: u32,
 ) -> Result<BitcoinKeyPair> {
-    let network = if mainnet { Network::Bitcoin } else { Network::Testnet };
+    let network = if mainnet {
+        Network::Bitcoin
+    } else {
+        Network::Testnet
+    };
     derive_bitcoin_key(seed_phrase, PURPOSE_SEGWIT, network, account, change, index)
 }
 
@@ -230,8 +244,19 @@ pub fn derive_taproot_key(
     change: u32,
     index: u32,
 ) -> Result<BitcoinKeyPair> {
-    let network = if mainnet { Network::Bitcoin } else { Network::Testnet };
-    derive_bitcoin_key(seed_phrase, PURPOSE_TAPROOT, network, account, change, index)
+    let network = if mainnet {
+        Network::Bitcoin
+    } else {
+        Network::Testnet
+    };
+    derive_bitcoin_key(
+        seed_phrase,
+        PURPOSE_TAPROOT,
+        network,
+        account,
+        change,
+        index,
+    )
 }
 
 /// Parse Bitcoin derivation path
@@ -245,15 +270,23 @@ pub fn parse_bitcoin_path(path: &str) -> Result<(u32, bool, u32, u32, u32)> {
     if path.starts_with("m/") {
         let parts: Vec<&str> = path.trim_start_matches("m/").split('/').collect();
         if parts.len() >= 5 {
-            let purpose = parts[0].trim_end_matches('\'').parse::<u32>()
+            let purpose = parts[0]
+                .trim_end_matches('\'')
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let coin = parts[1].trim_end_matches('\'').parse::<u32>()
+            let coin = parts[1]
+                .trim_end_matches('\'')
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let account = parts[2].trim_end_matches('\'').parse::<u32>()
+            let account = parts[2]
+                .trim_end_matches('\'')
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let change = parts[3].parse::<u32>()
+            let change = parts[3]
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
-            let index = parts[4].parse::<u32>()
+            let index = parts[4]
+                .parse::<u32>()
                 .map_err(|_| Error::InvalidDerivation(path.to_string()))?;
 
             let mainnet = coin == COIN_TYPE_MAINNET;
@@ -266,7 +299,8 @@ pub fn parse_bitcoin_path(path: &str) -> Result<(u32, bool, u32, u32, u32)> {
     let parts: Vec<&str> = path.split("//").filter(|s| !s.is_empty()).collect();
 
     // Extract account number
-    let account = parts.iter()
+    let account = parts
+        .iter()
         .filter_map(|p| p.parse::<u32>().ok())
         .next()
         .unwrap_or(0);
@@ -287,30 +321,35 @@ pub fn parse_bitcoin_path(path: &str) -> Result<(u32, bool, u32, u32, u32)> {
 }
 
 /// Export extended public key (xpub/ypub/zpub) for watch-only wallet
-pub fn export_xpub(
-    seed_phrase: &str,
-    purpose: u32,
-    mainnet: bool,
-    account: u32,
-) -> Result<String> {
+pub fn export_xpub(seed_phrase: &str, purpose: u32, mainnet: bool, account: u32) -> Result<String> {
     use bip39::{Language, Mnemonic, Seed};
 
     let mnemonic = Mnemonic::from_phrase(seed_phrase, Language::English)
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid mnemonic: {}", e)))?;
     let seed = Seed::new(&mnemonic, "");
 
-    let network = if mainnet { Network::Bitcoin } else { Network::Testnet };
-    let coin_type = if mainnet { COIN_TYPE_MAINNET } else { COIN_TYPE_TESTNET };
+    let network = if mainnet {
+        Network::Bitcoin
+    } else {
+        Network::Testnet
+    };
+    let coin_type = if mainnet {
+        COIN_TYPE_MAINNET
+    } else {
+        COIN_TYPE_TESTNET
+    };
 
     let path_str = format!("m/{}'/{}'/{}'", purpose, coin_type, account);
-    let path: DerivationPath = path_str.parse()
+    let path: DerivationPath = path_str
+        .parse()
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid path: {}", e)))?;
 
     let secp = Secp256k1::new();
     let master = Xpriv::new_master(network, seed.as_bytes())
         .map_err(|e| Error::Other(anyhow::anyhow!("Master key error: {}", e)))?;
 
-    let derived = master.derive_priv(&secp, &path)
+    let derived = master
+        .derive_priv(&secp, &path)
         .map_err(|e| Error::Other(anyhow::anyhow!("Derivation error: {}", e)))?;
 
     let xpub = Xpub::from_priv(&secp, &derived);
@@ -376,9 +415,10 @@ pub struct PsbtInfo {
 
 /// Parse a PSBT from base64 string
 pub fn parse_psbt_base64(base64_str: &str) -> Result<Psbt> {
-    use bitcoin::base64::{Engine, engine::general_purpose::STANDARD};
+    use bitcoin::base64::{engine::general_purpose::STANDARD, Engine};
 
-    let bytes = STANDARD.decode(base64_str)
+    let bytes = STANDARD
+        .decode(base64_str)
         .map_err(|e| Error::Other(anyhow::anyhow!("Invalid base64: {}", e)))?;
 
     parse_psbt_bytes(&bytes)
@@ -386,12 +426,15 @@ pub fn parse_psbt_base64(base64_str: &str) -> Result<Psbt> {
 
 /// Parse a PSBT from raw bytes
 pub fn parse_psbt_bytes(bytes: &[u8]) -> Result<Psbt> {
-    Psbt::deserialize(bytes)
-        .map_err(|e| Error::Other(anyhow::anyhow!("Invalid PSBT: {}", e)))
+    Psbt::deserialize(bytes).map_err(|e| Error::Other(anyhow::anyhow!("Invalid PSBT: {}", e)))
 }
 
 /// Analyze a PSBT and extract display information
-pub fn analyze_psbt(psbt: &Psbt, our_pubkey: Option<&[u8; 33]>, network: Network) -> Result<PsbtInfo> {
+pub fn analyze_psbt(
+    psbt: &Psbt,
+    our_pubkey: Option<&[u8; 33]>,
+    network: Network,
+) -> Result<PsbtInfo> {
     let unsigned_tx = &psbt.unsigned_tx;
     let txid = unsigned_tx.compute_txid().to_string();
 
@@ -405,10 +448,15 @@ pub fn analyze_psbt(psbt: &Psbt, our_pubkey: Option<&[u8; 33]>, network: Network
         let prev_vout = tx_input.previous_output.vout;
 
         // Get amount from witness_utxo or non_witness_utxo
-        let amount = input.witness_utxo.as_ref().map(|utxo| utxo.value.to_sat())
+        let amount = input
+            .witness_utxo
+            .as_ref()
+            .map(|utxo| utxo.value.to_sat())
             .or_else(|| {
                 input.non_witness_utxo.as_ref().and_then(|tx| {
-                    tx.output.get(prev_vout as usize).map(|out| out.value.to_sat())
+                    tx.output
+                        .get(prev_vout as usize)
+                        .map(|out| out.value.to_sat())
                 })
             });
 
@@ -417,34 +465,47 @@ pub fn analyze_psbt(psbt: &Psbt, our_pubkey: Option<&[u8; 33]>, network: Network
         }
 
         // Try to determine address
-        let address = input.witness_utxo.as_ref()
+        let address = input
+            .witness_utxo
+            .as_ref()
             .and_then(|utxo| Address::from_script(&utxo.script_pubkey, network).ok())
             .map(|a| a.to_string());
 
         // Check if we can sign this input
-        let is_taproot = input.tap_key_sig.is_none() &&
-            (input.tap_internal_key.is_some() || input.witness_utxo.as_ref()
-                .map(|u| u.script_pubkey.is_p2tr()).unwrap_or(false));
+        let is_taproot = input.tap_key_sig.is_none()
+            && (input.tap_internal_key.is_some()
+                || input
+                    .witness_utxo
+                    .as_ref()
+                    .map(|u| u.script_pubkey.is_p2tr())
+                    .unwrap_or(false));
 
-        let can_sign = our_pubkey.map(|pk| {
-            // Check BIP32 derivations - keys in psbt are secp256k1::PublicKey
-            let in_bip32 = input.bip32_derivation.keys()
-                .any(|k| k.serialize() == *pk);
-            // Check tap key path
-            let in_tap = input.tap_internal_key
-                .map(|xonly| {
-                    let secp_pubkey = Secp256k1PublicKey::from_slice(pk).ok();
-                    secp_pubkey.map(|p| p.x_only_public_key().0 == xonly).unwrap_or(false)
-                }).unwrap_or(false);
-            in_bip32 || in_tap
-        }).unwrap_or(false);
+        let can_sign = our_pubkey
+            .map(|pk| {
+                // Check BIP32 derivations - keys in psbt are secp256k1::PublicKey
+                let in_bip32 = input.bip32_derivation.keys().any(|k| k.serialize() == *pk);
+                // Check tap key path
+                let in_tap = input
+                    .tap_internal_key
+                    .map(|xonly| {
+                        let secp_pubkey = Secp256k1PublicKey::from_slice(pk).ok();
+                        secp_pubkey
+                            .map(|p| p.x_only_public_key().0 == xonly)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+                in_bip32 || in_tap
+            })
+            .unwrap_or(false);
 
         if can_sign {
             signable_inputs += 1;
         }
 
         // Get derivation path hint
-        let derivation_path = input.bip32_derivation.values()
+        let derivation_path = input
+            .bip32_derivation
+            .values()
             .next()
             .map(|(_, path)| format!("{}", path));
 
@@ -472,7 +533,9 @@ pub fn analyze_psbt(psbt: &Psbt, our_pubkey: Option<&[u8; 33]>, network: Network
             .unwrap_or_else(|_| "unknown".to_string());
 
         // Check if this is change (has BIP32 derivation in psbt output)
-        let is_change = psbt.outputs.get(i)
+        let is_change = psbt
+            .outputs
+            .get(i)
             .map(|o| !o.bip32_derivation.is_empty() || o.tap_internal_key.is_some())
             .unwrap_or(false);
 
@@ -486,7 +549,8 @@ pub fn analyze_psbt(psbt: &Psbt, our_pubkey: Option<&[u8; 33]>, network: Network
     let fee = total_input.saturating_sub(total_output);
 
     // Estimate fee rate (rough estimate based on typical tx size)
-    let estimated_vsize = (unsigned_tx.input.len() * 68 + unsigned_tx.output.len() * 31 + 10) as f64;
+    let estimated_vsize =
+        (unsigned_tx.input.len() * 68 + unsigned_tx.output.len() * 31 + 10) as f64;
     let fee_rate = fee as f64 / estimated_vsize;
 
     Ok(PsbtInfo {
@@ -525,15 +589,20 @@ pub fn sign_psbt(psbt: &mut Psbt, keypair: &BitcoinKeyPair) -> Result<usize> {
         let input = &psbt.inputs[i];
 
         // Determine if this is a Taproot input
-        let is_taproot = input.tap_internal_key.is_some() ||
-            input.witness_utxo.as_ref()
+        let is_taproot = input.tap_internal_key.is_some()
+            || input
+                .witness_utxo
+                .as_ref()
                 .map(|u| u.script_pubkey.is_p2tr())
                 .unwrap_or(false);
 
         // Check if we should sign this input
         let should_sign = if is_taproot {
             // For Taproot, check internal key matches our x-only pubkey
-            input.tap_internal_key.map(|k| k == x_only_pubkey).unwrap_or(false)
+            input
+                .tap_internal_key
+                .map(|k| k == x_only_pubkey)
+                .unwrap_or(false)
         } else {
             // For SegWit, check BIP32 derivations - keys are secp256k1::PublicKey
             input.bip32_derivation.keys().any(|k| *k == secp_pubkey)
@@ -553,7 +622,8 @@ pub fn sign_psbt(psbt: &mut Psbt, keypair: &BitcoinKeyPair) -> Result<usize> {
                         prevouts.push(u.clone());
                     } else {
                         return Err(Error::Other(anyhow::anyhow!(
-                            "Missing witness_utxo for Taproot input {}", j
+                            "Missing witness_utxo for Taproot input {}",
+                            j
                         )));
                     }
                 }
@@ -582,9 +652,8 @@ pub fn sign_psbt(psbt: &mut Psbt, keypair: &BitcoinKeyPair) -> Result<usize> {
             // Sign SegWit (P2WPKH)
             if let Some(utxo) = &input.witness_utxo {
                 let script_code = bitcoin::script::ScriptBuf::new_p2wpkh(
-                    &bitcoin::WPubkeyHash::from_slice(
-                        &utxo.script_pubkey.as_bytes()[2..]
-                    ).map_err(|e| Error::Other(anyhow::anyhow!("Script error: {}", e)))?
+                    &bitcoin::WPubkeyHash::from_slice(&utxo.script_pubkey.as_bytes()[2..])
+                        .map_err(|e| Error::Other(anyhow::anyhow!("Script error: {}", e)))?,
                 );
 
                 let sighash = sighash_cache
@@ -619,9 +688,8 @@ pub fn finalize_psbt(psbt: &mut Psbt) -> Result<Transaction> {
         if input.tap_key_sig.is_some() {
             // Taproot key-path spend - just needs the signature
             if let Some(sig) = &input.tap_key_sig {
-                psbt.inputs[i].final_script_witness = Some(
-                    bitcoin::Witness::from_slice(&[sig.to_vec()])
-                );
+                psbt.inputs[i].final_script_witness =
+                    Some(bitcoin::Witness::from_slice(&[sig.to_vec()]));
             }
         } else if !input.partial_sigs.is_empty() {
             // SegWit (P2WPKH) - needs signature and pubkey
@@ -645,7 +713,7 @@ pub fn finalize_psbt(psbt: &mut Psbt) -> Result<Transaction> {
 
 /// Serialize a PSBT to base64 string
 pub fn psbt_to_base64(psbt: &Psbt) -> String {
-    use bitcoin::base64::{Engine, engine::general_purpose::STANDARD};
+    use bitcoin::base64::{engine::general_purpose::STANDARD, Engine};
     STANDARD.encode(psbt.serialize())
 }
 
@@ -665,7 +733,11 @@ pub fn format_sats(satoshis: u64) -> String {
     if satoshis >= 100_000_000 {
         format_btc(satoshis)
     } else if satoshis >= 1000 {
-        format!("{} sats ({:.4} mBTC)", satoshis, satoshis as f64 / 100_000.0)
+        format!(
+            "{} sats ({:.4} mBTC)",
+            satoshis,
+            satoshis as f64 / 100_000.0
+        )
     } else {
         format!("{} sats", satoshis)
     }
@@ -697,7 +769,7 @@ mod tests {
         let address = key.address().unwrap();
 
         println!("Taproot public key: {}", hex::encode(&key.public_key));
-        println!("Taproot x-only: {}", hex::encode(&key.x_only_pubkey()));
+        println!("Taproot x-only: {}", hex::encode(key.x_only_pubkey()));
         println!("Taproot address: {}", address);
 
         // Taproot addresses start with bc1p
@@ -728,7 +800,7 @@ mod tests {
         let signature = key.sign_schnorr(&message_hash).unwrap();
 
         assert_eq!(signature.len(), 64);
-        println!("Schnorr signature: {}", hex::encode(&signature));
+        println!("Schnorr signature: {}", hex::encode(signature));
     }
 
     #[test]
@@ -758,7 +830,8 @@ mod tests {
     #[test]
     fn test_parse_bitcoin_path() {
         // Full path
-        let (purpose, mainnet, account, change, index) = parse_bitcoin_path("m/84'/0'/0'/0/0").unwrap();
+        let (purpose, mainnet, account, change, index) =
+            parse_bitcoin_path("m/84'/0'/0'/0/0").unwrap();
         assert_eq!(purpose, 84);
         assert!(mainnet);
         assert_eq!(account, 0);
@@ -786,7 +859,7 @@ mod tests {
 
     #[test]
     fn test_psbt_create_and_analyze() {
-        use bitcoin::{Amount, OutPoint, Sequence, ScriptBuf, TxIn, TxOut, Txid};
+        use bitcoin::{Amount, OutPoint, ScriptBuf, Sequence, TxIn, TxOut, Txid};
         use std::str::FromStr;
 
         // Create a minimal PSBT for testing
@@ -796,8 +869,9 @@ mod tests {
             input: vec![TxIn {
                 previous_output: OutPoint {
                     txid: Txid::from_str(
-                        "0000000000000000000000000000000000000000000000000000000000000001"
-                    ).unwrap(),
+                        "0000000000000000000000000000000000000000000000000000000000000001",
+                    )
+                    .unwrap(),
                     vout: 0,
                 },
                 script_sig: ScriptBuf::new(),
@@ -807,9 +881,8 @@ mod tests {
             output: vec![TxOut {
                 value: Amount::from_sat(50000),
                 script_pubkey: ScriptBuf::new_p2wpkh(
-                    &bitcoin::WPubkeyHash::from_str(
-                        "751e76e8199196d454941c45d1b3a323f1433bd6"
-                    ).unwrap()
+                    &bitcoin::WPubkeyHash::from_str("751e76e8199196d454941c45d1b3a323f1433bd6")
+                        .unwrap(),
                 ),
             }],
         };
@@ -820,9 +893,8 @@ mod tests {
         psbt.inputs[0].witness_utxo = Some(TxOut {
             value: Amount::from_sat(100000),
             script_pubkey: ScriptBuf::new_p2wpkh(
-                &bitcoin::WPubkeyHash::from_str(
-                    "751e76e8199196d454941c45d1b3a323f1433bd6"
-                ).unwrap()
+                &bitcoin::WPubkeyHash::from_str("751e76e8199196d454941c45d1b3a323f1433bd6")
+                    .unwrap(),
             ),
         });
 
@@ -846,7 +918,7 @@ mod tests {
 
     #[test]
     fn test_psbt_serialization() {
-        use bitcoin::{Amount, OutPoint, Sequence, ScriptBuf, TxIn, TxOut, Txid};
+        use bitcoin::{Amount, OutPoint, ScriptBuf, Sequence, TxIn, TxOut, Txid};
         use std::str::FromStr;
 
         let tx = Transaction {
@@ -855,8 +927,9 @@ mod tests {
             input: vec![TxIn {
                 previous_output: OutPoint {
                     txid: Txid::from_str(
-                        "0000000000000000000000000000000000000000000000000000000000000001"
-                    ).unwrap(),
+                        "0000000000000000000000000000000000000000000000000000000000000001",
+                    )
+                    .unwrap(),
                     vout: 0,
                 },
                 script_sig: ScriptBuf::new(),
@@ -866,9 +939,8 @@ mod tests {
             output: vec![TxOut {
                 value: Amount::from_sat(50000),
                 script_pubkey: ScriptBuf::new_p2wpkh(
-                    &bitcoin::WPubkeyHash::from_str(
-                        "751e76e8199196d454941c45d1b3a323f1433bd6"
-                    ).unwrap()
+                    &bitcoin::WPubkeyHash::from_str("751e76e8199196d454941c45d1b3a323f1433bd6")
+                        .unwrap(),
                 ),
             }],
         };
@@ -878,15 +950,18 @@ mod tests {
         // Test base64 serialization
         let base64_str = psbt_to_base64(&psbt);
         println!("PSBT base64: {}", base64_str);
-        assert!(base64_str.starts_with("cHNidP8"));  // PSBT magic
+        assert!(base64_str.starts_with("cHNidP8")); // PSBT magic
 
         // Test hex serialization
         let hex_str = psbt_to_hex(&psbt);
         println!("PSBT hex: {}", hex_str);
-        assert!(hex_str.starts_with("70736274ff"));  // PSBT magic in hex
+        assert!(hex_str.starts_with("70736274ff")); // PSBT magic in hex
 
         // Test round-trip
         let parsed = parse_psbt_base64(&base64_str).unwrap();
-        assert_eq!(parsed.unsigned_tx.compute_txid(), psbt.unsigned_tx.compute_txid());
+        assert_eq!(
+            parsed.unsigned_tx.compute_txid(),
+            psbt.unsigned_tx.compute_txid()
+        );
     }
 }

@@ -21,6 +21,9 @@
 #![deny(unused_crate_dependencies)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![allow(clippy::let_unit_value)]
+#![allow(clippy::unnecessary_struct_initialization)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::unneeded_struct_pattern)]
 
 // These crates are used by pczt but need to be declared here
 // to satisfy the unused_crate_dependencies lint
@@ -378,19 +381,30 @@ fn try_create_address_by_genesis(
     use sp_core::H256;
 
     let db = get_db()?;
-    let genesis_hash_bytes = hex::decode(genesis_hash_hex)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Invalid genesis hash hex: {e}") })?;
+    let genesis_hash_bytes = hex::decode(genesis_hash_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Invalid genesis hash hex: {e}"),
+    })?;
     if genesis_hash_bytes.len() != 32 {
-        return Err(ErrorDisplayed::Str { s: "Genesis hash must be 32 bytes".to_string() });
+        return Err(ErrorDisplayed::Str {
+            s: "Genesis hash must be 32 bytes".to_string(),
+        });
     }
     let genesis_hash = H256::from_slice(&genesis_hash_bytes);
 
     let specs_invariants = genesis_hash_in_specs(&db, genesis_hash)
         .map_err(|e| ErrorDisplayed::Str { s: format!("{e}") })?
-        .ok_or_else(|| ErrorDisplayed::Str { s: format!("Network with genesis hash {} not found", genesis_hash_hex) })?;
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: format!("Network with genesis hash {} not found", genesis_hash_hex),
+        })?;
 
-    db_handling::identities::try_create_address(&db, seed_name, seed_phrase, path, &specs_invariants.first_network_specs_key)
-        .map_err(|e| e.to_string().into())
+    db_handling::identities::try_create_address(
+        &db,
+        seed_name,
+        seed_phrase,
+        path,
+        &specs_invariants.first_network_specs_key,
+    )
+    .map_err(|e| e.to_string().into())
 }
 
 /// Must be called with `DecodeSequenceResult::DynamicDerivationTransaction` payload
@@ -661,8 +675,8 @@ fn bs_generate_passphrase(n: u32) -> String {
 /// Returns JSON: {"v":2,"name":"...","accounts":[{"path":"...","genesis_hash":"...","network":"...","encryption":"..."}]}
 /// The seed phrase must be restored separately via banana split or manual entry
 fn bs_export_backup_data(seed_name: &str, _seed_phrase: &str) -> Result<String, ErrorDisplayed> {
-    use db_handling::identities::get_addresses_by_seed_name;
     use db_handling::helpers::try_get_network_specs;
+    use db_handling::identities::get_addresses_by_seed_name;
     use serde_json::{json, Value};
 
     let db = get_db()?;
@@ -674,17 +688,23 @@ fn bs_export_backup_data(seed_name: &str, _seed_phrase: &str) -> Result<String, 
         .filter(|(_, details)| !details.is_root()) // skip root key, only derived accounts
         .map(|(_, details)| {
             // Look up network specs to get genesis_hash, network name, and base58prefix
-            let (genesis_hash, network_name, base58prefix) = if let Some(ref network_id) = details.network_id {
+            let (genesis_hash, network_name, base58prefix) = if let Some(ref network_id) =
+                details.network_id
+            {
                 if let Ok(Some(specs)) = try_get_network_specs(&db, network_id) {
                     // Only include base58prefix for Substrate networks (sr25519/ed25519/ecdsa)
                     // Zcash and Penumbra don't use SS58 addresses
                     let prefix: Option<u16> = match details.encryption {
-                        definitions::crypto::Encryption::Sr25519 |
-                        definitions::crypto::Encryption::Ed25519 |
-                        definitions::crypto::Encryption::Ecdsa => Some(specs.specs.base58prefix),
+                        definitions::crypto::Encryption::Sr25519
+                        | definitions::crypto::Encryption::Ed25519
+                        | definitions::crypto::Encryption::Ecdsa => Some(specs.specs.base58prefix),
                         _ => None,
                     };
-                    (Some(hex::encode(specs.specs.genesis_hash)), Some(specs.specs.name), prefix)
+                    (
+                        Some(hex::encode(specs.specs.genesis_hash)),
+                        Some(specs.specs.name),
+                        prefix,
+                    )
                 } else {
                     (None, None, None)
                 }
@@ -716,7 +736,11 @@ fn bs_export_backup_data(seed_name: &str, _seed_phrase: &str) -> Result<String, 
 /// Export seed backup as UR-encoded multipart QR frames for device-to-device migration
 /// Returns QR image data ready for display as animated QR
 /// max_fragment_len: max bytes per QR frame (0 = single QR, 200-500 typical for animated)
-fn export_backup_qr(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -> Result<Vec<QrData>, ErrorDisplayed> {
+fn export_backup_qr(
+    seed_name: &str,
+    seed_phrase: &str,
+    max_fragment_len: u32,
+) -> Result<Vec<QrData>, ErrorDisplayed> {
     let ur_strings = export_backup_ur(seed_name, seed_phrase, max_fragment_len)?;
 
     // Convert each UR string to a QR image
@@ -725,7 +749,9 @@ fn export_backup_qr(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -
         .map(|ur_string| {
             qrcode_static::png_qr_from_string(&ur_string, qrcode_static::DataType::Sensitive)
                 .map(|data| QrData::Sensitive { data })
-                .map_err(|e| ErrorDisplayed::Str { s: format!("QR encoding error: {e}") })
+                .map_err(|e| ErrorDisplayed::Str {
+                    s: format!("QR encoding error: {e}"),
+                })
         })
         .collect();
 
@@ -735,7 +761,11 @@ fn export_backup_qr(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -
 /// Export seed backup as UR-encoded multipart string frames for device-to-device migration
 /// Uses fountain codes for reliable animated QR scanning
 /// max_fragment_len: max bytes per QR frame (0 = single QR, 200-500 typical for animated)
-fn export_backup_ur(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -> Result<Vec<String>, ErrorDisplayed> {
+fn export_backup_ur(
+    seed_name: &str,
+    seed_phrase: &str,
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
     // Get JSON backup data
     let json_data = bs_export_backup_data(seed_name, seed_phrase)?;
     let data_bytes = json_data.as_bytes();
@@ -767,13 +797,12 @@ fn export_backup_ur(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -
         Ok(vec![ur_string])
     } else {
         // Multi-part (animated) UR using fountain codes
-        let mut encoder = ur::ur::Encoder::new(
-            &cbor_data,
-            max_fragment_len as usize,
-            "zigner-backup",
-        ).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to create UR encoder: {:?}", e),
-        })?;
+        let mut encoder =
+            ur::ur::Encoder::new(&cbor_data, max_fragment_len as usize, "zigner-backup").map_err(
+                |e| ErrorDisplayed::Str {
+                    s: format!("Failed to create UR encoder: {:?}", e),
+                },
+            )?;
 
         // Generate enough frames for reliable scanning (2x the minimum)
         let frame_count = encoder.fragment_count() * 2;
@@ -791,13 +820,16 @@ fn export_backup_ur(seed_name: &str, seed_phrase: &str, max_fragment_len: u32) -
 /// Decode UR-encoded backup and return JSON string
 fn decode_backup_ur(ur_parts: Vec<String>) -> Result<String, ErrorDisplayed> {
     if ur_parts.is_empty() {
-        return Err(ErrorDisplayed::Str { s: "No UR parts provided".to_string() });
+        return Err(ErrorDisplayed::Str {
+            s: "No UR parts provided".to_string(),
+        });
     }
 
     // Try single-part decode first
     if ur_parts.len() == 1 {
-        let (_, cbor_data) = ur::ur::decode(&ur_parts[0])
-            .map_err(|e| ErrorDisplayed::Str { s: format!("UR decode error: {:?}", e) })?;
+        let (_, cbor_data) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
+            s: format!("UR decode error: {:?}", e),
+        })?;
         return extract_backup_json_from_cbor(&cbor_data);
     }
 
@@ -805,19 +837,30 @@ fn decode_backup_ur(ur_parts: Vec<String>) -> Result<String, ErrorDisplayed> {
     let mut decoder = ur::ur::Decoder::default();
 
     for part in &ur_parts {
-        decoder.receive(part)
-            .map_err(|e| ErrorDisplayed::Str { s: format!("UR receive error: {:?}", e) })?;
+        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
+            s: format!("UR receive error: {:?}", e),
+        })?;
 
         if decoder.complete() {
             match decoder.message() {
                 Ok(Some(cbor_data)) => return extract_backup_json_from_cbor(&cbor_data),
-                Ok(None) => return Err(ErrorDisplayed::Str { s: "UR decoder complete but no message".to_string() }),
-                Err(e) => return Err(ErrorDisplayed::Str { s: format!("UR message error: {:?}", e) }),
+                Ok(None) => {
+                    return Err(ErrorDisplayed::Str {
+                        s: "UR decoder complete but no message".to_string(),
+                    })
+                }
+                Err(e) => {
+                    return Err(ErrorDisplayed::Str {
+                        s: format!("UR message error: {:?}", e),
+                    })
+                }
             }
         }
     }
 
-    Err(ErrorDisplayed::Str { s: "Incomplete UR data - need more frames".to_string() })
+    Err(ErrorDisplayed::Str {
+        s: "Incomplete UR data - need more frames".to_string(),
+    })
 }
 
 fn extract_backup_json_from_cbor(cbor_data: &[u8]) -> Result<String, ErrorDisplayed> {
@@ -826,8 +869,9 @@ fn extract_backup_json_from_cbor(cbor_data: &[u8]) -> Result<String, ErrorDispla
         s: format!("Failed to parse CBOR: {}", e),
     })?;
 
-    String::from_utf8(json_bytes)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Invalid UTF-8 in backup: {e}") })
+    String::from_utf8(json_bytes).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Invalid UTF-8 in backup: {e}"),
+    })
 }
 
 fn sign_metadata_with_key(
@@ -902,17 +946,20 @@ fn sign_network_spec_with_key(
 ///   ? 3: tstr                ; name - optional label
 /// }
 /// ```
+#[allow(clippy::vec_init_then_push)]
 fn export_penumbra_fvk(
     seed_phrase: &str,
     account_index: u32,
     label: &str,
 ) -> Result<PenumbraFvkExport, ErrorDisplayed> {
-    use transaction_signing::penumbra::{FvkExportData, FullViewingKey, SpendKeyBytes};
+    use transaction_signing::penumbra::{FullViewingKey, FvkExportData, SpendKeyBytes};
 
     // Derive spend key from seed phrase
-    let spend_key_bytes = SpendKeyBytes::from_seed_phrase(seed_phrase, account_index)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to derive spend key: {e}"),
+    let spend_key_bytes =
+        SpendKeyBytes::from_seed_phrase(seed_phrase, account_index).map_err(|e| {
+            ErrorDisplayed::Str {
+                s: format!("Failed to derive spend key: {e}"),
+            }
         })?;
 
     // Create FVK export data
@@ -922,10 +969,11 @@ fn export_penumbra_fvk(
         Some(label.to_string())
     };
     let export_data =
-        FvkExportData::from_spend_key(&spend_key_bytes, account_index, label_opt.clone())
-            .map_err(|e| ErrorDisplayed::Str {
+        FvkExportData::from_spend_key(&spend_key_bytes, account_index, label_opt.clone()).map_err(
+            |e| ErrorDisplayed::Str {
                 s: format!("Failed to create FVK export: {e}"),
-            })?;
+            },
+        )?;
 
     // Get bech32m encoded strings
     let fvk = FullViewingKey::derive_from(&spend_key_bytes).map_err(|e| ErrorDisplayed::Str {
@@ -1185,12 +1233,11 @@ fn sign_cosmos_transaction(
 fn parse_penumbra_sign_request(qr_hex: &str) -> Result<PenumbraSignRequest, ErrorDisplayed> {
     use transaction_parsing::penumbra::parse_penumbra_transaction;
 
-    let plan = parse_penumbra_transaction(qr_hex)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse Penumbra QR: {e}") })?;
+    let plan = parse_penumbra_transaction(qr_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse Penumbra QR: {e}"),
+    })?;
 
-    let effect_hash_hex = plan.effect_hash
-        .map(|h| hex::encode(h))
-        .unwrap_or_default();
+    let effect_hash_hex = plan.effect_hash.map(hex::encode).unwrap_or_default();
 
     Ok(PenumbraSignRequest {
         chain_id: plan.chain_id.unwrap_or_default(),
@@ -1207,19 +1254,26 @@ fn sign_penumbra_transaction(
     seed_phrase: &str,
     request: PenumbraSignRequest,
 ) -> Result<Vec<u8>, ErrorDisplayed> {
-    use transaction_parsing::penumbra::{parse_penumbra_transaction, SpendKeyBytes, sign_transaction};
+    use transaction_parsing::penumbra::{
+        parse_penumbra_transaction, sign_transaction, SpendKeyBytes,
+    };
     use transaction_signing::penumbra::verify_effect_hash;
 
     // Re-parse to get the full plan data
-    let plan = parse_penumbra_transaction(&request.raw_qr_hex)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Failed to parse Penumbra QR: {e}") })?;
+    let plan =
+        parse_penumbra_transaction(&request.raw_qr_hex).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to parse Penumbra QR: {e}"),
+        })?;
 
-    let effect_hash = plan.effect_hash
-        .ok_or_else(|| ErrorDisplayed::Str { s: "No effect hash in QR".to_string() })?;
+    let effect_hash = plan.effect_hash.ok_or_else(|| ErrorDisplayed::Str {
+        s: "No effect hash in QR".to_string(),
+    })?;
 
     // Derive spend key from seed phrase (account 0)
-    let spend_key = SpendKeyBytes::from_seed_phrase(seed_phrase, 0)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("Key derivation failed: {e}") })?;
+    let spend_key =
+        SpendKeyBytes::from_seed_phrase(seed_phrase, 0).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Key derivation failed: {e}"),
+        })?;
 
     // SECURITY: Verify the effect hash from the QR matches what we compute
     // from the plan + our FVK. This prevents a compromised hot wallet from
@@ -1234,7 +1288,10 @@ fn sign_penumbra_transaction(
         &plan.delegator_vote_randomizers,
         &plan.lqt_vote_randomizers,
         &spend_key,
-    ).map_err(|e| ErrorDisplayed::Str { s: format!("Signing failed: {e}") })?;
+    )
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("Signing failed: {e}"),
+    })?;
 
     // Encode as QR response bytes
     Ok(auth_data.encode())
@@ -1308,10 +1365,11 @@ fn export_zcash_fvk(
     use transaction_signing::zcash::{OrchardSpendingKey, QR_TYPE_ZCASH_FVK_EXPORT};
 
     // Derive Orchard spending key from seed phrase using ZIP-32 derivation
-    let osk = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index)
-        .map_err(|e| ErrorDisplayed::Str {
+    let osk = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index).map_err(|e| {
+        ErrorDisplayed::Str {
             s: format!("Failed to derive Orchard key: {e}"),
-        })?;
+        }
+    })?;
 
     // Get FVK bytes (96 bytes raw orchard full viewing key)
     let fvk_bytes = osk.fvk_bytes();
@@ -1326,7 +1384,7 @@ fn export_zcash_fvk(
     // Generate seed fingerprint: first 16 bytes of SHA256(seed_phrase)
     // This allows Zashi to match accounts to the same seed without revealing the seed
     let seed_fingerprint = {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let hash = Sha256::digest(seed_phrase.as_bytes());
         hash[..16].to_vec()
     };
@@ -1426,7 +1484,8 @@ fn export_zcash_fvk(
     // flags: bit 0 = mainnet, bit 1 = has orchard, bit 2 = has transparent, bit 3 = has address
     let flags: u8 = (if mainnet { 0x01 } else { 0x00 }) | 0x02 | 0x08; // has orchard + has address
 
-    let mut qr_data = Vec::with_capacity(3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len());
+    let mut qr_data =
+        Vec::with_capacity(3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len());
     qr_data.push(0x53); // 'S' for Signer (substrate compat)
     qr_data.push(0x04); // Zcash chain ID
     qr_data.push(QR_TYPE_ZCASH_FVK_EXPORT);
@@ -1444,7 +1503,7 @@ fn export_zcash_fvk(
         label: label.to_string(),
         mainnet,
         address,
-        fvk_hex: hex::encode(&fvk_bytes),
+        fvk_hex: hex::encode(fvk_bytes),
         ufvk,
         qr_data,
         ur_string,
@@ -1461,7 +1520,7 @@ fn parse_zcash_sign_request(qr_hex: &str) -> Result<ZcashSignRequest, ErrorDispl
 
     Ok(ZcashSignRequest {
         account_index: request.account_index,
-        sighash: hex::encode(&request.sighash),
+        sighash: hex::encode(request.sighash),
         alphas: request.orchard_alphas.iter().map(hex::encode).collect(),
         summary: request.summary,
         mainnet: request.mainnet,
@@ -1516,7 +1575,7 @@ fn sign_zcash_transaction(
         })?;
 
     Ok(ZcashSignatureResponse {
-        sighash: hex::encode(&response.sighash),
+        sighash: hex::encode(response.sighash),
         orchard_sigs: response.orchard_sigs.iter().map(hex::encode).collect(),
     })
 }
@@ -1581,10 +1640,9 @@ fn generate_test_zcash_sign_request(
 
     // sighash (32 bytes) - use deterministic test value
     let test_sighash: [u8; 32] = [
-        0xde, 0xad, 0xbe, 0xef, 0x12, 0x34, 0x56, 0x78,
-        0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44,
-        0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
-        0xdd, 0xee, 0xff, 0x00, 0x01, 0x02, 0x03, 0x04,
+        0xde, 0xad, 0xbe, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33,
+        0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x01, 0x02,
+        0x03, 0x04,
     ];
     data.extend_from_slice(&test_sighash);
 
@@ -1595,8 +1653,8 @@ fn generate_test_zcash_sign_request(
     for i in 0..action_count {
         let mut alpha = [0u8; 32];
         // fill with pattern based on index
-        for j in 0..32 {
-            alpha[j] = (i as u8).wrapping_mul(17).wrapping_add(j as u8);
+        for (j, byte) in alpha.iter_mut().enumerate() {
+            *byte = (i as u8).wrapping_mul(17).wrapping_add(j as u8);
         }
         data.extend_from_slice(&alpha);
     }
@@ -1644,7 +1702,10 @@ fn decode_ur_zcash_pczt(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDisplayed
         let lower = ur_string.to_lowercase();
         if !lower.starts_with("ur:zcash-pczt/") {
             return Err(ErrorDisplayed::Str {
-                s: format!("Expected ur:zcash-pczt/... got: {}", ur_string.chars().take(30).collect::<String>()),
+                s: format!(
+                    "Expected ur:zcash-pczt/... got: {}",
+                    ur_string.chars().take(30).collect::<String>()
+                ),
             });
         }
         Ok(())
@@ -1687,11 +1748,14 @@ fn decode_ur_zcash_pczt(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDisplayed
             });
         }
 
-        let cbor_data = decoder.message().map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to get UR message: {:?}", e),
-        })?.ok_or_else(|| ErrorDisplayed::Str {
-            s: "UR decoder returned None despite being complete".to_string(),
-        })?;
+        let cbor_data = decoder
+            .message()
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to get UR message: {:?}", e),
+            })?
+            .ok_or_else(|| ErrorDisplayed::Str {
+                s: "UR decoder returned None despite being complete".to_string(),
+            })?;
 
         extract_pczt_from_cbor(&cbor_data)
     }
@@ -1741,7 +1805,10 @@ fn parse_cbor_bytes(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
     let additional = first & 0x1f;
 
     if major_type != 2 {
-        return Err(format!("Expected bytes (major type 2), got: {}", major_type));
+        return Err(format!(
+            "Expected bytes (major type 2), got: {}",
+            major_type
+        ));
     }
 
     let (len, header_len) = match additional {
@@ -1762,7 +1829,10 @@ fn parse_cbor_bytes(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
             if data.len() < 5 {
                 return Err("Truncated CBOR length".to_string());
             }
-            (u32::from_be_bytes([data[1], data[2], data[3], data[4]]) as usize, 5)
+            (
+                u32::from_be_bytes([data[1], data[2], data[3], data[4]]) as usize,
+                5,
+            )
         }
         _ => return Err(format!("Unsupported CBOR additional info: {}", additional)),
     };
@@ -1771,7 +1841,10 @@ fn parse_cbor_bytes(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
         return Err("Truncated CBOR bytes".to_string());
     }
 
-    Ok((data[header_len..header_len + len].to_vec(), header_len + len))
+    Ok((
+        data[header_len..header_len + len].to_vec(),
+        header_len + len,
+    ))
 }
 
 /// Sign a PCZT and return the signed PCZT bytes
@@ -1785,8 +1858,8 @@ fn sign_zcash_pczt(
     account_index: u32,
     pczt_bytes: Vec<u8>,
 ) -> Result<Vec<u8>, ErrorDisplayed> {
-    use pczt::Pczt;
     use pczt::roles::signer::Signer;
+    use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
     // Parse the PCZT to get action count first
@@ -1798,15 +1871,19 @@ fn sign_zcash_pczt(
     let action_count = pczt.orchard().actions().len();
 
     // Derive the orchard spending key from seed
-    let spending_key = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to derive spending key: {}", e),
+    let spending_key =
+        OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index).map_err(|e| {
+            ErrorDisplayed::Str {
+                s: format!("Failed to derive spending key: {}", e),
+            }
         })?;
 
     // Get the actual orchard spending key for signing
-    let orchard_sk = spending_key.to_spending_key().map_err(|e| ErrorDisplayed::Str {
-        s: format!("Failed to get orchard spending key: {}", e),
-    })?;
+    let orchard_sk = spending_key
+        .to_spending_key()
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to get orchard spending key: {}", e),
+        })?;
 
     // Create signer
     let mut signer = Signer::new(pczt).map_err(|e| ErrorDisplayed::Str {
@@ -1819,9 +1896,11 @@ fn sign_zcash_pczt(
 
     // Sign each action
     for action_index in 0..action_count {
-        signer.sign_orchard(action_index, &ask).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to sign orchard action {}: {:?}", action_index, e),
-        })?;
+        signer
+            .sign_orchard(action_index, &ask)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to sign orchard action {}: {:?}", action_index, e),
+            })?;
     }
 
     // Finish signing and get the signed PCZT
@@ -1833,7 +1912,10 @@ fn sign_zcash_pczt(
 
 /// Encode signed PCZT as UR string(s) for QR display
 /// Returns a vector of UR parts for animated QR (or single part for small PCZTs)
-fn encode_signed_pczt_ur(pczt_bytes: Vec<u8>, max_fragment_len: u32) -> Result<Vec<String>, ErrorDisplayed> {
+fn encode_signed_pczt_ur(
+    pczt_bytes: Vec<u8>,
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
     // Wrap PCZT bytes in CBOR: { 1: bytes }
     let cbor_data = encode_pczt_to_cbor(&pczt_bytes);
 
@@ -1843,13 +1925,10 @@ fn encode_signed_pczt_ur(pczt_bytes: Vec<u8>, max_fragment_len: u32) -> Result<V
         Ok(vec![ur_string])
     } else {
         // Multi-part (animated) UR using fountain codes
-        let mut encoder = ur::ur::Encoder::new(
-            &cbor_data,
-            max_fragment_len as usize,
-            "zcash-pczt",
-        ).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to create UR encoder: {:?}", e),
-        })?;
+        let mut encoder = ur::ur::Encoder::new(&cbor_data, max_fragment_len as usize, "zcash-pczt")
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to create UR encoder: {:?}", e),
+            })?;
 
         let mut parts = Vec::new();
         // Generate enough parts to reconstruct (with some redundancy)

@@ -19,8 +19,8 @@ ur = "0.4"
 sha2 = "0.10"
 # PCZT (Partially Created Zcash Transaction) for Zashi hardware wallet signing
 # Note: requires transparent feature due to bug in pczt crate where signer role references transparent types
-pczt = { git = "https://github.com/zcash/librustzcash", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
-zcash_transparent = { git = "https://github.com/zcash/librustzcash", package = "zcash_transparent", features = ["transparent-inputs"] }
+pczt = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
+zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "zcash_transparent", features = ["transparent-inputs"] }
 # Orchard crate for SpendAuthorizingKey type - use same version as pczt
 orchard = "0.12"
 

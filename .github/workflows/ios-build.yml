@@ -4,11 +4,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-on:
-  pull_request:
-  push:
-    branches:
-      - master
+# disabled until apple developer secrets are configured
+# (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_BASE64, KEYCHAIN_PASSWORD,
+#  MATCH_GIT_BASIC_AUTHORIZATION, MATCH_PASSWORD)
+on: workflow_dispatch
 
 jobs:
   build-ipa:

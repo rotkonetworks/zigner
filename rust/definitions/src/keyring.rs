@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn error_in_network_specs_key_signer() {
         let network_specs_key_hex =
-            "0450e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e";
+            "0f50e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e";
         let network_specs_key = NetworkSpecsKey::from_hex(network_specs_key_hex).unwrap();
         let error = network_specs_key.genesis_hash_encryption().unwrap_err();
         if let Error::CodecError(_) = error {
@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn error_in_network_specs_key_active() {
         let network_specs_key_hex =
-            "0450e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e";
+            "0f50e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e";
         let network_specs_key =
             NetworkSpecsKey::from_ivec(&IVec::from(hex::decode(network_specs_key_hex).unwrap()));
         let error = network_specs_key.genesis_hash_encryption().unwrap_err();

@@ -183,20 +183,20 @@ fn print_show_all_networks_flag_westend() {
     let expected_menu = MNetworkMenu {
         networks: vec![
             Network {
-                key: "0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3"
-                    .to_string(),
-                logo: "polkadot".to_string(),
-                order: 0,
-                selected: false,
-                title: "Polkadot".to_string(),
-            },
-            Network {
                 key: "01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe"
                     .to_string(),
                 logo: "kusama".to_string(),
-                order: 1,
+                order: 0,
                 selected: false,
                 title: "Kusama".to_string(),
+            },
+            Network {
+                key: "0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3"
+                    .to_string(),
+                logo: "polkadot".to_string(),
+                order: 1,
+                selected: false,
+                title: "Polkadot".to_string(),
             },
             Network {
                 key: "01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e"
@@ -205,6 +205,22 @@ fn print_show_all_networks_flag_westend() {
                 order: 2,
                 selected: true,
                 title: "Westend".to_string(),
+            },
+            Network {
+                key: "0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08"
+                    .to_string(),
+                logo: "zcash".to_string(),
+                order: 3,
+                selected: false,
+                title: "Zcash".to_string(),
+            },
+            Network {
+                key: "040000000000000000000000000000000000000000000000000000000000006532"
+                    .to_string(),
+                logo: "penumbra".to_string(),
+                order: 4,
+                selected: false,
+                title: "Penumbra".to_string(),
             },
         ],
     };
@@ -220,18 +236,18 @@ fn show_all_networks_no_flag() {
     let networks = show_all_networks(&db).unwrap();
     let expected_networks = vec![
         MMNetwork {
-            key: "0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3".to_string(),
-            title: "polkadot".to_string(),
-            logo: "polkadot".to_string(),
-            order: 0,
-            path_id: "//polkadot".to_string(),
-        },
-        MMNetwork {
             key: "01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe".to_string(),
             title: "kusama".to_string(),
             logo: "kusama".to_string(),
-            order: 1,
+            order: 0,
             path_id: "//kusama".to_string(),
+        },
+        MMNetwork {
+            key: "0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3".to_string(),
+            title: "polkadot".to_string(),
+            logo: "polkadot".to_string(),
+            order: 1,
+            path_id: "//polkadot".to_string(),
         },
         MMNetwork {
             key: "01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e".to_string(),
@@ -239,6 +255,20 @@ fn show_all_networks_no_flag() {
             logo: "westend".to_string(),
             order: 2,
             path_id: "//westend".to_string(),
+        },
+        MMNetwork {
+            key: "0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08".to_string(),
+            title: "zcash".to_string(),
+            logo: "zcash".to_string(),
+            order: 3,
+            path_id: "m/32'/133'/0'".to_string(),
+        },
+        MMNetwork {
+            key: "040000000000000000000000000000000000000000000000000000000000006532".to_string(),
+            title: "penumbra".to_string(),
+            logo: "penumbra".to_string(),
+            order: 4,
+            path_id: "m/44'/6532'/0'".to_string(),
         },
     ];
     assert_eq!(networks, expected_networks);
@@ -251,7 +281,7 @@ fn first_standard_network() {
 
     populate_cold(&db, Verifier { v: None }).unwrap();
     let specs = first_network(&db).unwrap();
-    assert_eq!(specs.unwrap().specs.name, "polkadot");
+    assert_eq!(specs.unwrap().specs.name, "kusama");
 }
 
 #[test]
@@ -934,7 +964,7 @@ fn history_with_identities() {
     let history_printed_after_create_seed: Vec<_> =
         get_history(&db).unwrap().into_iter().map(|e| e.1).collect();
 
-    let element3 = vec![Event::SeedCreated {
+    let element3 = [Event::SeedCreated {
         seed_created: "Alice".to_string(),
     }];
 
