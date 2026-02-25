@@ -29,7 +29,7 @@ use crate::Error;
 use crate::Result;
 use crate::{db_transactions::TrDbCold, helpers::make_batch_clear_tree};
 
-/// Print total number of pages, for maximum [`HISTORY_PAGE_SIZE`] number of
+/// Print total number of pages, for maximum [`HISTORY_PAGE_SIZE`](constants::HISTORY_PAGE_SIZE) number of
 /// entries per page.
 pub fn history_total_pages(database: &sled::Db) -> Result<u32> {
     use constants::HISTORY_PAGE_SIZE;
@@ -144,7 +144,7 @@ pub fn history_entry_system(database: &sled::Db, event: Event) -> Result<()> {
 /// Process the fact that the Vault device was online.
 ///
 /// - Add history log entry with `Event::DeviceWasOnline`.
-/// - Update [`DangerRecord`] stored in [`SETTREE`] with
+/// - Update [`DangerRecord`] stored in [`SETTREE`](constants::SETTREE) with
 ///   `device_was_online = true` flag.
 ///
 /// Unacknowledged non-safe [`DangerRecord`] block the use of Vault in the
@@ -163,7 +163,7 @@ pub fn device_was_online(database: &sled::Db) -> Result<()> {
 /// [`DangerRecord`] back to safe.
 ///
 /// - Add history log entry with `Event::ResetDangerRecord`.
-/// - Reset [`DangerRecord`] stored in [`SETTREE`] to
+/// - Reset [`DangerRecord`] stored in [`SETTREE`](constants::SETTREE) to
 ///   `safe`, i.e. with `device_was_online = false` flag.
 ///
 /// Acknowledged and reset [`DangerRecord`] allow to resume the use of Vault in

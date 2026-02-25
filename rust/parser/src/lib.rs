@@ -1,5 +1,6 @@
 #![deny(unused_crate_dependencies)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![allow(rustdoc::invalid_html_tags)]
 
 extern crate alloc;
 

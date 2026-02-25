@@ -590,7 +590,7 @@ pub fn remove_network(database: &Db, network_specs_key: &NetworkSpecsKey) -> Res
 ///
 /// Metadata in the Vault database is determined by the network name and
 /// network version, and has no information about the
-/// [`Encryption`] algorithm supported by the
+/// [`Encryption`](definitions::crypto::Encryption) algorithm supported by the
 /// network. Therefore if the network supports more than one encryption
 /// algorithm, removing metadata for one will affect all encryptions.
 pub fn remove_metadata(
@@ -650,7 +650,7 @@ pub fn remove_types_info(database: &sled::Db) -> Result<()> {
         .apply(database)
 }
 
-/// Modify existing batch for [`ADDRTREE`] with incoming
+/// Modify existing batch for [`ADDRTREE`](constants::ADDRTREE) with incoming
 /// vector of additions.
 #[cfg(feature = "active")]
 pub(crate) fn upd_id_batch(mut batch: Batch, adds: Vec<(AddressKey, AddressDetails)>) -> Batch {
@@ -663,7 +663,7 @@ pub(crate) fn upd_id_batch(mut batch: Batch, adds: Vec<(AddressKey, AddressDetai
 /// Verify checksum in Vault database.
 ///
 /// Used in retrieving temporary stored data from
-/// [`TRANSACTION`] tree of the database.
+/// [`TRANSACTION`](constants::TRANSACTION) tree of the database.
 // TODO Goes obsolete if the temporary storage goes.
 pub(crate) fn verify_checksum(database: &Db, checksum: u32) -> Result<()> {
     let real_checksum = database.checksum()?;

@@ -586,7 +586,7 @@ pub fn meta_fetch(address: &str) -> Result<MetaFetched> {
 ///
 /// Fetched network metadata, processes it, and outputs file
 /// `<network_name><metadata_version>_<block_hash>` with hexadecimal
-/// metadata in [`EXPORT_FOLDER`].
+/// metadata in [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
 ///
 /// Command line to get metadata at block:
 ///
@@ -1006,7 +1006,7 @@ fn get_hash(input_hash: &str, what: Hash) -> Result<H256> {
 
 /// Write to file `load_metadata` update payload as raw bytes.
 ///
-/// Resulting file, located in dedicated [`FOLDER`], could be
+/// Resulting file, located in dedicated [`FOLDER`](constants::FOLDER), could be
 /// used to generate data signature and to produce updates.
 pub fn load_metadata_print<P>(shortcut: &MetaShortCut, files_dir: P) -> Result<()>
 where
@@ -1024,7 +1024,7 @@ where
 
 /// Write to file `add_specs` update payload as raw bytes.
 ///
-/// Resulting file, located in dedicated directory (by default, [`FOLDER`]), could be
+/// Resulting file, located in dedicated directory (by default, [`FOLDER`](constants::FOLDER)), could be
 /// used to generate data signature and to produce updates.
 pub fn add_specs_print<P>(network_specs: &NetworkSpecs, files_dir: P) -> Result<()>
 where

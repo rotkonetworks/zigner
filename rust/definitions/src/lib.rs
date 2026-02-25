@@ -13,6 +13,7 @@
 
 #![deny(unused_crate_dependencies)]
 #![deny(rustdoc::broken_intra_doc_links)]
+#![allow(rustdoc::redundant_explicit_links)]
 
 pub mod crypto;
 

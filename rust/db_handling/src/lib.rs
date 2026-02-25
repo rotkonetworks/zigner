@@ -20,6 +20,7 @@
 //! during the build.
 
 #![deny(rustdoc::broken_intra_doc_links)]
+#![allow(rustdoc::redundant_explicit_links)]
 
 // possibly TODO: rename all database_name into database_path or whatever,
 // currently it is quite confusing

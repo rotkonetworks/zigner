@@ -15,13 +15,13 @@ use crate::helpers::{
 /// Display all metadata currently stored in the hot database.
 ///
 /// Function prints for each entry in hot database
-/// [`METATREE`] tree:
+/// [`METATREE`](constants::METATREE) tree:
 ///
 /// - network name
 /// - network version
 /// - hexadecimal metadata hash
 /// - block hash at which the metadata was fetched if on record, from
-///   [`META_HISTORY`] tree
+///   [`META_HISTORY`](constants::META_HISTORY) tree
 ///
 /// It could be called by:
 ///
@@ -63,7 +63,7 @@ pub fn show_metadata(database: &sled::Db) -> Result<()> {
 /// Show current state of the hot database address book
 ///
 /// Function prints for each entry in hot database
-/// [`ADDRESS_BOOK`] tree:
+/// [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree:
 ///
 /// - address book title for the network
 /// - URL address at which RPC calls are made for the network
@@ -71,7 +71,7 @@ pub fn show_metadata(database: &sled::Db) -> Result<()> {
 /// - additional marker that the network is a default one
 /// - network title as it will be displayed in Vault, from
 ///   [`NetworkSpecs`](definitions::network_specs::NetworkSpecs) in
-///   [`SPECSTREEPREP`] tree
+///   [`SPECSTREEPREP`](constants::SPECSTREEPREP) tree
 ///
 /// It could be called by:
 ///
@@ -207,7 +207,7 @@ pub fn show_specs(database: &sled::Db, title: String) -> Result<()> {
 }
 
 /// Show metadata block hash history from
-/// [`META_HISTORY`] tree.
+/// [`META_HISTORY`](constants::META_HISTORY) tree.
 pub fn show_block_history(database: &sled::Db) -> Result<()> {
     let meta_history_set = meta_history_content(database)?;
     if meta_history_set.is_empty() {

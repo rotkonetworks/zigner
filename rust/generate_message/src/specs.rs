@@ -351,10 +351,10 @@ where
 /// - Fetch network specs through RPC calls and check that the network specs
 ///   from the database are still valid
 /// - Modify network specs according to the overrides requested
-/// - Update database as needed: [`ADDRESS_BOOK`] and
-///   [`SPECSTREEPREP`] are updated if the encryption
+/// - Update database as needed: [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) and
+///   [`SPECSTREEPREP`](constants::SPECSTREEPREP) are updated if the encryption
 ///   was not previously in the database for this network,
-///   [`SPECSTREEPREP`] alone is updated if the
+///   [`SPECSTREEPREP`](constants::SPECSTREEPREP) alone is updated if the
 ///   overrides modified network specs entry
 /// - Print payload files if requested
 ///
