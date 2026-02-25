@@ -123,7 +123,7 @@ struct DefaultNetworkInfo {
 /// Populate `DefaultNetworkInfo` for default networks
 /// Zigner focuses on Penumbra and Zcash - Substrate networks kept for compatibility
 #[cfg(feature = "active")]
-fn default_network_info() -> [DefaultNetworkInfo; 5] {
+fn default_network_info() -> [DefaultNetworkInfo; 10] {
     [
         // Substrate networks first (tests index into this array)
         DefaultNetworkInfo {
@@ -216,6 +216,100 @@ fn default_network_info() -> [DefaultNetworkInfo; 5] {
             secondary_color: String::from("#B8841A"),
             title: String::from("Penumbra"),
             unit: String::from("UM"),
+        },
+        // Cosmos networks
+        DefaultNetworkInfo {
+            address: String::from("https://rpc.osmosis.zone"),
+            base58prefix: 0,                // Not used for Cosmos (uses bech32)
+            color: String::from("#5E12A0"), // Osmosis purple
+            decimals: 6,
+            encryption: Encryption::Cosmos,
+            genesis_hash: H256::from_str(
+                // osmosis-1 chain ID hash
+                "00000000000000000000000000000000000000006f736d6f7369732d31000001",
+            )
+            .expect("known value"),
+            logo: String::from("osmosis"),
+            name: String::from("osmosis"),
+            order: 5,
+            path_id: String::from("m/44'/118'/0'/0/0"),
+            secondary_color: String::from("#4A0E80"),
+            title: String::from("Osmosis"),
+            unit: String::from("OSMO"),
+        },
+        DefaultNetworkInfo {
+            address: String::from("https://rpc.noble.xyz"),
+            base58prefix: 0,
+            color: String::from("#00D2FF"), // Noble blue
+            decimals: 6,
+            encryption: Encryption::Cosmos,
+            genesis_hash: H256::from_str(
+                // noble-1 chain ID hash
+                "000000000000000000000000000000000000000000006e6f626c652d31000001",
+            )
+            .expect("known value"),
+            logo: String::from("noble"),
+            name: String::from("noble"),
+            order: 6,
+            path_id: String::from("m/44'/118'/0'/0/0"),
+            secondary_color: String::from("#00A8CC"),
+            title: String::from("Noble"),
+            unit: String::from("USDC"),
+        },
+        DefaultNetworkInfo {
+            address: String::from("https://rpc.celestia.network"),
+            base58prefix: 0,
+            color: String::from("#7B2BF9"), // Celestia purple
+            decimals: 6,
+            encryption: Encryption::Cosmos,
+            genesis_hash: H256::from_str(
+                // celestia chain ID hash
+                "0000000000000000000000000000000000000063656c65737469610000000001",
+            )
+            .expect("known value"),
+            logo: String::from("celestia"),
+            name: String::from("celestia"),
+            order: 7,
+            path_id: String::from("m/44'/118'/0'/0/0"),
+            secondary_color: String::from("#6222C7"),
+            title: String::from("Celestia"),
+            unit: String::from("TIA"),
+        },
+        DefaultNetworkInfo {
+            address: String::from("https://rpc.cosmos.network"),
+            base58prefix: 0,
+            color: String::from("#2E3148"), // Cosmos dark
+            decimals: 6,
+            encryption: Encryption::Cosmos,
+            genesis_hash: H256::from_str(
+                "000000000000000000000000000000000000636f736d6f736875622d34000001",
+            )
+            .expect("known value"),
+            logo: String::from("cosmos"),
+            name: String::from("cosmos"),
+            order: 8,
+            path_id: String::from("m/44'/118'/0'/0/0"),
+            secondary_color: String::from("#1B1E36"),
+            title: String::from("Cosmos Hub"),
+            unit: String::from("ATOM"),
+        },
+        DefaultNetworkInfo {
+            address: String::from("https://rpc.terra.dev"),
+            base58prefix: 0,
+            color: String::from("#5493F7"), // Terra blue
+            decimals: 6,
+            encryption: Encryption::Cosmos,
+            genesis_hash: H256::from_str(
+                "000000000000000000000000000000000000000070686f656e69782d31000001",
+            )
+            .expect("known value"),
+            logo: String::from("terra"),
+            name: String::from("terra"),
+            order: 9,
+            path_id: String::from("m/44'/330'/0'/0/0"),
+            secondary_color: String::from("#3B6FC5"),
+            title: String::from("Terra"),
+            unit: String::from("LUNA"),
         },
     ]
 }

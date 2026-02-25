@@ -69,11 +69,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
- * Check if network uses FVK (Penumbra or Zcash) - these show FVK QR instead of address
+ * Check if network uses export QR (Penumbra, Zcash, Cosmos) - these show export QR instead of address
  */
 private fun isFvkNetwork(networkLogo: String): Boolean {
 	val logo = networkLogo.lowercase()
-	return logo.contains("penumbra") || logo.contains("zcash")
+	return logo.contains("penumbra") || logo.contains("zcash") ||
+		isCosmosNetwork(networkLogo)
+}
+
+private fun isCosmosNetwork(networkLogo: String): Boolean {
+	val logo = networkLogo.lowercase()
+	return logo.contains("noble") || logo.contains("osmosis") ||
+		logo.contains("celestia") || logo.contains("cosmos")
 }
 
 /**
@@ -185,8 +192,9 @@ fun KeyDetailsPublicKeyScreen(
 						verticalAlignment = Alignment.CenterVertically,
 					) {
 						if (isFvkNetwork && showFvk && fvkResult != null) {
+							val keyLabel = if (fvkResult.networkType == "cosmos") "PubKey" else "FVK"
 							Text(
-								text = "FVK: ${fvkResult.displayKey.take(20)}...",
+								text = "$keyLabel: ${fvkResult.displayKey.take(20)}...",
 								style = SignerTypeface.CaptionM,
 								color = MaterialTheme.colors.textTertiary,
 								modifier = Modifier.weight(1f)
@@ -218,9 +226,10 @@ fun KeyDetailsPublicKeyScreen(
 						val selectedBg = MaterialTheme.colors.pink500
 						val unselectedBg = MaterialTheme.colors.fill12
 
-						// FVK button
+						// Export button
+						val isCosmosNet = isCosmosNetwork(model.networkInfo.networkLogo)
 						Text(
-							text = "FVK",
+							text = if (isCosmosNet) "Export" else "FVK",
 							style = SignerTypeface.LabelM,
 							color = if (showFvk) Color.White else MaterialTheme.colors.primary,
 							modifier = Modifier

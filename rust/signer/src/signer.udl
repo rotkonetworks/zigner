@@ -752,6 +752,23 @@ namespace signer {
     [Throws=ErrorDisplayed]
     PenumbraFvkExport export_penumbra_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label);
 
+    // Cosmos accounts export - generate addresses QR for Zafu import
+    // network_name filters to a single chain (e.g. "noble"), empty string exports all
+    [Throws=ErrorDisplayed]
+    CosmosAccountExport export_cosmos_accounts([ByRef] string seed_phrase, u32 account_index, [ByRef] string label, [ByRef] string network_name);
+
+    // ========================================================================
+    // Cosmos cold signing functions
+    // ========================================================================
+
+    // Parse Cosmos sign request from QR hex data
+    [Throws=ErrorDisplayed]
+    CosmosSignRequest parse_cosmos_sign_request([ByRef] string qr_hex);
+
+    // Sign Cosmos transaction and return 64-byte signature
+    [Throws=ErrorDisplayed]
+    sequence<u8> sign_cosmos_transaction([ByRef] string seed_phrase, CosmosSignRequest request);
+
     // ========================================================================
     // Penumbra cold signing functions
     // ========================================================================
@@ -1067,6 +1084,41 @@ dictionary PenumbraFvkExport {
     string wallet_id_bech32m;
     sequence<u8> qr_data;
     string ur_string;
+};
+
+// Cosmos account export for Zafu wallet import
+dictionary CosmosAccountExport {
+    u32 account_index;
+    string label;
+    string public_key_hex;
+    sequence<CosmosChainAddress> addresses;
+    sequence<u8> qr_data;
+};
+
+dictionary CosmosChainAddress {
+    string chain_id;
+    string address;
+    string prefix;
+};
+
+// Single cosmos message for display
+dictionary CosmosMsgDisplay {
+    string msg_type;
+    string recipient;
+    string amount;
+    string detail;
+    boolean blind;
+};
+
+// Cosmos sign request parsed from QR
+dictionary CosmosSignRequest {
+    u32 account_index;
+    string chain_name;
+    string chain_id;
+    sequence<CosmosMsgDisplay> msgs;
+    string fee;
+    string memo;
+    string raw_qr_hex;
 };
 
 // Penumbra sign request parsed from QR

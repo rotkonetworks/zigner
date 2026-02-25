@@ -12,6 +12,7 @@ import io.parity.signer.uniffi.MKeyDetails
 import io.parity.signer.uniffi.encodeToQr
 import io.parity.signer.uniffi.exportZcashFvk
 import io.parity.signer.uniffi.exportPenumbraFvk
+import io.parity.signer.uniffi.exportCosmosAccounts
 
 
 class KeyDetailsScreenViewModel : ViewModel() {
@@ -171,6 +172,16 @@ class KeyDetailsScreenViewModel : ViewModel() {
 								networkType = "penumbra"
 							)
 						}
+						isCosmosNetwork(networkLogo) -> {
+							val cosmosChainName = cosmosNetworkName(networkLogo)
+							val export = exportCosmosAccounts(seedResult.result, accountIndex, label, cosmosChainName)
+							FvkExportResult(
+								displayKey = export.publicKeyHex.take(20) + "...",
+								qrPng = export.qrData.toList(),
+								label = export.label,
+								networkType = "cosmos"
+							)
+						}
 						else -> null
 					}
 				} catch (e: Exception) {
@@ -178,6 +189,23 @@ class KeyDetailsScreenViewModel : ViewModel() {
 				}
 			}
 		}
+	}
+}
+
+private fun isCosmosNetwork(networkLogo: String): Boolean {
+	val logo = networkLogo.lowercase()
+	return logo.contains("noble") || logo.contains("osmosis") ||
+		logo.contains("celestia") || logo.contains("cosmos")
+}
+
+/** Extract the specific cosmos chain name from network logo for single-chain export */
+private fun cosmosNetworkName(networkLogo: String): String {
+	val logo = networkLogo.lowercase()
+	return when {
+		logo.contains("noble") -> "noble"
+		logo.contains("osmosis") -> "osmosis"
+		logo.contains("celestia") -> "celestia"
+		else -> "" // empty = export all
 	}
 }
 

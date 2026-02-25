@@ -1087,6 +1087,215 @@ fn export_penumbra_fvk(
 }
 
 // ============================================================================
+// Cosmos account export
+// ============================================================================
+
+/// Export Cosmos chain addresses from a seed phrase.
+///
+/// Derives a secp256k1 key using BIP44 path m/44'/118'/account'/0/0
+/// and generates bech32 addresses for the specified chain (or all if network_name is empty).
+/// The QR data encodes a simple JSON payload for Zafu to import.
+fn export_cosmos_accounts(
+    seed_phrase: &str,
+    account_index: u32,
+    label: &str,
+    network_name: &str,
+) -> Result<CosmosAccountExport, ErrorDisplayed> {
+    use db_handling::cosmos::{
+        derive_cosmos_key, PREFIX_CELESTIA, PREFIX_NOBLE, PREFIX_OSMOSIS, SLIP0044_COSMOS,
+    };
+
+    let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account_index, 0).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Failed to derive Cosmos key: {e}"),
+        }
+    })?;
+
+    let pubkey_hex = hex::encode(&key.public_key);
+
+    // Generate addresses for supported chains (filter by network_name if specified)
+    let all_chains: Vec<(&str, &str)> = vec![
+        ("osmosis", PREFIX_OSMOSIS),
+        ("noble", PREFIX_NOBLE),
+        ("celestia", PREFIX_CELESTIA),
+    ];
+
+    let chains: Vec<(&str, &str)> = if network_name.is_empty() {
+        all_chains
+    } else {
+        let name = network_name.to_lowercase();
+        all_chains
+            .into_iter()
+            .filter(|(id, _)| *id == name)
+            .collect()
+    };
+
+    let mut addresses = Vec::new();
+    for (chain_id, prefix) in &chains {
+        let addr = key
+            .bech32_address(prefix)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to encode {chain_id} address: {e}"),
+            })?;
+        addresses.push(CosmosChainAddress {
+            chain_id: chain_id.to_string(),
+            address: addr,
+            prefix: prefix.to_string(),
+        });
+    }
+
+    // Build QR data as JSON for Zafu import
+    let label_str = if label.is_empty() { "Zigner" } else { label };
+    let json = serde_json::json!({
+        "type": "cosmos-accounts",
+        "version": 1,
+        "label": label_str,
+        "account_index": account_index,
+        "public_key": pubkey_hex,
+        "addresses": addresses.iter().map(|a| {
+            serde_json::json!({
+                "chain_id": a.chain_id,
+                "address": a.address,
+                "prefix": a.prefix,
+            })
+        }).collect::<Vec<_>>(),
+    });
+
+    let json_bytes = json.to_string().into_bytes();
+    let qr_data = encode_to_qr(&json_bytes, false).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to generate QR: {e}"),
+    })?;
+
+    Ok(CosmosAccountExport {
+        account_index,
+        label: label_str.to_string(),
+        public_key_hex: pubkey_hex,
+        addresses,
+        qr_data,
+    })
+}
+
+// ============================================================================
+// Cosmos cold signing functions
+// ============================================================================
+
+/// Parse a Cosmos sign request from QR hex data (amino JSON sign doc)
+fn parse_cosmos_sign_request(qr_hex: &str) -> Result<CosmosSignRequest, ErrorDisplayed> {
+    use transaction_signing::cosmos::{CosmosSignDocDisplay, CosmosSignRequest as InternalRequest};
+
+    let req = InternalRequest::from_qr_hex(qr_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse Cosmos QR: {e}"),
+    })?;
+
+    let display =
+        CosmosSignDocDisplay::from_json(&req.sign_doc_bytes).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to parse sign doc: {e}"),
+        })?;
+
+    let msgs = display
+        .msgs
+        .into_iter()
+        .map(|m| CosmosMsgDisplay {
+            msg_type: m.msg_type,
+            recipient: m.recipient,
+            amount: m.amount,
+            detail: m.detail,
+            blind: m.blind,
+        })
+        .collect();
+
+    Ok(CosmosSignRequest {
+        account_index: req.account_index,
+        chain_name: req.chain_name,
+        chain_id: display.chain_id,
+        msgs,
+        fee: display.fee,
+        memo: display.memo,
+        raw_qr_hex: qr_hex.to_string(),
+    })
+}
+
+/// Sign a Cosmos transaction and return 64-byte compact signature.
+///
+/// IMPORTANT: re-derives display fields from raw_qr_hex and verifies they
+/// match what the user approved. This prevents a compromised hot wallet from
+/// displaying one transaction but signing another.
+fn sign_cosmos_transaction(
+    seed_phrase: &str,
+    request: CosmosSignRequest,
+) -> Result<Vec<u8>, ErrorDisplayed> {
+    use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS};
+    use transaction_signing::cosmos::{
+        sign_cosmos_amino, CosmosSignDocDisplay, CosmosSignRequest as InternalRequest,
+    };
+
+    // re-parse the QR to get the sign doc bytes
+    let req =
+        InternalRequest::from_qr_hex(&request.raw_qr_hex).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to re-parse QR: {e}"),
+        })?;
+
+    // re-derive display fields from the raw QR and verify they match
+    // what the user was shown. this is the cosmos equivalent of
+    // penumbra's verify_effect_hash — it binds display to signing.
+    let display =
+        CosmosSignDocDisplay::from_json(&req.sign_doc_bytes).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to re-parse sign doc: {e}"),
+        })?;
+
+    if display.chain_id != request.chain_id {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Chain ID mismatch: display showed '{}' but QR contains '{}'",
+                request.chain_id, display.chain_id
+            ),
+        });
+    }
+    if display.fee != request.fee {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Fee mismatch: display showed '{}' but QR contains '{}'",
+                request.fee, display.fee
+            ),
+        });
+    }
+    if display.memo != request.memo {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Memo mismatch: display showed '{}' but QR contains '{}'",
+                request.memo, display.memo
+            ),
+        });
+    }
+    if display.msgs.len() != request.msgs.len() {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Message count mismatch: display showed {} but QR contains {}",
+                request.msgs.len(),
+                display.msgs.len()
+            ),
+        });
+    }
+
+    // derive the cosmos key from seed phrase
+    let key =
+        derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, request.account_index, 0).map_err(|e| {
+            ErrorDisplayed::Str {
+                s: format!("Key derivation failed: {e}"),
+            }
+        })?;
+
+    // sign with SHA256 prehash (NOT blake2b)
+    let signature = sign_cosmos_amino(&key.secret_key, &req.sign_doc_bytes).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Signing failed: {e}"),
+        }
+    })?;
+
+    Ok(signature.to_vec())
+}
+
+// ============================================================================
 // Penumbra cold signing functions
 // ============================================================================
 
@@ -1118,6 +1327,7 @@ fn sign_penumbra_transaction(
     use transaction_parsing::penumbra::{
         parse_penumbra_transaction, sign_transaction, SpendKeyBytes,
     };
+    use transaction_signing::penumbra::verify_effect_hash;
 
     // Re-parse to get the full plan data
     let plan =
@@ -1135,6 +1345,15 @@ fn sign_penumbra_transaction(
             s: format!("Key derivation failed: {e}"),
         })?;
 
+    // SECURITY: Verify the effect hash from the QR matches what we compute
+    // from the plan + our FVK. This prevents a compromised hot wallet from
+    // tricking us into signing a different transaction.
+    verify_effect_hash(&plan.plan_bytes, &effect_hash, &spend_key).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Effect hash verification failed: {e}"),
+        }
+    })?;
+
     // Sign the transaction
     let auth_data = sign_transaction(
         effect_hash,
@@ -1148,7 +1367,9 @@ fn sign_penumbra_transaction(
     })?;
 
     // Encode as QR response bytes
-    Ok(auth_data.encode())
+    auth_data.encode().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Encode failed: {e}"),
+    })
 }
 
 // ============================================================================

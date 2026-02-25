@@ -42,6 +42,46 @@ pub fn derive_zcash_fvk_bytes(mnemonic: &str, account: u32) -> Result<String, Js
     Ok(hex::encode(fvk_bytes))
 }
 
+/// derive zcash unified address from a UFVK string (uview1... or uviewtest1...)
+///
+/// used by watch-only wallets (zigner import) to display receive address
+#[wasm_bindgen]
+pub fn address_from_ufvk(ufvk_str: &str) -> Result<String, JsError> {
+    use orchard::keys::FullViewingKey;
+    use zcash_address::unified::{
+        Address as UnifiedAddress, Container, Encoding, Fvk, Receiver, Ufvk,
+    };
+
+    // detect network from UFVK prefix
+    let (network, parsed) =
+        Ufvk::decode(ufvk_str).map_err(|e| JsError::new(&format!("invalid ufvk: {}", e)))?;
+
+    // extract orchard FVK bytes from the parsed UFVK
+    let orchard_fvk_bytes = parsed
+        .items_as_parsed()
+        .iter()
+        .find_map(|item| {
+            if let Fvk::Orchard(bytes) = item {
+                Some(*bytes)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| JsError::new("ufvk does not contain orchard component"))?;
+
+    // reconstruct FullViewingKey from bytes and derive address
+    let fvk = FullViewingKey::from_bytes(&orchard_fvk_bytes)
+        .ok_or_else(|| JsError::new("invalid orchard fvk bytes in ufvk"))?;
+
+    let addr = fvk.address_at(0u32, orchard::keys::Scope::External);
+    let receiver = Receiver::Orchard(addr.to_raw_address_bytes());
+
+    let ua = UnifiedAddress::try_from_items(vec![receiver])
+        .map_err(|e| JsError::new(&format!("failed to build address: {}", e)))?;
+
+    Ok(ua.encode(&network))
+}
+
 // === internal helpers ===
 
 #[derive(Zeroize)]
@@ -144,5 +184,22 @@ mod tests {
     fn test_derive_fvk_bytes() {
         let fvk_hex = derive_zcash_fvk_bytes(TEST_MNEMONIC, 0).unwrap();
         assert_eq!(fvk_hex.len(), 192); // 96 bytes = 192 hex chars
+    }
+
+    #[test]
+    fn test_address_from_ufvk() {
+        // derive ufvk and address from mnemonic, then verify address_from_ufvk matches
+        let ufvk = derive_zcash_ufvk(TEST_MNEMONIC, 0, true).unwrap();
+        let expected_addr = derive_zcash_address(TEST_MNEMONIC, 0, true).unwrap();
+        let addr = address_from_ufvk(&ufvk).unwrap();
+        assert_eq!(addr, expected_addr);
+    }
+
+    #[test]
+    fn test_address_from_ufvk_testnet() {
+        let ufvk = derive_zcash_ufvk(TEST_MNEMONIC, 0, false).unwrap();
+        let expected_addr = derive_zcash_address(TEST_MNEMONIC, 0, false).unwrap();
+        let addr = address_from_ufvk(&ufvk).unwrap();
+        assert_eq!(addr, expected_addr);
     }
 }

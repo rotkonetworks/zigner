@@ -869,6 +869,63 @@ pub struct PenumbraFvkExport {
     pub ur_string: String,
 }
 
+/// Cosmos account export data for Zafu wallet import
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosAccountExport {
+    pub account_index: u32,
+    pub label: String,
+    /// Hex-encoded compressed secp256k1 public key (33 bytes)
+    pub public_key_hex: String,
+    /// Bech32 addresses for each chain
+    pub addresses: Vec<CosmosChainAddress>,
+    /// Binary QR data for Zafu wallet
+    pub qr_data: Vec<u8>,
+}
+
+/// A bech32 address on a specific Cosmos chain
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosChainAddress {
+    /// Chain identifier (e.g. "osmosis", "noble")
+    pub chain_id: String,
+    /// Bech32 address (e.g. "osmo1...")
+    pub address: String,
+    /// Bech32 prefix (e.g. "osmo")
+    pub prefix: String,
+}
+
+/// a single cosmos message displayed to the user
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosMsgDisplay {
+    /// message type (e.g. "Send", "IBC Transfer", "Swap", "Contract Call (BLIND)")
+    pub msg_type: String,
+    /// target address (recipient, validator, contract, etc.)
+    pub recipient: String,
+    /// amount string
+    pub amount: String,
+    /// extra detail (min output, pool id, raw contract msg, etc.)
+    pub detail: String,
+    /// true if this message requires blind signing (contract calls, unknown types)
+    pub blind: bool,
+}
+
+/// Cosmos sign request parsed from QR
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosSignRequest {
+    pub account_index: u32,
+    /// chain name from QR (e.g. "noble", "osmosis")
+    pub chain_name: String,
+    /// chain_id from amino JSON (e.g. "noble-1", "osmosis-1")
+    pub chain_id: String,
+    /// ALL messages in the sign doc — must all be shown to the user
+    pub msgs: Vec<CosmosMsgDisplay>,
+    /// fee string
+    pub fee: String,
+    /// memo
+    pub memo: String,
+    /// raw QR hex for re-parsing during signing
+    pub raw_qr_hex: String,
+}
+
 /// String pair for FFI compatibility
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StringPair {
@@ -946,7 +1003,7 @@ pub struct ZcashOrchardOutput {
 /// | zcash-accounts| 49201    | Container for multiple accounts   |
 /// | zcash-ufvk    | 49203    | Single unified full viewing key   |
 ///
-/// Reference: https://github.com/KeystoneHQ/keystone-sdk-rust
+/// Reference: <https://github.com/KeystoneHQ/keystone-sdk-rust>
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashFvkExport {
     pub account_index: u32,
@@ -961,7 +1018,7 @@ pub struct ZcashFvkExport {
     /// Binary QR data for Zafu wallet
     pub qr_data: Vec<u8>,
     /// UR-encoded string for Zashi/Keystone QR compatibility
-    /// Format: "ur:zcash-accounts/<bytewords>"
+    /// Format: `ur:zcash-accounts/<bytewords>`
     /// Uses CBOR tag 49201 (zcash-accounts) containing tag 49203 (zcash-unified-full-viewing-key)
     pub ur_string: String,
 }

@@ -67,6 +67,8 @@ struct SettingsView: View {
             PenumbraFvkExportView(viewModel: .init())
         case .zcashFvkExport:
             ZcashFvkExportView(viewModel: .init())
+        case .cosmosAccountExport:
+            CosmosAccountExportView(viewModel: .init())
         case .logs:
             LogsListView(viewModel: .init())
         case .networks:
@@ -111,6 +113,9 @@ extension SettingsView {
                 isDetailsPresented = true
             case .zcashFvkExport:
                 detailScreen = .zcashFvkExport
+                isDetailsPresented = true
+            case .cosmosAccountExport:
+                detailScreen = .cosmosAccountExport
                 isDetailsPresented = true
             case .logs:
                 detailScreen = .logs

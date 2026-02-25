@@ -10,6 +10,7 @@ import Foundation
 enum SettingsItem: Equatable, Hashable, CaseIterable {
     case penumbraFvkExport
     case zcashFvkExport
+    case cosmosAccountExport
     case logs
     case networks
     case verifier
@@ -25,6 +26,8 @@ extension SettingsItem {
             Localizable.Settings.Label.penumbraFvkExport.string
         case .zcashFvkExport:
             Localizable.Settings.Label.zcashFvkExport.string
+        case .cosmosAccountExport:
+            "Export Cosmos Accounts"
         case .logs:
             Localizable.Settings.Label.logs.string
         case .networks:

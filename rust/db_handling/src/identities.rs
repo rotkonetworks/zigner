@@ -97,6 +97,7 @@ fn get_display_address(
     multisigner: &MultiSigner,
     optional_prefix: Option<u16>,
     encryption: Encryption,
+    network_name: Option<&str>,
 ) -> String {
     // For Penumbra, try to get the stored bech32m address
     if encryption == Encryption::Penumbra {
@@ -110,6 +111,17 @@ fn get_display_address(
     if encryption == Encryption::Zcash {
         let pubkey_hex = hex::encode(multisigner_to_public(multisigner));
         if let Ok(Some(address)) = crate::zcash::get_zcash_address(database, &pubkey_hex) {
+            return address;
+        }
+    }
+    // For Cosmos, compute bech32 address on-the-fly from pubkey + chain prefix
+    // Same key for all cosmos chains (coin type 118), different bech32 prefix per chain
+    #[cfg(feature = "cosmos")]
+    if encryption == Encryption::Cosmos {
+        let pubkey_bytes = multisigner_to_public(multisigner);
+        if let Ok(address) =
+            crate::cosmos::pubkey_to_bech32_address(&pubkey_bytes, network_name.unwrap_or("cosmos"))
+        {
             return address;
         }
     }
@@ -524,10 +536,15 @@ fn cosmos_derive_multisigner_and_address(
     let key_pair = cosmos::derive_cosmos_key(seed_phrase, coin_type, account, address_index)
         .map_err(|e| Error::Other(anyhow::anyhow!("Cosmos key derivation failed: {}", e)))?;
 
-    // Get bech32 prefix from network specs, or use "cosmos" as default
+    // Get bech32 prefix from network name
     let prefix = network_specs
-        .and_then(|ns| ns.path_id.split("//").nth(1))
-        .unwrap_or("cosmos");
+        .map(|ns| match ns.name.as_str() {
+            "osmosis" => cosmos::PREFIX_OSMOSIS,
+            "noble" => cosmos::PREFIX_NOBLE,
+            "celestia" => cosmos::PREFIX_CELESTIA,
+            _ => cosmos::PREFIX_COSMOS,
+        })
+        .unwrap_or(cosmos::PREFIX_COSMOS);
 
     // Generate bech32 address
     let bech32_address = key_pair
@@ -759,6 +776,7 @@ pub fn process_dynamic_derivations_v1(
                 multisigner,
                 Some(network_specs.specs.base58prefix),
                 encryption,
+                Some(&network_specs.specs.name),
             ),
             path: derivation_request.derivation_path.clone(),
             network_logo: network_specs.specs.logo,
@@ -1189,9 +1207,17 @@ pub(crate) fn create_address(
         {
             let (multisigner, bech32_address) =
                 cosmos_derive_multisigner_and_address(seed_phrase, path, network_specs)?;
-            // Store the bech32 address for later retrieval
+            // Store the bech32 address for later retrieval, keyed by pubkey + genesis hash
             let pubkey_hex = hex::encode(multisigner_to_public(&multisigner));
-            crate::cosmos::store_cosmos_address(database, &pubkey_hex, &bech32_address)?;
+            let genesis_hash_hex = network_specs
+                .map(|ns| hex::encode(ns.genesis_hash))
+                .unwrap_or_default();
+            crate::cosmos::store_cosmos_address(
+                database,
+                &pubkey_hex,
+                &genesis_hash_hex,
+                &bech32_address,
+            )?;
             multisigner
         }
         #[cfg(not(feature = "cosmos"))]
@@ -1224,12 +1250,17 @@ pub(crate) fn create_address(
     // TODO regex elements may keep the line with password somewhere, how to
     // zeroize then? checked regex crate and it appears that only references are
     // moved around; need to double-check later;
-    let (cropped_path, has_pwd) = match REG_PATH.captures(path) {
-        Some(caps) => match caps.name("path") {
-            Some(a) => (a.as_str(), caps.name("password").is_some()),
-            None => ("", caps.name("password").is_some()),
-        },
-        None => ("", false),
+    // BIP44-style paths (m/44'/...) don't match the Substrate regex, use them directly
+    let (cropped_path, has_pwd) = if path.starts_with("m/") {
+        (path, false)
+    } else {
+        match REG_PATH.captures(path) {
+            Some(caps) => match caps.name("path") {
+                Some(a) => (a.as_str(), caps.name("password").is_some()),
+                None => ("", caps.name("password").is_some()),
+            },
+            None => ("", false),
+        }
     };
 
     do_create_address(
@@ -2081,6 +2112,7 @@ pub fn export_secret_key(
         secret_exposed: true,
     };
 
+    let network_name = network_specs.specs.name.clone();
     let network_info = MSCNetworkInfo {
         network_title: network_specs.specs.name,
         network_logo: network_specs.specs.logo,
@@ -2149,6 +2181,7 @@ pub fn export_secret_key(
             multisigner,
             Some(network_specs.specs.base58prefix),
             address_details.encryption,
+            Some(&network_name),
         ),
         address,
     })

@@ -28,6 +28,8 @@ import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
 import net.rotko.zigner.screens.scan.transaction.ZcashTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraSignatureQrScreen
+import net.rotko.zigner.screens.scan.transaction.CosmosTransactionScreen
+import net.rotko.zigner.screens.scan.transaction.CosmosSignatureQrScreen
 import net.rotko.zigner.screens.scan.transaction.dynamicderivations.AddDynamicDerivationScreenFull
 import net.rotko.zigner.screens.scan.transaction.previewType
 import net.rotko.zigner.screens.scan.transaction.ZcashSignatureQrScreen
@@ -67,6 +69,10 @@ fun ScanNavSubgraph(
 	// Penumbra signing state
 	val penumbraSignRequest = scanViewModel.penumbraSignRequest.collectAsStateWithLifecycle()
 	val penumbraSignatureQr = scanViewModel.penumbraSignatureQr.collectAsStateWithLifecycle()
+
+	// Cosmos signing state
+	val cosmosSignRequest = scanViewModel.cosmosSignRequest.collectAsStateWithLifecycle()
+	val cosmosSignatureQr = scanViewModel.cosmosSignatureQr.collectAsStateWithLifecycle()
 
 	// UR backup restore state
 	val urBackupFrames = scanViewModel.urBackupFrames.collectAsStateWithLifecycle()
@@ -172,6 +178,29 @@ fun ScanNavSubgraph(
 				scanViewModel.clearZcashState()
 			}
 		)
+	} else if (cosmosSignatureQr.value != null) {
+		// Show Cosmos signature QR after signing
+		CosmosSignatureQrScreen(
+			signatureBytes = cosmosSignatureQr.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onDone = {
+				scanViewModel.clearCosmosState()
+			}
+		)
+	} else if (cosmosSignRequest.value != null) {
+		// Show Cosmos transaction for approval
+		CosmosTransactionScreen(
+			request = cosmosSignRequest.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onApprove = {
+				scanViewModel.viewModelScope.launch {
+					scanViewModel.signCosmosTransaction(context)
+				}
+			},
+			onDecline = {
+				scanViewModel.clearCosmosState()
+			}
+		)
 	} else if (penumbraSignatureQr.value != null) {
 		// Show Penumbra signature QR after signing
 		PenumbraSignatureQrScreen(
@@ -214,6 +243,9 @@ fun ScanNavSubgraph(
 			},
 			onPenumbraSignRequest = { payload ->
 				scanViewModel.performPenumbraSignRequest(payload, context)
+			},
+			onCosmosSignRequest = { payload ->
+				scanViewModel.performCosmosSignRequest(payload, context)
 			},
 			onUrBackupRestore = { urFrames ->
 				scanViewModel.urBackupFrames.value = urFrames
