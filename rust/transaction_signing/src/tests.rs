@@ -890,13 +890,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -921,14 +931,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     00e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: westend-ed25519 (westend with ed25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -972,14 +992,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     00e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: westend-ed25519 (westend with ed25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1004,14 +1034,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     00e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: westend-ed25519 (westend with ed25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1029,14 +1069,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     00e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: westend-ed25519 (westend with ed25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1109,13 +1159,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1138,13 +1198,23 @@ Metadata:
     westend9010
     westend9070
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1239,13 +1309,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1265,6 +1345,11 @@ Metadata:
 Network Specs:
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1349,13 +1434,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1377,13 +1472,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1468,13 +1573,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1496,14 +1611,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1576,14 +1701,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -1690,6 +1825,11 @@ Network Specs:
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1776,13 +1916,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1804,14 +1954,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1884,14 +2044,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -1993,14 +2163,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee","identicon":"<ed>","encryption":"ed25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -2101,14 +2281,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -2186,13 +2376,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -2215,13 +2415,23 @@ Metadata:
     westend9010
     westend9111
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"","identicon":"<empty>","encryption":"none"}
@@ -3067,12 +3277,22 @@ Metadata:
     kusama2030
     polkadot30
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -3149,14 +3369,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee","identicon":"<ed>","encryption":"ed25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -3187,13 +3417,23 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -3229,14 +3469,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee","identicon":"<ed>","encryption":"ed25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
@@ -3273,14 +3523,24 @@ Metadata:
     westend9000
     westend9010
 Network Specs:
+    070000000000000000000000000000000000000063656c65737469610000000001: Celestia (celestia with cosmos)
+    07000000000000000000000000000000000000636f736d6f736875622d34000001: Cosmos Hub (cosmos with cosmos)
     01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe: Kusama (kusama with sr25519)
+    07000000000000000000000000000000000000000000006e6f626c652d31000001: Noble (noble with cosmos)
+    0700000000000000000000000000000000000000006f736d6f7369732d31000001: Osmosis (osmosis with cosmos)
     040000000000000000000000000000000000000000000000000000000000006532: Penumbra (penumbra with penumbra)
     0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: Polkadot (polkadot with sr25519)
+    07000000000000000000000000000000000000000070686f656e69782d31000001: Terra (terra with cosmos)
     01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e: Westend (westend with sr25519)
     0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: Zcash (zcash with zcash)
     016bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: dock-pos-main-runtime-sr25519 (dock-pos-main-runtime with sr25519)
 Verifiers:
     0000000000000000000000000000000000000000000000000000000000006532: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000000006e6f626c652d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    00000000000000000000000000000000000000006f736d6f7369732d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000000070686f656e69782d31000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    0000000000000000000000000000000000000063656c65737469610000000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
+    000000000000000000000000000000000000636f736d6f736875622d34000001: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
     6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae: "type":"custom","details":{"public_key":"88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee","identicon":"<ed>","encryption":"ed25519"}
     91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3: "type":"general","details":{"public_key":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","identicon":"d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d","encryption":"sr25519"}
