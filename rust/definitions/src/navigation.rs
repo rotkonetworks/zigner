@@ -852,7 +852,7 @@ pub struct PenumbraTransactionSummary {
 /// }
 /// ```
 ///
-/// Reference: https://github.com/BlockchainCommons/Research (UR spec)
+/// Reference: <https://github.com/BlockchainCommons/Research> (UR spec)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PenumbraFvkExport {
     pub account_index: u32,
@@ -864,7 +864,7 @@ pub struct PenumbraFvkExport {
     /// Binary QR data for Zafu wallet
     pub qr_data: Vec<u8>,
     /// UR-encoded string for hardware wallet QR compatibility
-    /// Format: "ur:penumbra-accounts/<bytewords>"
+    /// Format: `ur:penumbra-accounts/<bytewords>`
     /// Uses CBOR tag 49301 (penumbra-accounts) containing tag 49302 (penumbra-full-viewing-key)
     pub ur_string: String,
 }
