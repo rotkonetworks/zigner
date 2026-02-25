@@ -1003,7 +1003,7 @@ pub struct ZcashOrchardOutput {
 /// | zcash-accounts| 49201    | Container for multiple accounts   |
 /// | zcash-ufvk    | 49203    | Single unified full viewing key   |
 ///
-/// Reference: https://github.com/KeystoneHQ/keystone-sdk-rust
+/// Reference: <https://github.com/KeystoneHQ/keystone-sdk-rust>
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashFvkExport {
     pub account_index: u32,
@@ -1018,7 +1018,7 @@ pub struct ZcashFvkExport {
     /// Binary QR data for Zafu wallet
     pub qr_data: Vec<u8>,
     /// UR-encoded string for Zashi/Keystone QR compatibility
-    /// Format: "ur:zcash-accounts/<bytewords>"
+    /// Format: `ur:zcash-accounts/<bytewords>`
     /// Uses CBOR tag 49201 (zcash-accounts) containing tag 49203 (zcash-unified-full-viewing-key)
     pub ur_string: String,
 }
