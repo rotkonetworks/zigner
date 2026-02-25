@@ -257,7 +257,10 @@ impl CosmosMsg {
             },
             "cosmos-sdk/MsgBeginRedelegate" => CosmosMsg {
                 msg_type: "Redelegate".to_string(),
-                recipient: v["validator_dst_address"].as_str().unwrap_or("").to_string(),
+                recipient: v["validator_dst_address"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
                 amount: format_coin_obj(&v["amount"]),
                 detail: {
                     let src = v["validator_src_address"].as_str().unwrap_or("");
@@ -643,6 +646,9 @@ mod tests {
 
         assert_eq!(display.msgs[0].msg_type, "some-module/MsgDoSomething");
         assert!(display.msgs[0].blind, "unknown types must be marked blind");
-        assert!(display.msgs[0].detail.contains("bar"), "should show raw value JSON");
+        assert!(
+            display.msgs[0].detail.contains("bar"),
+            "should show raw value JSON"
+        );
     }
 }

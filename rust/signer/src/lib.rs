@@ -1226,8 +1226,7 @@ fn sign_cosmos_transaction(
 ) -> Result<Vec<u8>, ErrorDisplayed> {
     use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS};
     use transaction_signing::cosmos::{
-        sign_cosmos_amino, CosmosSignDocDisplay,
-        CosmosSignRequest as InternalRequest,
+        sign_cosmos_amino, CosmosSignDocDisplay, CosmosSignRequest as InternalRequest,
     };
 
     // re-parse the QR to get the sign doc bytes
@@ -1239,8 +1238,8 @@ fn sign_cosmos_transaction(
     // re-derive display fields from the raw QR and verify they match
     // what the user was shown. this is the cosmos equivalent of
     // penumbra's verify_effect_hash — it binds display to signing.
-    let display = CosmosSignDocDisplay::from_json(&req.sign_doc_bytes)
-        .map_err(|e| ErrorDisplayed::Str {
+    let display =
+        CosmosSignDocDisplay::from_json(&req.sign_doc_bytes).map_err(|e| ErrorDisplayed::Str {
             s: format!("Failed to re-parse sign doc: {e}"),
         })?;
 
