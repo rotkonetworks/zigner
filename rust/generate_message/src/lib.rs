@@ -1,3 +1,5 @@
+#![allow(rustdoc::redundant_explicit_links)]
+#![allow(rustdoc::invalid_html_tags)]
 //! This crate is intended to support
 //! [Zigner](https://github.com/rotkonetworks/zigner) from the active
 //! (non air-gapped) side.
