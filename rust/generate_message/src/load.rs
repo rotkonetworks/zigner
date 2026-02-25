@@ -353,11 +353,11 @@ where
 ///
 /// - Get all available [`AddressSpecs`] from the database
 /// - Get and sort existing metadata entries from [`METATREE`], with block
-///   data from [`META_HISTORY`](constants::META_HISTORY) if available
+///   data from [`META_HISTORY`] if available
 /// - Process each [`AddressSpecs`] and update sorted metadata entries in the
 ///   process. Input [`Write`] indicates if the payload file should be created.
 /// - Rewrite the database [`METATREE`] with updated metadata set and update
-///   [`META_HISTORY`](constants::META_HISTORY)
+///   [`META_HISTORY`]
 fn meta_kpt_a<P>(database: &sled::Db, write: &Write, pass_errors: bool, files_dir: P) -> Result<()>
 where
     P: AsRef<Path>,
@@ -423,7 +423,7 @@ where
 /// `load-metadata<-k/-p/-t> -n <network_name>`
 ///
 /// - Get and sort existing metadata entries from [`METATREE`], with block
-///   data from [`META_HISTORY`](constants::META_HISTORY) if available
+///   data from [`META_HISTORY`] if available
 /// - Get all available [`AddressSpecs`] from the database and search for the
 ///   one with user-entered network name
 /// - Fetch network information using RPC calls at `address` in [`AddressSpecs`]
@@ -432,7 +432,7 @@ where
 ///   insert it into [`SortedMetaValues`]
 /// - Output raw bytes payload file, if requested by input [`Write`]
 /// - Rewrite the database [`METATREE`] with updated metadata set and update
-///   [`META_HISTORY`](constants::META_HISTORY)
+///   [`META_HISTORY`]
 ///
 /// Inputs user-entered network name and [`Write`] indicating if the
 /// `load_metadata` payload should be created.
@@ -450,8 +450,8 @@ where
     db_upd_metadata(database, sorted_meta_values)
 }
 
-/// Network information from [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) and
-/// [`SPECSTREEPREP`](constants::SPECSTREEPREP).
+/// Network information from [`ADDRESS_BOOK`] and
+/// [`SPECSTREEPREP`].
 ///
 /// This data is sufficient to make RPC calls and check that the metadata is
 /// consistent with existing database content.

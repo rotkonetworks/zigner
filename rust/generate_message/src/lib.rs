@@ -38,7 +38,7 @@
 //!
 //! <table>
 //!     <tr>
-//!         <td>prelude <code>[0x53, 0x<encryption code>, 0x<payload code>]</code></td>
+//!         <td>prelude <code>[0x53, 0x&lt;encryption code&gt;, 0x&lt;payload code&gt;]</code></td>
 //!         <td>verifier public key (if signed)</td>
 //!         <td>update payload</td>
 //!         <td>signature (if signed)</td>
@@ -132,7 +132,7 @@
 //!
 //! `$ cargo run show metadata`
 //!
-//! Prints for each entry in hot database [`METATREE`](constants::METATREE)
+//! Prints for each entry in hot database [`METATREE`]
 //! tree:
 //!
 //! - network name
@@ -148,7 +148,7 @@
 //! `$ cargo run show networks`
 //!
 //! Prints for each entry in hot database
-//! [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree:
+//! [`ADDRESS_BOOK`] tree:
 //!
 //! - address book title for the network `<network_name>-<network_encryption>`,
 //!   used only to distinguish between address book entries
@@ -165,7 +165,7 @@
 //!
 //! Prints network address book title and corresponding
 //! [`NetworkSpecs`](definitions::network_specs::NetworkSpecs)
-//! from [`SPECSTREEPREP`](constants::SPECSTREEPREP) tree of the hot
+//! from [`SPECSTREEPREP`] tree of the hot
 //! database.
 //!
 //! ### Example
@@ -196,7 +196,7 @@
 //! until a proper metadata fetch from a node is done with some associated block
 //! hash.
 //!
-//! [`META_HISTORY`](constants::META_HISTORY) tree stores all block hashes that
+//! [`META_HISTORY`] tree stores all block hashes that
 //! were ever encountered on successful new metadata fetch, and clears only on
 //! the database reset.
 //!
@@ -207,7 +207,7 @@
 //!
 //! `$ cargo run add-specs [OPTIONS] <-d|-f|-k|-p|-t> <--all|--name <NAME>|--url <ADDRESS>>`
 //!
-//! A file is generated in dedicated [`FOLDER`](constants::FOLDER) to
+//! A file is generated in dedicated [`FOLDER`] to
 //! (optionally) be signed and later be transformed into `add_specs` update
 //! QR. Output file name is `sign_me_add_specs_<network_name>_<encryption>`.
 //!
@@ -258,11 +258,11 @@
 //! Reference keys (exactly only one has to be used):
 //!
 //! - `--all`: all networks with entries in the
-//!   [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree of the hot database
+//!   [`ADDRESS_BOOK`] tree of the hot database
 //! - `--name` followed by single network address book title: for a network with
-//!   existing record in the [`ADDRESS_BOOK`](constants::ADDRESS_BOOK)
+//!   existing record in the [`ADDRESS_BOOK`]
 //! - `--url` followed by single URL address: reserved for networks with no
-//!   record yet in the [`ADDRESS_BOOK`](constants::ADDRESS_BOOK)
+//!   record yet in the [`ADDRESS_BOOK`]
 //!
 //! `--all` key could be used with `--pass-errors` key, to stop processing after first
 //! error.
@@ -415,7 +415,7 @@
 //!
 //! `$ cargo run load-metadata [OPTIONS] <-d|-f|-k|-p|-t>`
 //!
-//! A file is generated in dedicated [`FOLDER`](constants::FOLDER) to
+//! A file is generated in dedicated [`FOLDER`] to
 //! (optionally) be signed and later be transformed into `load_metadata`
 //! update QR. Output file name is
 //! `sign_me_load_metadata_<network_name>V<version>`.
@@ -479,11 +479,11 @@
 //! Reference keys (exactly only one has to be used):
 //!
 //! - `-a,--all`: all networks with entries in the
-//!   [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree of the hot database
+//!   [`ADDRESS_BOOK`] tree of the hot database
 //! - `-n,--name` followed by single network name: for a network with existing
-//!   record in the [`ADDRESS_BOOK`](constants::ADDRESS_BOOK)
+//!   record in the [`ADDRESS_BOOK`]
 //! - `-u,--url` followed by single URL address: reserved for networks with no
-//!   record yet in the [`ADDRESS_BOOK`](constants::ADDRESS_BOOK)
+//!   record yet in the [`ADDRESS_BOOK`]
 //!
 //! `-a` key could be used with `--pass-errors` key, to stop processing after first
 //! error.
@@ -628,7 +628,7 @@
 //!
 //! `$ cargo run load-types`
 //!
-//! A file is generated in dedicated [`FOLDER`](constants::FOLDER) to
+//! A file is generated in dedicated [`FOLDER`] to
 //! (optionally) be signed and later be transformed into `load_types` update QR.
 //! Output file name is `sign_me_load_types`.
 //!
@@ -658,7 +658,7 @@
 //! as a static QR code, this QR code content goes into command line.
 //!
 //! Update QR and/or hexadecimal string file are produced in
-//! [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
+//! [`EXPORT_FOLDER`].
 //!
 //! Keys and most arguments (except file paths) are not case-sensitive.
 //!
@@ -719,22 +719,22 @@
 //!    - `Alice` to generate messages "verified" by
 //!      [Alice seed phrase](constants::ALICE_SEED_PHRASE) with derivation `//Alice`
 //!    - `-hex` followed by hex public key
-//!    - `-file` followed by the path in dedicated [`FOLDER`](constants::FOLDER)
+//!    - `-file` followed by the path in dedicated [`FOLDER`]
 //!      for file with public key as raw bytes
 //!
 //! - Key `--payload` followed by file path in dedicated
-//!   [`FOLDER`](constants::FOLDER) containing already generated payload as
+//!   [`FOLDER`] containing already generated payload as
 //!   raw bytes
 //!
 //! - Key `--signature` (can be entered only if the `--crypto` argument was
 //!   `ed25519`, `sr25519`, or `ecdsa` **and** `--verifier` is not `Alice`),
 //!   followed by:
 //!    - `-hex` followed by hex signature
-//!    - `-file` followed by the path in dedicated [`FOLDER`](constants::FOLDER)
+//!    - `-file` followed by the path in dedicated [`FOLDER`]
 //!      for file with signature as raw bytes
 //!
 //! - Optional key `-name` followed by path override for export file in
-//!   dedicated [`EXPORT_FOLDER`](constants::EXPORT_FOLDER)
+//!   dedicated [`EXPORT_FOLDER`]
 //!
 //! ### `sign` command
 //!
@@ -751,7 +751,7 @@
 //!    - `-hex` followed by hexadecimal string with contents of Vault-produced
 //!      `SufficientCrypto` QR code
 //!    - `-file` followed by file path in dedicated
-//!      [`FOLDER`](constants::FOLDER) for raw bytes file with contents of
+//!      [`FOLDER`] for raw bytes file with contents of
 //!      Vault-produced `SufficientCrypto` QR code
 //!
 //! - Key `-msg` followed by message type:
@@ -760,11 +760,11 @@
 //!    - `add-specs`
 //!
 //! - Key `--payload` followed by file path in dedicated
-//!   [`FOLDER`](constants::FOLDER) containing already generated payload as
+//!   [`FOLDER`] containing already generated payload as
 //!   raw bytes
 //!
 //! - Optional key `-name` followed by path override for export file in
-//!   dedicated [`EXPORT_FOLDER`](constants::EXPORT_FOLDER)
+//!   dedicated [`EXPORT_FOLDER`]
 //!
 //! Generating `SufficientCrypto` in Vault is suggested mainly for update
 //! distribution purposes. A dedicated (i.e. used only for updates signing),
@@ -779,7 +779,7 @@
 //! ### Examples: generate `load_metadata` QR code for westend metadata version 9200.
 //!
 //! Update payload `sign_me_load_metadata_westendV9200` is already in dedicated
-//! [`FOLDER`](constants::FOLDER).
+//! [`FOLDER`].
 //!
 //! #### `make` for external signature
 //!
@@ -791,7 +791,7 @@
 //! the payload file for `<public_key>` using `<encryption>` algorithm.
 //!
 //! Output file is `load_metadata_westendV9200` in
-//! [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
+//! [`EXPORT_FOLDER`].
 //!
 //! Example:
 //!
@@ -810,7 +810,7 @@
 //! --verifier Alice --payload sign_me_load_metadata_westendV9200`.
 //!
 //! Output file is `load_metadata_westendV9200_Alice-<encryption>` in
-//! [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
+//! [`EXPORT_FOLDER`].
 //!
 //! Example:
 //!
@@ -823,7 +823,7 @@
 //! sign_me_load_metadata_westendV9200`
 //!
 //! Output file is `load_metadata_westendV9200_unverified` in
-//! [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
+//! [`EXPORT_FOLDER`].
 //!
 //! Example:
 //!
@@ -840,7 +840,7 @@
 //! load-metadata --payload sign_me_load_metadata_westendV9200`
 //!
 //! Output file is `load_metadata_westendV9200` in
-//! [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
+//! [`EXPORT_FOLDER`].
 //!
 //! Example:
 //!
@@ -852,9 +852,9 @@
 //!
 //! `$ cargo run remove --name <network_name> --version <metadata_version>`
 //!
-//! Removes only the specified entry from the [`METATREE`](constants::METATREE).
+//! Removes only the specified entry from the [`METATREE`].
 //!
-//! The entry in [`META_HISTORY`](constants::META_HISTORY) remains. Should the
+//! The entry in [`META_HISTORY`] remains. Should the
 //! same metadata version be retrieved afterwards, the `META_HISTORY` entry will
 //! be updated to a block hash from more recent fetch, as the metadata from
 //! old block saved in the database would not be necessarily the same as the one
@@ -867,15 +867,15 @@
 //! This will remove:
 //! - address book entry
 //!   [`AddressBookEntry`](definitions::metadata::AddressBookEntry) from
-//!   [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree
+//!   [`ADDRESS_BOOK`] tree
 //! - network specs
 //!   [`NetworkSpecs`](definitions::network_specs::NetworkSpecs)
-//!   from [`SPECSTREEPREP`](constants::SPECSTREEPREP) tree
-//! - all associated metadata entries from [`METATREE`](constants::METATREE)
+//!   from [`SPECSTREEPREP`] tree
+//! - all associated metadata entries from [`METATREE`]
 //!   if there are no other address book entries this metadata is associated
 //!   with
 //! - all associated meta block history entries from
-//!   [`META_HISTORY`](constants::META_HISTORY) if there are no other address book
+//!   [`META_HISTORY`] if there are no other address book
 //!   entries this block history entries are associated with
 //!
 //! ## Restore hot database to default state
@@ -883,16 +883,16 @@
 //! `$ cargo run restore-defaults`
 //!
 //! Removes old hot database and generates new one with default values at
-//! default path [`HOT_DB_NAME`](constants::HOT_DB_NAME).
+//! default path [`HOT_DB_NAME`].
 //!
 //! By default, hot database contains:
 //!
-//! - [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) entries for default networks
-//! - [`SPECSTREEPREP`](constants::SPECSTREEPREP) entries for default networks
-//! - types information in [`SETTREE`](constants::SETTREE)
-//! - **no** metadata entries in [`METATREE`](constants::METATREE)
+//! - [`ADDRESS_BOOK`] entries for default networks
+//! - [`SPECSTREEPREP`] entries for default networks
+//! - types information in [`SETTREE`]
+//! - **no** metadata entries in [`METATREE`]
 //! - **no** meta block history entries in
-//!   [`META_HISTORY`](constants::META_HISTORY)
+//!   [`META_HISTORY`]
 //!
 //! Default networks are Polkadot, Kusama, and Westend.
 //!
@@ -902,17 +902,17 @@
 //!
 //! Removes old cold release database and generates new one with default values
 //! (unitiniated) at user-provided path or, if no valid path is given, at
-//! default path [`COLD_DB_NAME_RELEASE`](constants::COLD_DB_NAME_RELEASE).
+//! default path [`COLD_DB_NAME_RELEASE`].
 //!
 //! By default, the uninitiated cold release database contains:
 //!
-//! - [`SPECSTREE`](constants::SPECSTREE) entries for default networks
-//! - [`VERIFIERS`](constants::VERIFIERS) entries for default networks, with
+//! - [`SPECSTREE`] entries for default networks
+//! - [`VERIFIERS`] entries for default networks, with
 //!   verifiers set to the general one
 //! - two latest metadata versions for default networks in
-//!   [`METATREE`](constants::METATREE)
+//!   [`METATREE`]
 //! - default types information and clean danger status in
-//!   [`SETTREE`](constants::SETTREE)
+//!   [`SETTREE`]
 //!
 //! Note that the general verifier is not specified and history is not
 //! started. This will be done only in Vault itself. Before initialization,
@@ -924,12 +924,12 @@
 //!
 //! Metadata from hot database is transferred to cold release database at
 //! user-provided path or, if no valid path is given, at default path
-//! [`COLD_DB_NAME_RELEASE`](constants::COLD_DB_NAME_RELEASE).
+//! [`COLD_DB_NAME_RELEASE`].
 //!
 //! Metadata is transferred only for the networks that are known to the cold
 //! database, i.e. the ones having
 //! [`OrderedNetworkSpecs`](definitions::network_specs::OrderedNetworkSpecs) entry in
-//! [`SPECSTREE`](constants::SPECSTREE).
+//! [`SPECSTREE`].
 
 //! ## Make derivations import QR and/or hexadecimal string file
 //!
@@ -972,14 +972,14 @@
 //! base58 prefix, it the network metadata has base58 prefix inside.
 //!
 //! A raw bytes update payload file is generated in dedicated
-//! [`FOLDER`](constants::FOLDER) to (optionally) be signed and later be
+//! [`FOLDER`] to (optionally) be signed and later be
 //! transformed into `load_metadata` update QR. Update payload file name is
 //! `sign_me_load_metadata_<network_name>V<version>`.
 //!
 //! By default, metadata extracted from `.wasm` file is added to the database.
 //! Optional `-d` key could be used is database should **not** be updated.
 //! If the metadata gets entered in the database (i.e. no `-d` key used),
-//! [`META_HISTORY`](constants::META_HISTORY) gets no entry. Block hash will be
+//! [`META_HISTORY`] gets no entry. Block hash will be
 //! added if the same metadata is later fetched from a node.
 //!
 //! ## Make metadata file for `defaults` release metadata set
@@ -987,10 +987,10 @@
 //! `$ cargo run  meta-default-file --name <NETWORK NAME> --version <NETWORK VERSION>`
 //!
 //! Produces file with hex-encoded network metadata from the hot database
-//! [`METATREE`](constants::METATREE) entry.
+//! [`METATREE`] entry.
 //!
 //! Output file named `<network_name><metadata_version>` is generated in
-//! dedicated [`EXPORT_FOLDER`](constants::EXPORT_FOLDER). It contains
+//! dedicated [`EXPORT_FOLDER`]. It contains
 //! hexadecimal network metadata.
 //!
 //! ### Example
@@ -1002,7 +1002,7 @@
 //! `$ cargo run meta-at-block --url <RPC URL> --block-hash <BLOCK HASH>`
 //!
 //! Output file named `<network_name><metadata_version>_<block_hash>` is
-//! generated in dedicated [`EXPORT_FOLDER`](constants::EXPORT_FOLDER).
+//! generated in dedicated [`EXPORT_FOLDER`].
 //! It contains hexadecimal network metadata.
 //!
 //! This command does not address or update the hot database.

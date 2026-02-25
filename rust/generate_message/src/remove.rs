@@ -14,8 +14,8 @@
 //! `$ cargo run remove -name westend -version 9200`
 //!
 //! Note that this will remove only the selected metadata from [`METATREE`] tree
-//! and will not affect [`ADDRESS_BOOK`](constants::ADDRESS_BOOK),
-//! [`META_HISTORY`] or [`SPECSTREEPREP`](constants::SPECSTREEPREP) trees of the
+//! and will not affect [`ADDRESS_BOOK`],
+//! [`META_HISTORY`] or [`SPECSTREEPREP`] trees of the
 //! database.
 //!
 //! If the same version of the network metadata is loaded again, the
@@ -36,10 +36,10 @@
 //!
 //! - address book entry
 //!   [`AddressBookEntry`](definitions::metadata::AddressBookEntry) from
-//!   [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree
+//!   [`ADDRESS_BOOK`] tree
 //! - network specs
 //!   [`NetworkSpecs`](definitions::network_specs::NetworkSpecs) from
-//!   [`SPECSTREEPREP`](constants::SPECSTREEPREP) tree
+//!   [`SPECSTREEPREP`] tree
 //! - all associated metadata entries from [`METATREE`] if there are no other
 //!   address book entries this metadata is associated with
 //! - all associated meta block history entries from [`META_HISTORY`] if there

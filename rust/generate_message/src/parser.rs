@@ -36,15 +36,15 @@ pub enum Command {
     /// This will remove:
     /// - address book entry
     ///   [`AddressBookEntry`](definitions::metadata::AddressBookEntry) from
-    ///   [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree
+    ///   [`ADDRESS_BOOK`] tree
     /// - network specs
     ///   [`NetworkSpecs`](definitions::network_specs::NetworkSpecs)
-    ///   from [`SPECSTREEPREP`](constants::SPECSTREEPREP) tree
-    /// - all associated metadata entries from [`METATREE`](constants::METATREE)
+    ///   from [`SPECSTREEPREP`] tree
+    /// - all associated metadata entries from [`METATREE`]
     ///   if there are no other address book entries this metadata is associated
     ///   with
     /// - all associated meta block history entries from
-    ///   [`META_HISTORY`](constants::META_HISTORY) if there are no other address book
+    ///   [`META_HISTORY`] if there are no other address book
     ///   entries this block history entries are associated with
     #[command(name = "add-specs")]
     Specs {
@@ -79,15 +79,15 @@ pub enum Command {
     /// This will remove:
     /// - address book entry
     ///   [`AddressBookEntry`](definitions::metadata::AddressBookEntry) from
-    ///   [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) tree
+    ///   [`ADDRESS_BOOK`] tree
     /// - network specs
     ///   [`NetworkSpecs`](definitions::network_specs::NetworkSpecs)
-    ///   from [`SPECSTREEPREP`](constants::SPECSTREEPREP) tree
-    /// - all associated metadata entries from [`METATREE`](constants::METATREE)
+    ///   from [`SPECSTREEPREP`] tree
+    /// - all associated metadata entries from [`METATREE`]
     ///   if there are no other address book entries this metadata is associated
     ///   with
     /// - all associated meta block history entries from
-    ///   [`META_HISTORY`](constants::META_HISTORY) if there are no other address book
+    ///   [`META_HISTORY`] if there are no other address book
     ///   entries this block history entries are associated with
     Remove {
         #[clap(subcommand)]
@@ -101,16 +101,16 @@ pub enum Command {
     /// Restore hot database to default state
     ///
     /// Removes old hot database and generates new one with default values at
-    /// default path [`HOT_DB_NAME`](constants::HOT_DB_NAME).
+    /// default path [`HOT_DB_NAME`].
     ///
     /// By default, hot database contains:
     ///
-    /// - [`ADDRESS_BOOK`](constants::ADDRESS_BOOK) entries for default networks
-    /// - [`SPECSTREEPREP`](constants::SPECSTREEPREP) entries for default networks
-    /// - types information in [`SETTREE`](constants::SETTREE)
-    /// - **no** metadata entries in [`METATREE`](constants::METATREE)
+    /// - [`ADDRESS_BOOK`] entries for default networks
+    /// - [`SPECSTREEPREP`] entries for default networks
+    /// - types information in [`SETTREE`]
+    /// - **no** metadata entries in [`METATREE`]
     /// - **no** meta block history entries in
-    ///   [`META_HISTORY`](constants::META_HISTORY)
+    ///   [`META_HISTORY`]
     ///
     /// Default networks are Polkadot, Kusama, and Westend.
     RestoreDefaults {
@@ -123,17 +123,17 @@ pub enum Command {
     ///
     /// Removes old cold release database and generates new one with default values
     /// (uninitiated) at user-provided path or, if no valid path is given, at
-    /// default path [`COLD_DB_NAME_RELEASE`](constants::COLD_DB_NAME_RELEASE).
+    /// default path [`COLD_DB_NAME_RELEASE`].
     ///
     /// By default, the uninitiated cold release database contains:
     ///
-    /// - [`SPECSTREE`](constants::SPECSTREE) entries for default networks
-    /// - [`VERIFIERS`](constants::VERIFIERS) entries for default networks, with
+    /// - [`SPECSTREE`] entries for default networks
+    /// - [`VERIFIERS`] entries for default networks, with
     ///   verifiers set to the general one
     /// - two latest metadata versions for default networks in
-    ///   [`METATREE`](constants::METATREE)
+    ///   [`METATREE`]
     /// - default types information and clean danger status in
-    ///   [`SETTREE`](constants::SETTREE)
+    ///   [`SETTREE`]
     ///
     /// Note that the general verifier is not specified and history is not
     /// started. This will be done only in Vault itself. Before initialization,
@@ -147,12 +147,12 @@ pub enum Command {
     ///
     /// Metadata from hot database is transferred to cold release database at
     /// user-provided path or, if no valid path is given, at default path
-    /// [`COLD_DB_NAME_RELEASE`](constants::COLD_DB_NAME_RELEASE).
+    /// [`COLD_DB_NAME_RELEASE`].
     ///
     /// Metadata is transferred only for the networks that are known to the cold
     /// database, i.e. the ones having
     /// [`OrderedNetworkSpecs`](definitions::network_specs::OrderedNetworkSpecs) entry in
-    /// [`SPECSTREE`](constants::SPECSTREE).
+    /// [`SPECSTREE`].
     #[command(name = "transfer-meta")]
     TransferMetaToColdRelease {
         /// Path to release db
@@ -179,14 +179,14 @@ pub enum Command {
     /// base58 prefix, it the network metadata has base58 prefix inside.
     ///
     /// A raw bytes update payload file is generated in dedicated
-    /// [`FOLDER`](constants::FOLDER) to (optionally) be signed and later be
+    /// [`FOLDER`] to (optionally) be signed and later be
     /// transformed into `load_metadata` update QR. Update payload file name is
     /// `sign_me_load_metadata_<network_name>V<version>`.
     ///
     /// By default, metadata extracted from `.wasm` file is added to the database.
     /// Optional `-d` key could be used is database should **not** be updated.
     /// If the metadata gets entered in the database (i.e. no `-d` key used),
-    /// [`META_HISTORY`](constants::META_HISTORY) gets no entry. Block hash will be
+    /// [`META_HISTORY`] gets no entry. Block hash will be
     /// added if the same metadata is later fetched from a node.
     Unwasm {
         /// WASM file
@@ -209,10 +209,10 @@ pub enum Command {
     /// Make file with hexadecimal metadata for defaults release metadata set
     ///
     /// Produces file with hex-encoded network metadata from the hot database
-    /// [`METATREE`](constants::METATREE) entry.
+    /// [`METATREE`] entry.
     ///
     /// Output file named `<network_name><metadata_version>` is generated in
-    /// dedicated [`EXPORT_FOLDER`](constants::EXPORT_FOLDER). It contains
+    /// dedicated [`EXPORT_FOLDER`]. It contains
     /// hexadecimal network metadata.
     MetaDefaultFile {
         /// File name

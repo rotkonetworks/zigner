@@ -57,12 +57,14 @@ impl CosmosSignRequest {
     /// parse a cosmos sign request from QR hex data
     ///
     /// format:
+    /// ```text
     /// [0x53][0x05][0x10]       3B  prelude
     /// [account_index: 4 LE]    4B
     /// [chain_name_len: 1]      1B
     /// [chain_name: N]          NB
     /// [sign_doc_len: 4 LE]     4B
     /// [sign_doc_bytes: N]      NB  canonical amino JSON
+    /// ```
     pub fn from_qr_hex(hex: &str) -> Result<Self> {
         let bytes =
             hex::decode(hex).map_err(|e| Error::Other(anyhow::anyhow!("invalid hex: {e}")))?;

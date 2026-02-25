@@ -113,7 +113,7 @@ fn make_identicon(into_id: &[u8]) -> Identicon {
 }
 
 /// Get [`MultiSigner`](https://docs.rs/sp-runtime/6.0.0/sp_runtime/enum.MultiSigner.html)
-/// from public key and [`Encryption`](crate::crypto::Encryption)
+/// from public key and [`Encryption`]
 pub fn get_multisigner(public: &[u8], encryption: &Encryption) -> Result<MultiSigner> {
     match encryption {
         Encryption::Ed25519 => {
