@@ -53,7 +53,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Compute bech32 cosmos address from compressed pubkey bytes and network name.
 /// Same key for all cosmos chains (coin type 118), just different bech32 prefix.
-/// This follows how zafu differentiates addresses: fromBech32 → toBech32 with chain prefix.
+/// This follows how zafu differentiates addresses: `from_bech32` → `to_bech32` with chain prefix.
 pub fn pubkey_to_bech32_address(pubkey_bytes: &[u8], network_name: &str) -> Result<String> {
     use bech32::{Bech32, Hrp};
 

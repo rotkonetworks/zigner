@@ -1367,9 +1367,9 @@ fn sign_penumbra_transaction(
     })?;
 
     // Encode as QR response bytes
-    Ok(auth_data.encode().map_err(|e| ErrorDisplayed::Str {
+    auth_data.encode().map_err(|e| ErrorDisplayed::Str {
         s: format!("Encode failed: {e}"),
-    })?)
+    })
 }
 
 // ============================================================================

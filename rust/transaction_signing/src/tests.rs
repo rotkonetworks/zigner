@@ -1169,7 +1169,7 @@ fn load_known_types_upd_general_verifier() {
     populate_cold(&db, Verifier { v: None }).unwrap();
     let line = fs::read_to_string("for_tests/types_info_Alice.txt").unwrap();
     let output = produce_output(&db, line.trim()).unwrap();
-    let warning = "Received message is verified by a new general verifier. Currently no general verifier is set, and proceeding will update the general verifier to the received value. All previously acquired information associated with general verifier will be purged. Affected network specs entries: Kusama, Penumbra, Polkadot, Westend, Zcash; affected metadata entries: kusama2030, polkadot30, westend9000, westend9010. Types information is purged.".to_string();
+    let warning = "Received message is verified by a new general verifier. Currently no general verifier is set, and proceeding will update the general verifier to the received value. All previously acquired information associated with general verifier will be purged. Affected network specs entries: Celestia, Cosmos Hub, Kusama, Noble, Osmosis, Penumbra, Polkadot, Terra, Westend, Zcash; affected metadata entries: kusama2030, polkadot30, westend9000, westend9010. Types information is purged.".to_string();
 
     let warning2 =
         "Received types information is identical to the one that was in the database.".to_string();
@@ -1604,7 +1604,7 @@ Identities:
             .unwrap();
     let output = produce_output(&db, line.trim()).unwrap();
     let warning_1 = "Received message is verified. Currently no verifier is set for network with genesis hash 6bfe24dca2a3be10f22212678ac13a6446ec764103c0f3471c71609eac384aae and no general verifier is set. Proceeding will update the network verifier to general. All previously acquired network information that was received unverified will be purged. Affected network specs entries: dock-pos-main-runtime-sr25519; affected metadata entries: dock-pos-main-runtime31.".to_string();
-    let warning_2 = "Received message is verified by a new general verifier. Currently no general verifier is set, and proceeding will update the general verifier to the received value. All previously acquired information associated with general verifier will be purged. Affected network specs entries: Kusama, Penumbra, Polkadot, Westend, Zcash; affected metadata entries: kusama2030, polkadot30, westend9000, westend9010. Types information is purged.".to_string();
+    let warning_2 = "Received message is verified by a new general verifier. Currently no general verifier is set, and proceeding will update the general verifier to the received value. All previously acquired information associated with general verifier will be purged. Affected network specs entries: Celestia, Cosmos Hub, Kusama, Noble, Osmosis, Penumbra, Polkadot, Terra, Westend, Zcash; affected metadata entries: kusama2030, polkadot30, westend9000, westend9010. Types information is purged.".to_string();
     let warning_3 = "Received network specs information for dock-pos-main-runtime-sr25519 is same as the one already in the database.".to_string();
 
     let reply_known = TransactionCardSet {
@@ -2975,7 +2975,7 @@ fn proper_hold_display() {
     }
 
     let line = fs::read_to_string("for_tests/types_info_Alice.txt").unwrap();
-    let warning_1 = "Received message is verified by a new general verifier. Currently no general verifier is set, and proceeding will update the general verifier to the received value. All previously acquired information associated with general verifier will be purged. Affected network specs entries: Kusama, Penumbra, Polkadot, Westend, Zcash, westend-ed25519; affected metadata entries: kusama2030, polkadot30, westend9000, westend9010. Types information is purged.".to_string();
+    let warning_1 = "Received message is verified by a new general verifier. Currently no general verifier is set, and proceeding will update the general verifier to the received value. All previously acquired information associated with general verifier will be purged. Affected network specs entries: Celestia, Cosmos Hub, Kusama, Noble, Osmosis, Penumbra, Polkadot, Terra, Westend, Zcash, westend-ed25519; affected metadata entries: kusama2030, polkadot30, westend9000, westend9010. Types information is purged.".to_string();
     let warning_2 =
         "Received types information is identical to the one that was in the database.".to_string();
 
