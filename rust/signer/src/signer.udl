@@ -1101,14 +1101,21 @@ dictionary CosmosChainAddress {
     string prefix;
 };
 
+// Single cosmos message for display
+dictionary CosmosMsgDisplay {
+    string msg_type;
+    string recipient;
+    string amount;
+    string detail;
+    boolean blind;
+};
+
 // Cosmos sign request parsed from QR
 dictionary CosmosSignRequest {
     u32 account_index;
     string chain_name;
     string chain_id;
-    string msg_type;
-    string recipient;
-    string amount;
+    sequence<CosmosMsgDisplay> msgs;
     string fee;
     string memo;
     string raw_qr_hex;

@@ -295,6 +295,7 @@ class CameraViewModel() : ViewModel() {
 		_dynamicDerivationTransactionPayload.value = null
 		_zcashSignRequestPayload.value = null
 		_penumbraSignRequestPayload.value = null
+		_cosmosSignRequestPayload.value = null
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
 		resetScanValues()

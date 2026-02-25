@@ -173,7 +173,7 @@ impl PenumbraAuthorizationData {
     /// - delegator_vote_sigs: 64 bytes each
     /// - lqt_vote_count: 2 bytes (le)
     /// - lqt_vote_sigs: 64 bytes each
-    pub fn encode(&self) -> Vec<u8> {
+    pub fn encode(&self) -> Result<Vec<u8>> {
         // pre-allocate exact size
         let capacity = 64
             + 6
@@ -187,36 +187,42 @@ impl PenumbraAuthorizationData {
         output.extend_from_slice(&self.effect_hash);
 
         // spend auths (bounds-checked to prevent silent u16 truncation)
-        assert!(
-            self.spend_auths.len() <= u16::MAX as usize,
-            "too many spend auths"
-        );
+        if self.spend_auths.len() > u16::MAX as usize {
+            return Err(Error::Other(anyhow::anyhow!(
+                "too many spend auths: {}",
+                self.spend_auths.len()
+            )));
+        }
         output.extend_from_slice(&(self.spend_auths.len() as u16).to_le_bytes());
         for sig in &self.spend_auths {
             output.extend_from_slice(sig);
         }
 
         // delegator vote auths
-        assert!(
-            self.delegator_vote_auths.len() <= u16::MAX as usize,
-            "too many vote auths"
-        );
+        if self.delegator_vote_auths.len() > u16::MAX as usize {
+            return Err(Error::Other(anyhow::anyhow!(
+                "too many delegator vote auths: {}",
+                self.delegator_vote_auths.len()
+            )));
+        }
         output.extend_from_slice(&(self.delegator_vote_auths.len() as u16).to_le_bytes());
         for sig in &self.delegator_vote_auths {
             output.extend_from_slice(sig);
         }
 
         // lqt vote auths
-        assert!(
-            self.lqt_vote_auths.len() <= u16::MAX as usize,
-            "too many lqt vote auths"
-        );
+        if self.lqt_vote_auths.len() > u16::MAX as usize {
+            return Err(Error::Other(anyhow::anyhow!(
+                "too many lqt vote auths: {}",
+                self.lqt_vote_auths.len()
+            )));
+        }
         output.extend_from_slice(&(self.lqt_vote_auths.len() as u16).to_le_bytes());
         for sig in &self.lqt_vote_auths {
             output.extend_from_slice(sig);
         }
 
-        output
+        Ok(output)
     }
 }
 
@@ -801,7 +807,7 @@ mod tests {
         auth_data.spend_auths.push([1u8; 64]);
         auth_data.spend_auths.push([2u8; 64]);
 
-        let encoded = auth_data.encode();
+        let encoded = auth_data.encode().unwrap();
 
         // 64 (effect_hash) + 2 (count) + 128 (2 sigs) + 2 + 2 = 198
         assert_eq!(encoded.len(), 64 + 2 + 128 + 2 + 2);

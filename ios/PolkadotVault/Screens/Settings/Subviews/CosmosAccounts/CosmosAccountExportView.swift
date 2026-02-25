@@ -181,7 +181,8 @@ extension CosmosAccountExportView {
                     let export = try exportCosmosAccounts(
                         seedPhrase: seedPhrase,
                         accountIndex: 0,
-                        label: seedName
+                        label: seedName,
+                        networkName: ""
                     )
                     let addresses = export.addresses.map { addr in
                         CosmosAddressResult(

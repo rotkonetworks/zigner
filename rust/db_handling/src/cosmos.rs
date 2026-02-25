@@ -57,6 +57,13 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 pub fn pubkey_to_bech32_address(pubkey_bytes: &[u8], network_name: &str) -> Result<String> {
     use bech32::{Bech32, Hrp};
 
+    if pubkey_bytes.len() != 33 {
+        return Err(Error::Other(anyhow::anyhow!(
+            "expected 33-byte compressed secp256k1 pubkey, got {} bytes",
+            pubkey_bytes.len()
+        )));
+    }
+
     // Map network name to bech32 prefix
     let prefix = match network_name {
         "osmosis" => PREFIX_OSMOSIS,
@@ -102,7 +109,7 @@ pub const PREFIX_SECRET: &str = "secret";
 pub const PREFIX_INJECTIVE: &str = "inj";
 
 /// Cosmos key pair with secp256k1 keys
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct CosmosKeyPair {
     /// 32-byte secp256k1 secret key
     pub secret_key: [u8; 32],
@@ -126,18 +133,9 @@ impl CosmosKeyPair {
         Ok(address)
     }
 
-    /// Sign a message using secp256k1 ECDSA
-    pub fn sign(&self, message: &[u8]) -> Result<[u8; 64]> {
-        use sp_core::{ecdsa, Pair};
-
-        // sp_core's ecdsa uses 32-byte seed to derive the key
-        let pair = ecdsa::Pair::from_seed_slice(&self.secret_key)
-            .map_err(|e| Error::Other(anyhow::anyhow!("ECDSA seed error: {:?}", e)))?;
-
-        // Sign and return the 64-byte signature (r || s)
-        let signature = pair.sign(message);
-        Ok(signature.0[..64].try_into().expect("signature is 65 bytes"))
-    }
+    // NOTE: signing is done in transaction_signing::cosmos::sign_cosmos_amino()
+    // which correctly uses SHA256 pre-hash. Do NOT add a sign() method here
+    // using sp_core::ecdsa — it uses blake2b-256, which is wrong for Cosmos.
 }
 
 /// Derive Cosmos key from seed phrase

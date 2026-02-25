@@ -1192,32 +1192,91 @@ fn parse_cosmos_sign_request(qr_hex: &str) -> Result<CosmosSignRequest, ErrorDis
             s: format!("Failed to parse sign doc: {e}"),
         })?;
 
+    let msgs = display
+        .msgs
+        .into_iter()
+        .map(|m| CosmosMsgDisplay {
+            msg_type: m.msg_type,
+            recipient: m.recipient,
+            amount: m.amount,
+            detail: m.detail,
+            blind: m.blind,
+        })
+        .collect();
+
     Ok(CosmosSignRequest {
         account_index: req.account_index,
         chain_name: req.chain_name,
         chain_id: display.chain_id,
-        msg_type: display.msg_type,
-        recipient: display.recipient,
-        amount: display.amount,
+        msgs,
         fee: display.fee,
         memo: display.memo,
         raw_qr_hex: qr_hex.to_string(),
     })
 }
 
-/// Sign a Cosmos transaction and return 64-byte compact signature
+/// Sign a Cosmos transaction and return 64-byte compact signature.
+///
+/// IMPORTANT: re-derives display fields from raw_qr_hex and verifies they
+/// match what the user approved. This prevents a compromised hot wallet from
+/// displaying one transaction but signing another.
 fn sign_cosmos_transaction(
     seed_phrase: &str,
     request: CosmosSignRequest,
 ) -> Result<Vec<u8>, ErrorDisplayed> {
     use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS};
-    use transaction_signing::cosmos::{sign_cosmos_amino, CosmosSignRequest as InternalRequest};
+    use transaction_signing::cosmos::{
+        sign_cosmos_amino, CosmosSignDocDisplay,
+        CosmosSignRequest as InternalRequest,
+    };
 
     // re-parse the QR to get the sign doc bytes
     let req =
         InternalRequest::from_qr_hex(&request.raw_qr_hex).map_err(|e| ErrorDisplayed::Str {
             s: format!("Failed to re-parse QR: {e}"),
         })?;
+
+    // re-derive display fields from the raw QR and verify they match
+    // what the user was shown. this is the cosmos equivalent of
+    // penumbra's verify_effect_hash — it binds display to signing.
+    let display = CosmosSignDocDisplay::from_json(&req.sign_doc_bytes)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to re-parse sign doc: {e}"),
+        })?;
+
+    if display.chain_id != request.chain_id {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Chain ID mismatch: display showed '{}' but QR contains '{}'",
+                request.chain_id, display.chain_id
+            ),
+        });
+    }
+    if display.fee != request.fee {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Fee mismatch: display showed '{}' but QR contains '{}'",
+                request.fee, display.fee
+            ),
+        });
+    }
+    if display.memo != request.memo {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Memo mismatch: display showed '{}' but QR contains '{}'",
+                request.memo, display.memo
+            ),
+        });
+    }
+    if display.msgs.len() != request.msgs.len() {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Message count mismatch: display showed {} but QR contains {}",
+                request.msgs.len(),
+                display.msgs.len()
+            ),
+        });
+    }
 
     // derive the cosmos key from seed phrase
     let key =
@@ -1309,7 +1368,9 @@ fn sign_penumbra_transaction(
     })?;
 
     // Encode as QR response bytes
-    Ok(auth_data.encode())
+    Ok(auth_data.encode().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Encode failed: {e}"),
+    })?)
 }
 
 // ============================================================================

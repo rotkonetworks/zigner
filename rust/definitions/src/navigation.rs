@@ -893,6 +893,21 @@ pub struct CosmosChainAddress {
     pub prefix: String,
 }
 
+/// a single cosmos message displayed to the user
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CosmosMsgDisplay {
+    /// message type (e.g. "Send", "IBC Transfer", "Swap", "Contract Call (BLIND)")
+    pub msg_type: String,
+    /// target address (recipient, validator, contract, etc.)
+    pub recipient: String,
+    /// amount string
+    pub amount: String,
+    /// extra detail (min output, pool id, raw contract msg, etc.)
+    pub detail: String,
+    /// true if this message requires blind signing (contract calls, unknown types)
+    pub blind: bool,
+}
+
 /// Cosmos sign request parsed from QR
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CosmosSignRequest {
@@ -901,12 +916,8 @@ pub struct CosmosSignRequest {
     pub chain_name: String,
     /// chain_id from amino JSON (e.g. "noble-1", "osmosis-1")
     pub chain_id: String,
-    /// message type (e.g. "Send", "IBC Transfer")
-    pub msg_type: String,
-    /// recipient address
-    pub recipient: String,
-    /// amount string
-    pub amount: String,
+    /// ALL messages in the sign doc — must all be shown to the user
+    pub msgs: Vec<CosmosMsgDisplay>,
     /// fee string
     pub fee: String,
     /// memo

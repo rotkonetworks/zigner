@@ -31,6 +31,8 @@ fun CosmosTransactionScreen(
 	onDecline: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	val hasBlindMsgs = request.msgs.any { it.blind }
+
 	Column(
 		modifier = modifier
 			.fillMaxSize()
@@ -58,17 +60,59 @@ fun CosmosTransactionScreen(
 				value = request.chainName.ifEmpty { request.chainId.ifEmpty { "Unknown" } }
 			)
 
-			// Message type
-			CosmosInfoCard(label = "Type", value = request.msgType.ifEmpty { "Unknown" })
-
-			// Recipient
-			if (request.recipient.isNotEmpty()) {
-				CosmosInfoCard(label = "Recipient", value = request.recipient)
+			// Blind signing warning — shown prominently before any message details
+			if (hasBlindMsgs) {
+				CosmosWarningCard(
+					"BLIND SIGNING REQUIRED",
+					"This transaction contains message types that cannot be fully " +
+						"verified by the wallet. You are trusting the transaction " +
+						"source. Review all details carefully before signing."
+				)
 			}
 
-			// Amount
-			if (request.amount.isNotEmpty()) {
-				CosmosInfoCard(label = "Amount", value = request.amount)
+			// Show ALL messages — never hide messages from the user
+			val msgCount = request.msgs.size
+			if (msgCount > 1) {
+				CosmosInfoCard(
+					label = "WARNING",
+					value = "This transaction contains $msgCount messages. Review ALL of them carefully."
+				)
+			}
+
+			request.msgs.forEachIndexed { index, msg ->
+				val prefix = if (msgCount > 1) "Message ${index + 1}/$msgCount: " else ""
+
+				if (msg.blind) {
+					CosmosWarningCard(
+						label = "${prefix}${msg.msgType}",
+						value = "Cannot verify — blind signing required"
+					)
+				} else {
+					CosmosInfoCard(
+						label = "${prefix}Type",
+						value = msg.msgType.ifEmpty { "Unknown" }
+					)
+				}
+
+				if (msg.recipient.isNotEmpty()) {
+					CosmosInfoCard(label = "${prefix}Recipient", value = msg.recipient)
+				}
+
+				if (msg.amount.isNotEmpty()) {
+					CosmosInfoCard(label = "${prefix}Amount", value = msg.amount)
+				}
+
+				if (msg.detail.isNotEmpty()) {
+					CosmosInfoCard(label = "${prefix}Detail", value = msg.detail)
+				}
+
+				if (index < msgCount - 1) {
+					SignerDivider()
+				}
+			}
+
+			if (msgCount == 0) {
+				CosmosInfoCard(label = "Type", value = "Unknown (no messages)")
 			}
 
 			// Fee
@@ -95,7 +139,11 @@ fun CosmosTransactionScreen(
 			verticalArrangement = Arrangement.spacedBy(8.dp)
 		) {
 			PrimaryButtonWide(
-				label = stringResource(R.string.transaction_action_approve),
+				label = if (hasBlindMsgs) {
+					"Sign (Blind)"
+				} else {
+					stringResource(R.string.transaction_action_approve)
+				},
 				onClicked = onApprove
 			)
 			SecondaryButtonWide(
@@ -125,6 +173,29 @@ private fun CosmosInfoCard(label: String, value: String) {
 			text = value,
 			style = SignerTypeface.BodyL,
 			color = MaterialTheme.colors.primary
+		)
+	}
+}
+
+@Composable
+private fun CosmosWarningCard(label: String, value: String) {
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.clip(RoundedCornerShape(8.dp))
+			.background(MaterialTheme.colors.backgroundDanger)
+			.padding(12.dp),
+		verticalArrangement = Arrangement.spacedBy(4.dp)
+	) {
+		Text(
+			text = label,
+			style = SignerTypeface.LabelM,
+			color = MaterialTheme.colors.accentRed
+		)
+		Text(
+			text = value,
+			style = SignerTypeface.BodyL,
+			color = MaterialTheme.colors.accentRed
 		)
 	}
 }
