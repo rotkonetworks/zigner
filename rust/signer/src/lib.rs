@@ -1452,9 +1452,12 @@ fn export_zcash_fvk(
     // Get receiving address (unified address with orchard receiver)
     let address = osk.get_address(mainnet);
 
-    // Get UFVK string (standard Zcash unified full viewing key format per ZIP-316)
+    // Get UFVK string with orchard + transparent components (ZIP-316)
     // Format: "uview1..." for mainnet, "uviewtest1..." for testnet
-    let ufvk = osk.get_ufvk(mainnet);
+    let ufvk = OrchardSpendingKey::get_ufvk_with_transparent(seed_phrase, account_index, mainnet)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to derive UFVK: {e}"),
+        })?;
 
     // Generate seed fingerprint: first 16 bytes of SHA256(seed_phrase)
     // This allows Zashi to match accounts to the same seed without revealing the seed

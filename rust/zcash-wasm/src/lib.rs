@@ -25,11 +25,11 @@ pub fn derive_zcash_address(
 /// derive zcash unified full viewing key (ufvk) from mnemonic
 ///
 /// returns ufvk string (uview1...) for watch-only wallet import
+/// includes both orchard and transparent components so watch-only wallets
+/// can derive t-addresses
 #[wasm_bindgen]
 pub fn derive_zcash_ufvk(mnemonic: &str, account: u32, mainnet: bool) -> Result<String, JsError> {
-    let sk = derive_spending_key(mnemonic, account)?;
-    let ufvk = get_ufvk(&sk, mainnet);
-    Ok(ufvk)
+    get_ufvk_with_transparent(mnemonic, account, mainnet)
 }
 
 /// derive zcash orchard full viewing key bytes from mnemonic
@@ -160,6 +160,61 @@ fn get_ufvk(sk: &SpendingKeyBytes, mainnet: bool) -> String {
     Ufvk::try_from_items(vec![orchard_fvk])
         .expect("valid fvk")
         .encode(&network)
+}
+
+/// Build UFVK with both orchard and transparent components from mnemonic seed.
+/// The transparent component allows watch-only wallets to derive t-addresses.
+fn get_ufvk_with_transparent(mnemonic_str: &str, account: u32, mainnet: bool) -> Result<String, JsError> {
+    use orchard::keys::FullViewingKey;
+    use zcash_address::unified::{Encoding, Fvk, Ufvk};
+    use zcash_address::Network;
+
+    let mnemonic = bip32::Mnemonic::new(mnemonic_str, bip32::Language::English)
+        .map_err(|e| JsError::new(&format!("invalid mnemonic: {}", e)))?;
+    let seed = mnemonic.to_seed("");
+    let seed_bytes: &[u8] = seed.as_bytes();
+
+    // orchard FVK
+    let account_id = zip32::AccountId::try_from(account)
+        .map_err(|_| JsError::new("invalid account index"))?;
+    let orchard_sk = orchard::keys::SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
+        .map_err(|e| JsError::new(&format!("orchard key derivation failed: {:?}", e)))?;
+    let fvk = FullViewingKey::from(&orchard_sk);
+    let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
+
+    // transparent account pubkey: derive m/44'/133'/account'
+    let root_xprv = bip32::XPrv::new(seed_bytes)
+        .map_err(|e| JsError::new(&format!("bip32 root key failed: {}", e)))?;
+    let purpose = bip32::ChildNumber::new(44, true)
+        .map_err(|e| JsError::new(&format!("bip32 purpose: {}", e)))?;
+    let coin_type = bip32::ChildNumber::new(ZCASH_COIN_TYPE, true)
+        .map_err(|e| JsError::new(&format!("bip32 coin_type: {}", e)))?;
+    let account_child = bip32::ChildNumber::new(account, true)
+        .map_err(|e| JsError::new(&format!("bip32 account: {}", e)))?;
+
+    let account_xprv = root_xprv
+        .derive_child(purpose)
+        .and_then(|k| k.derive_child(coin_type))
+        .and_then(|k| k.derive_child(account_child))
+        .map_err(|e| JsError::new(&format!("bip32 derivation failed: {}", e)))?;
+
+    let account_xpub = bip32::XPub::from(&account_xprv);
+
+    // Fvk::P2pkh is 65 bytes: chain_code (32) + compressed_pubkey (33)
+    let mut p2pkh_data = [0u8; 65];
+    p2pkh_data[..32].copy_from_slice(&account_xpub.attrs().chain_code);
+    use bip32::PublicKey as _;
+    let pubkey_bytes = account_xpub.public_key().to_bytes();
+    p2pkh_data[32..65].copy_from_slice(&pubkey_bytes);
+
+    let transparent_fvk = Fvk::P2pkh(p2pkh_data);
+
+    let network = if mainnet { Network::Main } else { Network::Test };
+
+    let ufvk = Ufvk::try_from_items(vec![orchard_fvk, transparent_fvk])
+        .map_err(|e| JsError::new(&format!("failed to build UFVK: {}", e)))?;
+
+    Ok(ufvk.encode(&network))
 }
 
 #[cfg(test)]
