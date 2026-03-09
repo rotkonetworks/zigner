@@ -59,26 +59,41 @@ fun ZcashTransactionScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Transaction summary card
+            val isShielding = request.shieldingSighashes.isNotEmpty()
+            val sigCount = if (isShielding) request.shieldingSighashes.size else request.alphas.size
             TCZcashSummary(
                 summary = ZcashTransactionSummary(
                     mainnet = request.mainnet,
                     fee = "see summary",
-                    spendCount = request.alphas.size.toULong(),
+                    spendCount = sigCount.toULong(),
                     outputCount = 0u,
                     sighash = request.sighash,
-                    anchor = "provided by wallet"
+                    anchor = if (isShielding) "shielding (transparent → orchard)" else "provided by wallet"
                 )
             )
 
-            // Action cards for each alpha
-            request.alphas.forEachIndexed { index, alpha ->
-                TCZcashOrchardSpend(
-                    spend = ZcashOrchardSpend(
-                        nullifier = "action #${index + 1}",
-                        value = "shielded",
-                        cmx = alpha.take(32)
+            if (isShielding) {
+                // Shielding: show transparent input cards
+                request.shieldingAddressIndices.forEachIndexed { index, addrIdx ->
+                    TCZcashOrchardSpend(
+                        spend = ZcashOrchardSpend(
+                            nullifier = "transparent input #${index + 1}",
+                            value = "address index $addrIdx",
+                            cmx = request.shieldingSighashes.getOrElse(index) { "" }.take(32)
+                        )
                     )
-                )
+                }
+            } else {
+                // Orchard send: show action cards for each alpha
+                request.alphas.forEachIndexed { index, alpha ->
+                    TCZcashOrchardSpend(
+                        spend = ZcashOrchardSpend(
+                            nullifier = "action #${index + 1}",
+                            value = "shielded",
+                            cmx = alpha.take(32)
+                        )
+                    )
+                }
             }
 
             // Summary text from wallet
@@ -119,7 +134,7 @@ fun ZcashTransactionScreen(
                     color = MaterialTheme.colors.textTertiary
                 )
                 Text(
-                    text = "${request.alphas.size} signature${if (request.alphas.size == 1) "" else "s"} required",
+                    text = "$sigCount ${if (isShielding) "transparent" else "orchard"} signature${if (sigCount == 1) "" else "s"} required",
                     style = SignerTypeface.CaptionM,
                     color = MaterialTheme.colors.textSecondary
                 )

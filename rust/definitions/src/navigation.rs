@@ -1043,6 +1043,10 @@ pub struct ZcashSignRequest {
     pub summary: String,
     /// Network: true = mainnet, false = testnet
     pub mainnet: bool,
+    /// Shielding mode: per-input sighashes (hex) for transparent signing
+    pub shielding_sighashes: Vec<String>,
+    /// Shielding mode: BIP44 address index per input
+    pub shielding_address_indices: Vec<u32>,
 }
 
 /// Zcash signature response to encode as QR
@@ -1050,6 +1054,8 @@ pub struct ZcashSignRequest {
 pub struct ZcashSignatureResponse {
     pub sighash: String,
     pub orchard_sigs: Vec<String>,
+    /// Transparent signatures (hex, DER+hashtype+pubkey per input)
+    pub transparent_sigs: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

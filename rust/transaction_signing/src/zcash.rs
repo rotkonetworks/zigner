@@ -115,6 +115,20 @@ pub fn sign_transparent(
     Ok(sig)
 }
 
+/// get compressed public key from transparent spending key
+#[cfg(feature = "zcash")]
+pub fn transparent_compressed_pubkey(
+    secret_key: &TransparentSpendingKey,
+) -> Result<[u8; 33]> {
+    use secp256k1::{PublicKey, Secp256k1, SecretKey};
+
+    let secp = Secp256k1::new();
+    let sk = SecretKey::from_slice(&secret_key.0)
+        .map_err(|e| Error::ZcashKeyDerivation(format!("invalid secret key: {e}")))?;
+    let pk = PublicKey::from_secret_key(&secp, &sk);
+    Ok(pk.serialize())
+}
+
 /// derive transparent address from spending key
 #[cfg(feature = "zcash")]
 pub fn derive_transparent_address(
@@ -633,7 +647,7 @@ pub const QR_TYPE_ZCASH_SIGNATURES: u8 = 0x03;
 pub struct ZcashSignRequest {
     /// Account index for key derivation
     pub account_index: u32,
-    /// The transaction sighash (32 bytes)
+    /// The transaction sighash (32 bytes) — used for orchard sends
     pub sighash: [u8; 32],
     /// Orchard action randomizers (alpha values)
     pub orchard_alphas: Vec<[u8; 32]>,
@@ -642,6 +656,17 @@ pub struct ZcashSignRequest {
     /// Network: true = mainnet, false = testnet
     /// SECURITY: This should be verified by the user before signing
     pub mainnet: bool,
+    /// Shielding mode: per-input sighashes + address indices for transparent signing
+    pub shielding: Option<ShieldingInputs>,
+}
+
+/// Transparent shielding inputs — one sighash per UTXO, signed with BIP44 key
+#[derive(Debug, Clone)]
+pub struct ShieldingInputs {
+    /// Per-input sighash (32 bytes each)
+    pub sighashes: Vec<[u8; 32]>,
+    /// BIP44 address index per input (m/44'/133'/account'/0/<index>)
+    pub address_indices: Vec<u32>,
 }
 
 impl ZcashSignRequest {
@@ -685,80 +710,179 @@ impl ZcashSignRequest {
         let mainnet: bool;
         let first_byte = data[offset];
 
-        // v2 detection: if first byte looks like a flags byte (0x00 or 0x01)
+        // v2 detection: if first byte looks like a flags byte (0x00..=0x03)
         // and the next 4 bytes don't look like a small account index
-        if first_byte <= 0x01 {
-            // likely v2 format with flags
+        let is_shielding: bool;
+        if first_byte <= 0x03 {
+            // v2 format with flags
             mainnet = (first_byte & 0x01) != 0;
+            is_shielding = (first_byte & 0x02) != 0;
             offset += 1;
         } else {
             // v1 format (no flags), assume mainnet with warning
-            mainnet = true; // default assumption, but show warning in UI
+            mainnet = true;
+            is_shielding = false;
         }
 
         // Account index
         let account_index = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
         offset += 4;
 
-        // Sighash (32 bytes)
-        let sighash: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-        offset += 32;
-
-        // Action count
-        let action_count =
-            u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-        offset += 2;
-
-        // Each action's alpha (32 bytes each)
-        let mut orchard_alphas = Vec::with_capacity(action_count);
-        for _ in 0..action_count {
-            if offset + 32 > data.len() {
-                return Err(Error::ZcashParsing("alpha truncated".to_string()));
+        if is_shielding {
+            // ---- shielding format ----
+            // [input_count: 2B LE]
+            // [per input: sighash(32B) + address_index(4B LE)]
+            // [action_count: 2B LE] = 0
+            // [summary_len: 2B LE]
+            // [summary bytes]
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("shielding input count truncated".to_string()));
             }
-            let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-            orchard_alphas.push(alpha);
-            offset += 32;
-        }
-
-        // Summary (length-prefixed string)
-        let summary = if offset + 2 <= data.len() {
-            let summary_len =
-                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            let input_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
             offset += 2;
-            if offset + summary_len <= data.len() {
-                String::from_utf8_lossy(&data[offset..offset + summary_len]).to_string()
+
+            let mut sighashes = Vec::with_capacity(input_count);
+            let mut address_indices = Vec::with_capacity(input_count);
+            for _ in 0..input_count {
+                if offset + 36 > data.len() {
+                    return Err(Error::ZcashParsing("shielding input truncated".to_string()));
+                }
+                let sh: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+                sighashes.push(sh);
+                offset += 32;
+                let addr_idx = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+                address_indices.push(addr_idx);
+                offset += 4;
+            }
+
+            // action count (should be 0 for shielding)
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("action count truncated".to_string()));
+            }
+            let action_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+
+            let mut orchard_alphas = Vec::with_capacity(action_count);
+            for _ in 0..action_count {
+                if offset + 32 > data.len() {
+                    return Err(Error::ZcashParsing("alpha truncated".to_string()));
+                }
+                let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+                orchard_alphas.push(alpha);
+                offset += 32;
+            }
+
+            // Summary
+            let summary = if offset + 2 <= data.len() {
+                let summary_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                offset += 2;
+                if offset + summary_len <= data.len() {
+                    String::from_utf8_lossy(&data[offset..offset + summary_len]).to_string()
+                } else {
+                    String::new()
+                }
             } else {
                 String::new()
-            }
-        } else {
-            String::new()
-        };
+            };
 
-        Ok(Self {
-            account_index,
-            sighash,
-            orchard_alphas,
-            summary,
-            mainnet,
-        })
+            // use the first sighash as the "primary" sighash for the response
+            let sighash = sighashes.first().copied().unwrap_or([0u8; 32]);
+
+            Ok(Self {
+                account_index,
+                sighash,
+                orchard_alphas,
+                summary,
+                mainnet,
+                shielding: Some(ShieldingInputs { sighashes, address_indices }),
+            })
+        } else {
+            // ---- original orchard send format ----
+            // Sighash (32 bytes)
+            let sighash: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+            offset += 32;
+
+            // Action count
+            let action_count =
+                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+
+            // Each action's alpha (32 bytes each)
+            let mut orchard_alphas = Vec::with_capacity(action_count);
+            for _ in 0..action_count {
+                if offset + 32 > data.len() {
+                    return Err(Error::ZcashParsing("alpha truncated".to_string()));
+                }
+                let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+                orchard_alphas.push(alpha);
+                offset += 32;
+            }
+
+            // Summary (length-prefixed string)
+            let summary = if offset + 2 <= data.len() {
+                let summary_len =
+                    u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+                offset += 2;
+                if offset + summary_len <= data.len() {
+                    String::from_utf8_lossy(&data[offset..offset + summary_len]).to_string()
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            Ok(Self {
+                account_index,
+                sighash,
+                orchard_alphas,
+                summary,
+                mainnet,
+                shielding: None,
+            })
+        }
     }
 
     /// Sign this request and produce a signature response
     #[cfg(feature = "zcash")]
     pub fn sign(&self, seed_phrase: &str) -> Result<ZcashSignatureResponse> {
+        // Sign orchard actions (if any)
         let mut orchard_sigs = Vec::with_capacity(self.orchard_alphas.len());
+        if !self.orchard_alphas.is_empty() {
+            let sk = OrchardSpendingKey::from_seed_phrase(seed_phrase, self.account_index)?;
+            for alpha in &self.orchard_alphas {
+                let sig = sign_orchard_action(&self.sighash, alpha, &sk)?;
+                orchard_sigs.push(sig);
+            }
+        }
 
-        // Derive spending key and sign each action
-        let sk = OrchardSpendingKey::from_seed_phrase(seed_phrase, self.account_index)?;
+        // Sign transparent inputs (shielding mode)
+        let mut transparent_sigs = Vec::new();
+        if let Some(ref shielding) = self.shielding {
+            for (sighash, &addr_index) in shielding.sighashes.iter().zip(&shielding.address_indices) {
+                // derive transparent key at m/44'/133'/account'/0/<addr_index>
+                let tsk = TransparentSpendingKey::from_seed_phrase(
+                    seed_phrase, self.account_index, 0, addr_index,
+                )?;
 
-        for alpha in &self.orchard_alphas {
-            let sig = sign_orchard_action(&self.sighash, alpha, &sk)?;
-            orchard_sigs.push(sig);
+                // sign sighash
+                let sig = sign_transparent(sighash, &tsk)?;
+
+                // get compressed pubkey for P2PKH scriptSig
+                let pubkey = transparent_compressed_pubkey(&tsk)?;
+
+                // encode: DER sig + SIGHASH_ALL is already in `sig`
+                // we return sig_bytes + pubkey_bytes concatenated
+                // the extension splits them: sig = first (len-33) bytes, pubkey = last 33 bytes
+                let mut combined = sig;
+                combined.extend_from_slice(&pubkey);
+                transparent_sigs.push(combined);
+            }
         }
 
         Ok(ZcashSignatureResponse {
             sighash: self.sighash,
-            transparent_sigs: vec![], // No transparent inputs for now
+            transparent_sigs,
             orchard_sigs,
         })
     }
@@ -1483,6 +1607,7 @@ mod tests {
             orchard_alphas: vec![[0x01; 32]],
             summary: "test".to_string(),
             mainnet: true,
+            shielding: None,
         };
 
         let response = request.sign(test_mnemonic).unwrap();

@@ -26,8 +26,10 @@ fun ZcashSignatureQrScreen(
     onDone: Callback,
     modifier: Modifier = Modifier,
 ) {
-    // Convert ByteArray to List<List<UByte>> for QR encoding
-    val qrData: List<List<UByte>> = listOf(signatureBytes.map { it.toUByte() })
+    // Encode as hex string for QR — avoids binary charset corruption issues
+    // when zafu's QR scanner (ZXing) decodes byte-mode QR data
+    val hexString = signatureBytes.joinToString("") { String.format("%02x", it) }
+    val qrData: List<List<UByte>> = listOf(hexString.toByteArray(Charsets.US_ASCII).map { it.toUByte() })
 
     Column(
         modifier = modifier

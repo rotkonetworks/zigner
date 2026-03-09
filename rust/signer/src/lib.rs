@@ -1596,12 +1596,22 @@ fn parse_zcash_sign_request(qr_hex: &str) -> Result<ZcashSignRequest, ErrorDispl
         s: format!("Failed to parse sign request: {e}"),
     })?;
 
+    let (shielding_sighashes, shielding_address_indices) = match &request.shielding {
+        Some(s) => (
+            s.sighashes.iter().map(hex::encode).collect(),
+            s.address_indices.clone(),
+        ),
+        None => (vec![], vec![]),
+    };
+
     Ok(ZcashSignRequest {
         account_index: request.account_index,
         sighash: hex::encode(request.sighash),
         alphas: request.orchard_alphas.iter().map(hex::encode).collect(),
         summary: request.summary,
         mainnet: request.mainnet,
+        shielding_sighashes,
+        shielding_address_indices,
     })
 }
 
@@ -1637,12 +1647,46 @@ fn sign_zcash_transaction(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    // Parse shielding inputs if present
+    let shielding = if !request.shielding_sighashes.is_empty() {
+        use transaction_signing::zcash::ShieldingInputs;
+        let sighashes: Vec<[u8; 32]> = request
+            .shielding_sighashes
+            .iter()
+            .map(|h| {
+                hex::decode(h)
+                    .map_err(|e| ErrorDisplayed::Str {
+                        s: format!("Invalid shielding sighash hex: {e}"),
+                    })?
+                    .try_into()
+                    .map_err(|_| ErrorDisplayed::Str {
+                        s: "Shielding sighash must be 32 bytes".to_string(),
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if sighashes.len() != request.shielding_address_indices.len() {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "shielding sighash count ({}) != address index count ({})",
+                    sighashes.len(), request.shielding_address_indices.len()
+                ),
+            });
+        }
+        Some(ShieldingInputs {
+            sighashes,
+            address_indices: request.shielding_address_indices,
+        })
+    } else {
+        None
+    };
+
     let rust_request = RustSignRequest {
         account_index: request.account_index,
         sighash,
         orchard_alphas,
         summary: request.summary,
         mainnet: request.mainnet,
+        shielding,
     };
 
     // Sign the transaction
@@ -1655,6 +1699,7 @@ fn sign_zcash_transaction(
     Ok(ZcashSignatureResponse {
         sighash: hex::encode(response.sighash),
         orchard_sigs: response.orchard_sigs.iter().map(hex::encode).collect(),
+        transparent_sigs: response.transparent_sigs.iter().map(hex::encode).collect(),
     })
 }
 
@@ -1686,9 +1731,19 @@ fn encode_zcash_signature_qr(response: ZcashSignatureResponse) -> Result<Vec<u8>
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let transparent_sigs: Vec<Vec<u8>> = response
+        .transparent_sigs
+        .iter()
+        .map(|s| {
+            hex::decode(s).map_err(|e| ErrorDisplayed::Str {
+                s: format!("Invalid transparent sig hex: {e}"),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
     let rust_response = RustResponse {
         sighash,
-        transparent_sigs: vec![], // No transparent for now
+        transparent_sigs,
         orchard_sigs,
     };
 

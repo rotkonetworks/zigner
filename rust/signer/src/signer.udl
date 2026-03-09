@@ -1201,12 +1201,15 @@ dictionary ZcashSignRequest {
     sequence<string> alphas;
     string summary;
     boolean mainnet;
+    sequence<string> shielding_sighashes;
+    sequence<u32> shielding_address_indices;
 };
 
 // Zcash signature response to encode as QR
 dictionary ZcashSignatureResponse {
     string sighash;
     sequence<string> orchard_sigs;
+    sequence<string> transparent_sigs;
 };
 
 [Enum]
