@@ -37,6 +37,17 @@ extension KeyDetailsView {
 
         @Published var keyName: String
         @Published var keysData: MKeysNew?
+
+        /// Whether this keyset has any substrate networks (determines root QR visibility)
+        var hasSubstrateNetworks: Bool {
+            guard let keysData else { return true }
+            let nonSubstratePrefixes = ["zcash", "penumbra", "noble", "osmosis", "celestia",
+                                        "cosmos", "bitcoin", "nostr", "atprotocol", "ethereum"]
+            return keysData.set.contains { keyAndNetwork in
+                let logo = keyAndNetwork.network.networkLogo.lowercased()
+                return !nonSubstratePrefixes.contains(where: { logo.contains($0) })
+            }
+        }
         @Published var bananaSplitPresentationState: BananaSplitPresentationState = .empty
         @Published var shouldPresentRemoveConfirmationModal = false
         @Published var shouldPresentBananaSplitBackupModal = false

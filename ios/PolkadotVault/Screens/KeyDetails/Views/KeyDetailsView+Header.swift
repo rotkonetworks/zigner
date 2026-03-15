@@ -35,18 +35,20 @@ extension KeyDetailsView {
                 .padding(.bottom, Spacing.small)
                 .contentShape(Rectangle())
                 .onTapGesture { viewModel.onKeySetSelectionTap() }
-                HStack {
-                    Text(keySummary.base58.truncateMiddle())
-                        .foregroundColor(.textAndIconsTertiary)
-                        .font(PrimaryFont.bodyL.font)
-                        .lineLimit(1)
-                        .padding(.horizontal, Spacing.medium)
-                        .padding(.vertical, Spacing.extraSmall)
-                        .background(.fill6)
-                        .clipShape(Capsule())
+                if viewModel.hasSubstrateNetworks {
+                    HStack {
+                        Text(keySummary.base58.truncateMiddle())
+                            .foregroundColor(.textAndIconsTertiary)
+                            .font(PrimaryFont.bodyL.font)
+                            .lineLimit(1)
+                            .padding(.horizontal, Spacing.medium)
+                            .padding(.vertical, Spacing.extraSmall)
+                            .background(.fill6)
+                            .clipShape(Capsule())
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { viewModel.onRootKeyTap() }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { viewModel.onRootKeyTap() }
             }
             .padding(.horizontal, Spacing.large)
         } else {

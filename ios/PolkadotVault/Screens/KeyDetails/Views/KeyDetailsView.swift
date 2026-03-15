@@ -164,13 +164,17 @@ struct KeyDetailsView: View {
         .fullScreenModal(
             isPresented: $viewModel.isPresentingRootDetails
         ) {
-            RootKeyDetailsModal(
-                viewModel: .init(
-                    renderable: viewModel.rootKeyDetails(),
-                    isPresented: $viewModel.isPresentingRootDetails
+            if viewModel.hasSubstrateNetworks {
+                RootKeyDetailsModal(
+                    viewModel: .init(
+                        renderable: viewModel.rootKeyDetails(),
+                        isPresented: $viewModel.isPresentingRootDetails
+                    )
                 )
-            )
-            .clearModalBackground()
+                .clearModalBackground()
+            } else {
+                EmptyView()
+            }
         }
         .fullScreenModal(
             isPresented: $viewModel.isPresentingError
