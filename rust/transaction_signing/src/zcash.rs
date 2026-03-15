@@ -217,10 +217,20 @@ impl OrchardSpendingKey {
         fvk.to_bytes()
     }
 
-    /// get receiving address as unified address string
+    /// get receiving address as unified address string (default diversifier index 0)
     #[cfg(feature = "zcash")]
     #[allow(deprecated)]
     pub fn get_address(&self, mainnet: bool) -> String {
+        self.get_address_at(0, mainnet)
+    }
+
+    /// get receiving address at a specific diversifier index
+    ///
+    /// orchard supports unlimited diversified addresses from the same FVK.
+    /// each diversifier index produces a unique address that maps to the same wallet.
+    #[cfg(feature = "zcash")]
+    #[allow(deprecated)]
+    pub fn get_address_at(&self, diversifier_index: u32, mainnet: bool) -> String {
         use orchard::keys::FullViewingKey;
         use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
         use zcash_address::Network;
@@ -228,11 +238,10 @@ impl OrchardSpendingKey {
         let sk = self.to_spending_key().expect("valid spending key");
         let fvk = FullViewingKey::from(&sk);
 
-        // Get default address (diversifier index 0)
-        let default_address = fvk.address_at(0u32, orchard::keys::Scope::External);
+        let address = fvk.address_at(diversifier_index, orchard::keys::Scope::External);
 
         // Build unified address with just Orchard receiver
-        let orchard_receiver = Receiver::Orchard(default_address.to_raw_address_bytes());
+        let orchard_receiver = Receiver::Orchard(address.to_raw_address_bytes());
         let network = if mainnet {
             Network::Main
         } else {

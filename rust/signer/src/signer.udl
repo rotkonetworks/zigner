@@ -789,6 +789,14 @@ namespace signer {
     [Throws=ErrorDisplayed]
     ZcashFvkExport export_zcash_fvk([ByRef] string seed_phrase, u32 account_index, [ByRef] string label, boolean mainnet);
 
+    // Get a diversified Zcash Orchard address at a specific diversifier index
+    [Throws=ErrorDisplayed]
+    string get_zcash_diversified_address([ByRef] string seed_phrase, u32 account_index, u32 diversifier_index, boolean mainnet);
+
+    // Get the transparent (t-address) for a Zcash account
+    [Throws=ErrorDisplayed]
+    string get_zcash_transparent_address([ByRef] string seed_phrase, u32 account, boolean mainnet);
+
     // Parse Zcash sign request from QR hex data
     [Throws=ErrorDisplayed]
     ZcashSignRequest parse_zcash_sign_request([ByRef] string qr_hex);

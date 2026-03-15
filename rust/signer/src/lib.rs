@@ -1588,6 +1588,49 @@ fn export_zcash_fvk(
     })
 }
 
+/// Get a diversified Zcash Orchard address at a specific diversifier index.
+///
+/// Orchard supports unlimited diversified addresses from the same spending key.
+/// Each index produces a unique address that maps to the same wallet.
+fn get_zcash_diversified_address(
+    seed_phrase: &str,
+    account_index: u32,
+    diversifier_index: u32,
+    mainnet: bool,
+) -> Result<String, ErrorDisplayed> {
+    use transaction_signing::zcash::OrchardSpendingKey;
+
+    let osk = OrchardSpendingKey::from_seed_phrase(seed_phrase, account_index).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Failed to derive Orchard key: {e}"),
+        }
+    })?;
+
+    Ok(osk.get_address_at(diversifier_index, mainnet))
+}
+
+/// Get the transparent (t-address) for a Zcash account.
+///
+/// Returns a t1... (mainnet) or tm... (testnet) P2PKH address.
+/// Uses BIP44 path: m/44'/133'/account'/0/0
+fn get_zcash_transparent_address(
+    seed_phrase: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<String, ErrorDisplayed> {
+    use transaction_signing::zcash::{derive_transparent_address, TransparentSpendingKey};
+
+    let tsk = TransparentSpendingKey::from_seed_phrase(seed_phrase, account, 0, 0).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Failed to derive transparent key: {e}"),
+        }
+    })?;
+
+    derive_transparent_address(&tsk, mainnet).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to derive transparent address: {e}"),
+    })
+}
+
 /// Parse Zcash sign request from QR hex data
 fn parse_zcash_sign_request(qr_hex: &str) -> Result<ZcashSignRequest, ErrorDisplayed> {
     use transaction_signing::zcash::ZcashSignRequest as RustSignRequest;
