@@ -56,6 +56,14 @@ fn get_display_address(
             return address;
         }
     }
+    // For Zcash, try to get the stored unified address (u1...)
+    #[cfg(feature = "zcash")]
+    if encryption == Encryption::Zcash {
+        let pubkey_hex = hex::encode(multisigner_to_public(multisigner));
+        if let Ok(Some(address)) = crate::zcash::get_zcash_address(database, &pubkey_hex) {
+            return address;
+        }
+    }
     // For Cosmos, compute bech32 address on-the-fly from pubkey + chain prefix
     #[cfg(feature = "cosmos")]
     if encryption == Encryption::Cosmos {
@@ -377,6 +385,8 @@ pub fn export_key(
                 "ethereum"
             } else if network_specs.encryption == Encryption::Cosmos {
                 "cosmos"
+            } else if network_specs.encryption == Encryption::Zcash {
+                "zcash"
             } else {
                 "substrate"
             };
