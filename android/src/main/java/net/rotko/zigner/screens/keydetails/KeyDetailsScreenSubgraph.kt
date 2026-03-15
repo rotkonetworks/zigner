@@ -58,6 +58,12 @@ fun KeyDetailsScreenSubgraph(
 	var fvkResult by remember { mutableStateOf<FvkExportResult?>(null) }
 	var fvkLoading by remember { mutableStateOf(false) }
 
+	// Zcash diversified/transparent address state
+	var zcashDiversifiedAddress by remember { mutableStateOf<String?>(null) }
+	var zcashDiversifiedLoading by remember { mutableStateOf(false) }
+	var zcashTransparentAddress by remember { mutableStateOf<String?>(null) }
+	var zcashTransparentLoading by remember { mutableStateOf(false) }
+
 	Box(modifier = Modifier.statusBarsPadding()) {
 		KeyDetailsPublicKeyScreen(
 			model = model,
@@ -79,7 +85,30 @@ fun KeyDetailsScreenSubgraph(
 					)
 					fvkLoading = false
 				}
-			}
+			},
+			zcashDiversifiedAddress = zcashDiversifiedAddress,
+			zcashDiversifiedLoading = zcashDiversifiedLoading,
+			onRequestZcashDiversifiedAddress = { divIndex ->
+				scope.launch {
+					zcashDiversifiedLoading = true
+					zcashDiversifiedAddress = vm.getZcashDiversifiedAddress(
+						seedName = model.address.cardBase.seedName,
+						diversifierIndex = divIndex,
+					)
+					zcashDiversifiedLoading = false
+				}
+			},
+			zcashTransparentAddress = zcashTransparentAddress,
+			zcashTransparentLoading = zcashTransparentLoading,
+			onRequestZcashTransparentAddress = {
+				scope.launch {
+					zcashTransparentLoading = true
+					zcashTransparentAddress = vm.getZcashTransparentAddress(
+						seedName = model.address.cardBase.seedName,
+					)
+					zcashTransparentLoading = false
+				}
+			},
 		)
 	}
 

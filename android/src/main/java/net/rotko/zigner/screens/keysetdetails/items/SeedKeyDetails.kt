@@ -51,6 +51,7 @@ fun SeedKeyDetails(
 	onShowRoot: Callback,
 	onSeedSelect: Callback,
 	modifier: Modifier = Modifier,
+	showRootQr: Boolean = true,
 ) {
 	val plateShape = RoundedCornerShape(dimensionResource(id = R.dimen.qrShapeCornerRadius))
 
@@ -59,31 +60,33 @@ fun SeedKeyDetails(
 			.fillMaxWidth(),
 		horizontalAlignment = Alignment.CenterHorizontally,
 	) {
-		// FVK QR Code - shown automatically, no extra tap needed
-		Box(
-			modifier = Modifier
-				.padding(horizontal = 16.dp, vertical = 8.dp)
-				.fillMaxWidth()
-				.aspectRatio(1f)
-				.clip(plateShape)
-				.background(Color.White, plateShape),
-			contentAlignment = Alignment.Center,
-		) {
-			if (LocalInspectionMode.current) {
-				AnimatedQrKeysInfo(
-					input = Unit,
-					provider = EmptyAnimatedQrKeysProvider(),
-					modifier = Modifier.padding(8.dp)
-				)
-			} else {
-				AnimatedQrKeysInfo(
-					input = KeySetDetailsExportService.GetQrCodesListRequest(
-						seedName = model.seedName,
-						keys = emptyList()
-					),
-					provider = KeySetDetailsExportService(),
-					modifier = Modifier.padding(8.dp)
-				)
+		// Root QR Code - only shown for substrate keysets
+		if (showRootQr) {
+			Box(
+				modifier = Modifier
+					.padding(horizontal = 16.dp, vertical = 8.dp)
+					.fillMaxWidth()
+					.aspectRatio(1f)
+					.clip(plateShape)
+					.background(Color.White, plateShape),
+				contentAlignment = Alignment.Center,
+			) {
+				if (LocalInspectionMode.current) {
+					AnimatedQrKeysInfo(
+						input = Unit,
+						provider = EmptyAnimatedQrKeysProvider(),
+						modifier = Modifier.padding(8.dp)
+					)
+				} else {
+					AnimatedQrKeysInfo(
+						input = KeySetDetailsExportService.GetQrCodesListRequest(
+							seedName = model.seedName,
+							keys = emptyList()
+						),
+						provider = KeySetDetailsExportService(),
+						modifier = Modifier.padding(8.dp)
+					)
+				}
 			}
 		}
 

@@ -22,12 +22,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Switch
+import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -94,10 +97,20 @@ fun KeyDetailsPublicKeyScreen(
 	fvkResult: FvkExportResult? = null,
 	fvkLoading: Boolean = false,
 	onRequestFvk: Callback = {},
+	zcashDiversifiedAddress: String? = null,
+	zcashDiversifiedLoading: Boolean = false,
+	onRequestZcashDiversifiedAddress: (UInt) -> Unit = {},
+	zcashTransparentAddress: String? = null,
+	zcashTransparentLoading: Boolean = false,
+	onRequestZcashTransparentAddress: Callback = {},
 ) {
 	val isFvkNetwork = isFvkNetwork(model.networkInfo.networkLogo)
+	val isZcash = model.networkInfo.networkLogo.lowercase().contains("zcash")
 	// Toggle between FVK (for wallet import) and Address (for receiving)
 	var showFvk by remember { mutableStateOf(true) }
+	// Zcash diversified address state
+	var diversifierIndex by remember { mutableIntStateOf(0) }
+	var showTransparent by remember { mutableStateOf(false) }
 
 	// Auto-request FVK for Penumbra/Zcash on first load
 	LaunchedEffect(isFvkNetwork) {
@@ -169,6 +182,70 @@ fun KeyDetailsPublicKeyScreen(
 									modifier = Modifier.size(264.dp)
 								)
 							}
+							// Zcash Receive: transparent address
+							isZcash && !showFvk && showTransparent -> {
+								if (zcashTransparentLoading) {
+									CircularProgressIndicator(
+										color = MaterialTheme.colors.pink500,
+										modifier = Modifier.size(48.dp)
+									)
+								} else if (zcashTransparentAddress != null) {
+									val tAddrQr = remember(zcashTransparentAddress) {
+										runBlocking {
+											encodeToQr(
+												zcashTransparentAddress.toByteArray(Charsets.UTF_8)
+													.map { it.toUByte() },
+												false
+											)
+										}
+									}
+									Image(
+										bitmap = tAddrQr.intoImageBitmap(),
+										contentDescription = "Transparent address QR",
+										contentScale = ContentScale.Fit,
+										modifier = Modifier.size(264.dp)
+									)
+								}
+							}
+							// Zcash Receive: diversified orchard address
+							isZcash && !showFvk -> {
+								if (zcashDiversifiedLoading) {
+									CircularProgressIndicator(
+										color = MaterialTheme.colors.pink500,
+										modifier = Modifier.size(48.dp)
+									)
+								} else if (zcashDiversifiedAddress != null) {
+									val divAddrQr = remember(zcashDiversifiedAddress) {
+										runBlocking {
+											encodeToQr(
+												zcashDiversifiedAddress.toByteArray(Charsets.UTF_8)
+													.map { it.toUByte() },
+												false
+											)
+										}
+									}
+									Image(
+										bitmap = divAddrQr.intoImageBitmap(),
+										contentDescription = "Orchard address QR",
+										contentScale = ContentScale.Fit,
+										modifier = Modifier.size(264.dp)
+									)
+								} else {
+									val qrImage = remember {
+										if (isPreview) {
+											PreviewData.exampleQRImage
+										} else {
+											runBlocking { encodeToQr(model.qrData, false) }
+										}
+									}
+									Image(
+										bitmap = qrImage.intoImageBitmap(),
+										contentDescription = stringResource(R.string.qr_with_address_to_scan_description),
+										contentScale = ContentScale.Fit,
+										modifier = Modifier.size(264.dp)
+									)
+								}
+							}
 							// Address QR (for receiving funds) - all networks including FVK networks
 							else -> {
 								val qrImage = remember {
@@ -195,6 +272,20 @@ fun KeyDetailsPublicKeyScreen(
 							val keyLabel = if (fvkResult.networkType == "cosmos") "PubKey" else "FVK"
 							Text(
 								text = "$keyLabel: ${fvkResult.displayKey.take(20)}...",
+								style = SignerTypeface.CaptionM,
+								color = MaterialTheme.colors.textTertiary,
+								modifier = Modifier.weight(1f)
+							)
+						} else if (isZcash && !showFvk && showTransparent && zcashTransparentAddress != null) {
+							Text(
+								text = zcashTransparentAddress.take(12) + "..." + zcashTransparentAddress.takeLast(8),
+								style = SignerTypeface.CaptionM,
+								color = MaterialTheme.colors.textTertiary,
+								modifier = Modifier.weight(1f)
+							)
+						} else if (isZcash && !showFvk && zcashDiversifiedAddress != null) {
+							Text(
+								text = "Address #$diversifierIndex",
 								style = SignerTypeface.CaptionM,
 								color = MaterialTheme.colors.textTertiary,
 								modifier = Modifier.weight(1f)
@@ -264,6 +355,88 @@ fun KeyDetailsPublicKeyScreen(
 							.fillMaxWidth()
 							.padding(horizontal = 24.dp, vertical = 4.dp)
 					)
+				}
+
+				// Zcash Receive mode: New Address button + Transparent toggle
+				if (isZcash && !showFvk) {
+					// New Address button
+					if (!showTransparent) {
+						Box(
+							modifier = Modifier
+								.fillMaxWidth()
+								.padding(horizontal = 24.dp, vertical = 4.dp),
+							contentAlignment = Alignment.Center
+						) {
+							Text(
+								text = "New Address",
+								style = SignerTypeface.LabelM,
+								color = Color.White,
+								modifier = Modifier
+									.clip(RoundedCornerShape(8.dp))
+									.background(MaterialTheme.colors.pink500)
+									.clickable {
+										diversifierIndex++
+										onRequestZcashDiversifiedAddress(diversifierIndex.toUInt())
+									}
+									.padding(horizontal = 24.dp, vertical = 10.dp)
+							)
+						}
+					}
+
+					// Transparent address toggle
+					Row(
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(horizontal = 24.dp, vertical = 8.dp),
+						verticalAlignment = Alignment.CenterVertically,
+					) {
+						Text(
+							text = "Transparent address",
+							style = SignerTypeface.BodyL,
+							color = MaterialTheme.colors.primary,
+							modifier = Modifier.weight(1f)
+						)
+						Switch(
+							checked = showTransparent,
+							onCheckedChange = { checked ->
+								showTransparent = checked
+								if (checked && zcashTransparentAddress == null) {
+									onRequestZcashTransparentAddress()
+								}
+							},
+							colors = SwitchDefaults.colors(
+								checkedThumbColor = MaterialTheme.colors.pink500,
+								checkedTrackColor = MaterialTheme.colors.pink500.copy(alpha = 0.5f)
+							)
+						)
+					}
+					if (showTransparent) {
+						Row(
+							modifier = Modifier
+								.fillMaxWidth()
+								.padding(horizontal = 24.dp)
+								.background(
+									MaterialTheme.colors.red500fill12,
+									RoundedCornerShape(8.dp)
+								)
+								.padding(12.dp),
+							verticalAlignment = Alignment.CenterVertically,
+						) {
+							Icon(
+								imageVector = Icons.Outlined.Info,
+								contentDescription = null,
+								tint = MaterialTheme.colors.red500,
+								modifier = Modifier
+									.size(20.dp)
+									.padding(end = 4.dp)
+							)
+							Text(
+								text = "Transparent addresses offer no privacy. Use only for exchange compatibility.",
+								style = SignerTypeface.CaptionM,
+								color = MaterialTheme.colors.primary,
+							)
+						}
+					}
 				}
 
 				BottomKeyPlate(plateShape, model, isFvkNetwork)

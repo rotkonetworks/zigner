@@ -13,6 +13,8 @@ import io.parity.signer.uniffi.encodeToQr
 import io.parity.signer.uniffi.exportZcashFvk
 import io.parity.signer.uniffi.exportPenumbraFvk
 import io.parity.signer.uniffi.exportCosmosAccounts
+import io.parity.signer.uniffi.getZcashDiversifiedAddress
+import io.parity.signer.uniffi.getZcashTransparentAddress
 
 
 class KeyDetailsScreenViewModel : ViewModel() {
@@ -131,6 +133,43 @@ class KeyDetailsScreenViewModel : ViewModel() {
 		networkSpecsKey: String,
 	): UniffiResult<Unit> {
 		return uniFfi.removedDerivedKey(addressKey, networkSpecsKey)
+	}
+
+	suspend fun getZcashDiversifiedAddress(
+		seedName: String,
+		accountIndex: UInt = 0u,
+		diversifierIndex: UInt = 0u,
+		mainnet: Boolean = true
+	): String? {
+		val seedResult = repo.getSeedPhraseForceAuth(seedName)
+		return when (seedResult) {
+			is RepoResult.Failure -> null
+			is RepoResult.Success -> {
+				try {
+					getZcashDiversifiedAddress(seedResult.result, accountIndex, diversifierIndex, mainnet)
+				} catch (e: Exception) {
+					null
+				}
+			}
+		}
+	}
+
+	suspend fun getZcashTransparentAddress(
+		seedName: String,
+		account: UInt = 0u,
+		mainnet: Boolean = true
+	): String? {
+		val seedResult = repo.getSeedPhraseForceAuth(seedName)
+		return when (seedResult) {
+			is RepoResult.Failure -> null
+			is RepoResult.Success -> {
+				try {
+					getZcashTransparentAddress(seedResult.result, account, mainnet)
+				} catch (e: Exception) {
+					null
+				}
+			}
+		}
 	}
 
 	suspend fun exportFvk(

@@ -167,6 +167,20 @@ fun KeySetDetailsScreenView(
 	}
 }
 
+/**
+ * Check if the keyset has any substrate networks (to determine if root QR should be shown)
+ */
+private fun hasSubstrateNetworks(model: KeySetDetailsModel): Boolean {
+	return model.keysAndNetwork.any { keyAndNetwork ->
+		val logo = keyAndNetwork.network.networkLogo.lowercase()
+		!logo.contains("zcash") && !logo.contains("penumbra") &&
+			!logo.contains("noble") && !logo.contains("osmosis") &&
+			!logo.contains("celestia") && !logo.contains("cosmos") &&
+			!logo.contains("bitcoin") && !logo.contains("nostr") &&
+			!logo.contains("atprotocol") && !logo.contains("ethereum")
+	}
+}
+
 @Composable
 private fun SeedKeyItemElement(
 	model: KeySetDetailsModel,
@@ -177,6 +191,7 @@ private fun SeedKeyItemElement(
 		model = model.root,
 		onSeedSelect = onSeedSelect,
 		onShowRoot = onShowRoot,
+		showRootQr = hasSubstrateNetworks(model),
 		modifier = Modifier
 			.padding(horizontal = 24.dp, vertical = 8.dp)
 			.padding(bottom = 16.dp)
