@@ -2,16 +2,12 @@ package net.rotko.zigner.screens.scan.transaction
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
@@ -26,85 +22,85 @@ import io.parity.signer.uniffi.frostSpendSignActions
 import io.parity.signer.uniffi.frostLoadWallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 /**
- * FROST signing flow — 2 rounds:
+ * FROST signing — handles one round at a time.
  *
- * Round 1 (commitment): Triggered by scan of sign-init QR.
- *   Load wallet → frost_sign_round1 → display commitments QR
+ * Round 1: triggered by {"frost":"sign1","wallet":"..."} → load wallet → generate commitments
+ *   → display commitments QR → user shows to coordinator → "Scan Sign Request" → back to camera
+ *   → nonces saved in ScanViewModel.frostSignNonces
  *
- * Round 2 (sign): Triggered by scan of sign-request QR.
- *   frost_spend_sign_actions → display shares QR
+ * Round 2: triggered by {"frost":"sign2","sighash":"...","alphas":[...],"commitments":[...]}
+ *   → sign with saved nonces → display shares QR → done
  */
 
 enum class FrostSignState {
-	LOADING_WALLET,
-	GENERATING_COMMITMENTS,
-	DISPLAY_COMMITMENTS,
-	SIGNING,
-	DISPLAY_SHARES,
+	LOADING,
+	DISPLAY_QR,
 	ERROR,
 }
 
 @Composable
 fun FrostSignScreen(
-	walletId: String,
-	// Round 2 data (null if we're only doing round 1)
-	sighashHex: String? = null,
-	alphasJson: String? = null,
-	commitmentsJson: String? = null,
+	round: Int,  // 1 or 2
+	walletId: String = "",
+	// Round 2 data
+	sighashHex: String = "",
+	alphasJson: String = "[]",
+	commitmentsJson: String = "[]",
+	// Shared state from previous round
+	previousNonces: String = "",
+	previousKeyPackage: String = "",
+	onNoncesUpdated: (nonces: String, keyPackage: String) -> Unit = { _, _ -> },
+	onScanNext: Callback,
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
 	val scope = rememberCoroutineScope()
 
-	var state by remember { mutableStateOf(FrostSignState.LOADING_WALLET) }
+	var state by remember { mutableStateOf(FrostSignState.LOADING) }
 	var errorMsg by remember { mutableStateOf("") }
-	var commitmentsQr by remember { mutableStateOf("") }
-	var sharesQr by remember { mutableStateOf("") }
-	var noncesHex by remember { mutableStateOf("") }
-
-	// Determine if this is round 1 (generate commitments) or round 2 (sign)
-	val isRound2 = sighashHex != null && alphasJson != null && commitmentsJson != null
+	var qrData by remember { mutableStateOf("") }
+	var isRound2Complete by remember { mutableStateOf(false) }
 
 	LaunchedEffect(Unit) {
 		scope.launch {
 			try {
-				// Load wallet secrets
-				state = FrostSignState.LOADING_WALLET
-				val walletJson = withContext(Dispatchers.Default) {
-					frostLoadWallet(walletId)
-				}
-				val wallet = org.json.JSONObject(walletJson)
-				val keyPackageHex = wallet.getString("key_package")
-				val ephemeralSeedHex = wallet.getString("ephemeral_seed")
+				when (round) {
+					1 -> {
+						val walletJson = withContext(Dispatchers.Default) {
+							frostLoadWallet(walletId)
+						}
+						val wallet = org.json.JSONObject(walletJson)
+						val keyPackageHex = wallet.getString("key_package")
+						val ephemeralSeedHex = wallet.getString("ephemeral_seed")
 
-				if (isRound2) {
-					// Round 2: sign with provided nonces (from previous round 1)
-					// For now, we need nonces from the previous round which should have
-					// been stored. In the QR flow, the coordinator includes them.
-					state = FrostSignState.SIGNING
-					val result = withContext(Dispatchers.Default) {
-						frostSpendSignActions(
-							keyPackageHex, noncesHex, sighashHex!!, alphasJson!!, commitmentsJson!!
-						)
+						val result = withContext(Dispatchers.Default) {
+							frostSignRound1(ephemeralSeedHex, keyPackageHex)
+						}
+						val json = org.json.JSONObject(result)
+						onNoncesUpdated(json.getString("nonces"), keyPackageHex)
+						qrData = json.getString("commitments")
+						state = FrostSignState.DISPLAY_QR
 					}
-					sharesQr = result
-					state = FrostSignState.DISPLAY_SHARES
-				} else {
-					// Round 1: generate commitments
-					state = FrostSignState.GENERATING_COMMITMENTS
-					val result = withContext(Dispatchers.Default) {
-						frostSignRound1(ephemeralSeedHex, keyPackageHex)
+					2 -> {
+						val result = withContext(Dispatchers.Default) {
+							frostSpendSignActions(
+								previousKeyPackage, previousNonces,
+								sighashHex, alphasJson, commitmentsJson
+							)
+						}
+						qrData = result
+						isRound2Complete = true
+						// Clear nonces after use
+						onNoncesUpdated("", "")
+						state = FrostSignState.DISPLAY_QR
 					}
-					val json = org.json.JSONObject(result)
-					noncesHex = json.getString("nonces")
-					commitmentsQr = json.getString("commitments")
-					state = FrostSignState.DISPLAY_COMMITMENTS
 				}
 			} catch (e: Exception) {
-				errorMsg = e.message ?: "FROST signing failed"
+				errorMsg = e.message ?: "FROST sign round $round failed"
 				state = FrostSignState.ERROR
 			}
 		}
@@ -117,121 +113,75 @@ fun FrostSignScreen(
 			.padding(16.dp)
 	) {
 		Text(
-			text = "FROST Sign",
+			text = if (round == 1) "FROST Sign — Commitments" else "FROST Sign — Shares",
 			style = SignerTypeface.TitleL,
 			color = MaterialTheme.colors.primary,
 			modifier = Modifier.padding(bottom = 16.dp)
 		)
 
 		when (state) {
-			FrostSignState.LOADING_WALLET,
-			FrostSignState.GENERATING_COMMITMENTS,
-			FrostSignState.SIGNING -> {
-				val msg = when (state) {
-					FrostSignState.LOADING_WALLET -> "Loading wallet..."
-					FrostSignState.GENERATING_COMMITMENTS -> "Generating commitments..."
-					else -> "Signing..."
-				}
-				Box(
-					modifier = Modifier.weight(1f).fillMaxWidth(),
-					contentAlignment = Alignment.Center
-				) {
+			FrostSignState.LOADING -> {
+				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
 					Column(horizontalAlignment = Alignment.CenterHorizontally) {
-						CircularProgressIndicator(
-							color = MaterialTheme.colors.pink500,
-							modifier = Modifier.size(48.dp)
-						)
+						CircularProgressIndicator(color = MaterialTheme.colors.pink500, modifier = Modifier.size(48.dp))
 						Spacer(modifier = Modifier.height(16.dp))
-						Text(text = msg, style = SignerTypeface.TitleS, color = MaterialTheme.colors.primary)
+						Text(
+							if (round == 1) "Generating commitments..." else "Signing...",
+							style = SignerTypeface.TitleS, color = MaterialTheme.colors.primary
+						)
 					}
 				}
 			}
 
-			FrostSignState.DISPLAY_COMMITMENTS -> {
+			FrostSignState.DISPLAY_QR -> {
 				Text(
-					text = "Show this commitment to the coordinator",
+					text = "Show this to the coordinator",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)
 				)
-				QrDisplayText(
-					data = commitmentsQr,
-					modifier = Modifier.weight(1f)
-				)
+				val qrBytes = remember(qrData) {
+					try {
+						val bytes = qrData.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+						runBlocking { encodeToQr(bytes, false) }
+					} catch (e: Exception) { null }
+				}
+				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+					if (qrBytes != null) {
+						AnimatedQrKeysInfo<List<List<UByte>>>(
+							input = listOf(qrBytes),
+							provider = EmptyQrCodeProvider(),
+							modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+						)
+					}
+				}
 				SignerDivider()
 				Spacer(modifier = Modifier.height(8.dp))
-				Text(
-					text = "After coordinator collects all commitments, scan the sign request QR",
-					style = SignerTypeface.CaptionM,
-					color = MaterialTheme.colors.textTertiary,
-					modifier = Modifier.padding(bottom = 8.dp)
-				)
-				PrimaryButtonWide(label = "Done", onClicked = onDone)
-			}
-
-			FrostSignState.DISPLAY_SHARES -> {
-				Text(
-					text = "Show this signature share to the coordinator",
-					style = SignerTypeface.LabelM,
-					color = MaterialTheme.colors.textTertiary,
-					modifier = Modifier.padding(bottom = 8.dp)
-				)
-				QrDisplayText(
-					data = sharesQr,
-					modifier = Modifier.weight(1f)
-				)
-				SignerDivider()
-				Spacer(modifier = Modifier.height(16.dp))
-				PrimaryButtonWide(label = "Done", onClicked = onDone)
+				if (round == 1) {
+					Text(
+						text = "After coordinator collects all commitments, scan the sign request QR",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+						modifier = Modifier.padding(bottom = 8.dp)
+					)
+					PrimaryButtonWide(label = "Scan Sign Request", onClicked = onScanNext)
+				} else {
+					PrimaryButtonWide(label = "Done", onClicked = onDone)
+				}
 			}
 
 			FrostSignState.ERROR -> {
-				Box(
-					modifier = Modifier.weight(1f).fillMaxWidth(),
-					contentAlignment = Alignment.Center
-				) {
+				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
 					Column(horizontalAlignment = Alignment.CenterHorizontally) {
-						Text(
-							text = "Signing Failed",
-							style = SignerTypeface.TitleS,
-							color = MaterialTheme.colors.red500
-						)
+						Text("Signing Failed", style = SignerTypeface.TitleS, color = MaterialTheme.colors.red500)
 						Spacer(modifier = Modifier.height(8.dp))
-						Text(
-							text = errorMsg,
-							style = SignerTypeface.BodyL,
-							color = MaterialTheme.colors.textSecondary
-						)
+						Text(errorMsg, style = SignerTypeface.BodyL, color = MaterialTheme.colors.textSecondary)
 					}
 				}
 				SignerDivider()
 				Spacer(modifier = Modifier.height(16.dp))
 				SecondaryButtonWide(label = "Dismiss", onClicked = onDone)
 			}
-		}
-	}
-}
-
-@Composable
-private fun QrDisplayText(data: String, modifier: Modifier = Modifier) {
-	val qrBytes = remember(data) {
-		try {
-			val bytes = data.toByteArray(Charsets.UTF_8).map { it.toUByte() }
-			kotlinx.coroutines.runBlocking { encodeToQr(bytes, false) }
-		} catch (e: Exception) { null }
-	}
-	Box(
-		modifier = modifier.fillMaxWidth(),
-		contentAlignment = Alignment.Center
-	) {
-		if (qrBytes != null) {
-			AnimatedQrKeysInfo<List<List<UByte>>>(
-				input = listOf(qrBytes),
-				provider = EmptyQrCodeProvider(),
-				modifier = Modifier
-					.fillMaxWidth()
-					.padding(horizontal = 24.dp)
-			)
 		}
 	}
 }

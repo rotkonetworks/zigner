@@ -107,6 +107,25 @@ class ScanViewModel : ViewModel() {
 
 	// FROST multisig state
 	var frostPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
+	// FROST DKG secrets held across rounds (memory only, cleared on completion/cancel)
+	var frostDkgSecret: String = ""
+	var frostDkgMaxSigners: UShort = 0u
+	var frostDkgMinSigners: UShort = 0u
+	var frostDkgLabel: String = ""
+	var frostDkgMainnet: Boolean = true
+	// FROST signing state held across rounds
+	var frostSignNonces: String = ""
+	var frostSignKeyPackage: String = ""
+	var frostSignWalletId: String = ""
+
+	fun clearFrostDkgState() {
+		frostDkgSecret = ""
+	}
+
+	fun clearFrostSignState() {
+		frostSignNonces = ""
+		frostSignKeyPackage = ""
+	}
 
 	// Auth challenge state
 	var authPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
@@ -421,6 +440,8 @@ class ScanViewModel : ViewModel() {
 		zcashNoteSyncFrames.value = null
 		zcashPcztUrParts.value = null
 		frostPayload.value = null
+		clearFrostDkgState()
+		clearFrostSignState()
 		authPayload.value = null
 	}
 

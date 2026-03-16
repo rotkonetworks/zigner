@@ -114,26 +114,92 @@ fun ScanNavSubgraph(
 	} else if (frostData.value != null) {
 		val json = frostData.value!!
 		val frostType = json.optString("frost", "")
+		val dismissFrost = { scanViewModel.frostPayload.value = null }
+		val scanNextFrost = {
+			// Dismiss screen, back to camera for next round QR
+			scanViewModel.frostPayload.value = null
+		}
 		when (frostType) {
 			"dkg1" -> {
+				scanViewModel.frostDkgMaxSigners = json.optInt("n", 3).toUShort()
+				scanViewModel.frostDkgMinSigners = json.optInt("t", 2).toUShort()
+				scanViewModel.frostDkgLabel = json.optString("label", "")
+				scanViewModel.frostDkgMainnet = json.optBoolean("mainnet", true)
 				FrostDkgScreen(
-					maxSigners = json.optInt("n", 3).toUShort(),
-					minSigners = json.optInt("t", 2).toUShort(),
-					label = json.optString("label", ""),
-					mainnet = json.optBoolean("mainnet", true),
+					round = 1,
+					maxSigners = scanViewModel.frostDkgMaxSigners,
+					minSigners = scanViewModel.frostDkgMinSigners,
+					label = scanViewModel.frostDkgLabel,
+					mainnet = scanViewModel.frostDkgMainnet,
+					onSecretUpdated = { scanViewModel.frostDkgSecret = it },
+					onScanNext = scanNextFrost,
 					modifier = Modifier.statusBarsPadding(),
-					onDone = { scanViewModel.frostPayload.value = null },
+					onDone = { dismissFrost(); scanViewModel.clearFrostDkgState() },
+				)
+			}
+			"dkg2" -> {
+				FrostDkgScreen(
+					round = 2,
+					maxSigners = scanViewModel.frostDkgMaxSigners,
+					minSigners = scanViewModel.frostDkgMinSigners,
+					label = scanViewModel.frostDkgLabel,
+					mainnet = scanViewModel.frostDkgMainnet,
+					previousSecret = scanViewModel.frostDkgSecret,
+					broadcastsJson = json.optJSONArray("broadcasts")?.toString() ?: "[]",
+					onSecretUpdated = { scanViewModel.frostDkgSecret = it },
+					onScanNext = scanNextFrost,
+					modifier = Modifier.statusBarsPadding(),
+					onDone = { dismissFrost(); scanViewModel.clearFrostDkgState() },
+				)
+			}
+			"dkg3" -> {
+				FrostDkgScreen(
+					round = 3,
+					maxSigners = scanViewModel.frostDkgMaxSigners,
+					minSigners = scanViewModel.frostDkgMinSigners,
+					label = scanViewModel.frostDkgLabel,
+					mainnet = scanViewModel.frostDkgMainnet,
+					previousSecret = scanViewModel.frostDkgSecret,
+					round1BroadcastsJson = json.optJSONArray("round1")?.toString() ?: "[]",
+					round2PackagesJson = json.optJSONArray("round2")?.toString() ?: "[]",
+					onSecretUpdated = { scanViewModel.frostDkgSecret = it },
+					onScanNext = scanNextFrost,
+					modifier = Modifier.statusBarsPadding(),
+					onDone = { dismissFrost(); scanViewModel.clearFrostDkgState() },
 				)
 			}
 			"sign1" -> {
+				scanViewModel.frostSignWalletId = json.optString("wallet", "")
 				FrostSignScreen(
-					walletId = json.optString("wallet", ""),
+					round = 1,
+					walletId = scanViewModel.frostSignWalletId,
+					onNoncesUpdated = { n, k ->
+						scanViewModel.frostSignNonces = n
+						scanViewModel.frostSignKeyPackage = k
+					},
+					onScanNext = scanNextFrost,
 					modifier = Modifier.statusBarsPadding(),
-					onDone = { scanViewModel.frostPayload.value = null },
+					onDone = { dismissFrost(); scanViewModel.clearFrostSignState() },
+				)
+			}
+			"sign2" -> {
+				FrostSignScreen(
+					round = 2,
+					sighashHex = json.optString("sighash", ""),
+					alphasJson = json.optJSONArray("alphas")?.toString() ?: "[]",
+					commitmentsJson = json.optJSONArray("commitments")?.toString() ?: "[]",
+					previousNonces = scanViewModel.frostSignNonces,
+					previousKeyPackage = scanViewModel.frostSignKeyPackage,
+					onNoncesUpdated = { n, k ->
+						scanViewModel.frostSignNonces = n
+						scanViewModel.frostSignKeyPackage = k
+					},
+					onScanNext = scanNextFrost,
+					modifier = Modifier.statusBarsPadding(),
+					onDone = { dismissFrost(); scanViewModel.clearFrostSignState() },
 				)
 			}
 			else -> {
-				// Unknown frost type, clear
 				scanViewModel.frostPayload.value = null
 			}
 		}
