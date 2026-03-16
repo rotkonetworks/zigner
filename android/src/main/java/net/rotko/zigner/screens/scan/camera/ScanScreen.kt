@@ -44,6 +44,7 @@ fun ScanScreen(
 	onZcashNotes: (List<String>) -> Unit = {},
 	onZcashPczt: (List<String>) -> Unit = {},
 	onFrost: (org.json.JSONObject) -> Unit = {},
+	onAuth: (org.json.JSONObject) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
 
@@ -62,6 +63,7 @@ fun ScanScreen(
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
 	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
 	val currentOnFrost by rememberUpdatedState(onFrost)
+	val currentOnAuth by rememberUpdatedState(onAuth)
 
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
@@ -166,6 +168,16 @@ fun ScanScreen(
 				.collect { json ->
 					currentOnFrost(json)
 					viewModel.resetFrostPayload()
+				}
+		}
+
+		// Auth handler
+		launch {
+			viewModel.authPayload
+				.filterNotNull()
+				.collect { json ->
+					currentOnAuth(json)
+					viewModel.resetAuthPayload()
 				}
 		}
 	}

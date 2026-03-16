@@ -100,6 +100,9 @@ class ScanViewModel : ViewModel() {
 	// FROST multisig state
 	var frostPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
 
+	// Auth challenge state
+	var authPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
+
 	private val transactionIsInProgress = MutableStateFlow<Boolean>(false)
 
 	suspend fun performTransactionPayload(payload: String, context: Context) {
@@ -410,6 +413,7 @@ class ScanViewModel : ViewModel() {
 		zcashNoteSyncFrames.value = null
 		zcashPcztUrParts.value = null
 		frostPayload.value = null
+		authPayload.value = null
 	}
 
 	private suspend fun signTransaction(

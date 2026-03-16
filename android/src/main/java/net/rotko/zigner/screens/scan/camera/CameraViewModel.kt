@@ -58,9 +58,11 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashPcztComplete = MutableStateFlow<List<String>?>(null)
 	val zcashPcztComplete: StateFlow<List<String>?> = _zcashPcztComplete.asStateFlow()
 
-	// FROST multisig JSON payload (detected by {"frost":...} prefix)
+	// JSON payloads (detected by {"frost":...} or {"auth":...} prefix)
 	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
 	val frostPayload: StateFlow<JSONObject?> = _frostPayload.asStateFlow()
+	private val _authPayload = MutableStateFlow<JSONObject?>(null)
+	val authPayload: StateFlow<JSONObject?> = _authPayload.asStateFlow()
 
 	private val _dynamicDerivationPayload =
 		MutableStateFlow<String?>(null)
@@ -116,6 +118,11 @@ class CameraViewModel() : ViewModel() {
 							if (json.has("frost")) {
 								resetScanValues()
 								_frostPayload.value = json
+								return@forEach
+							}
+							if (json.has("auth")) {
+								resetScanValues()
+								_authPayload.value = json
 								return@forEach
 							}
 						} catch (_: Exception) { /* not valid JSON, continue */ }
@@ -328,6 +335,7 @@ class CameraViewModel() : ViewModel() {
 		_zcashPcztFrames.value = emptyList()
 		_zcashPcztComplete.value = null
 		_frostPayload.value = null
+		_authPayload.value = null
 		resetScanValues()
 	}
 
@@ -348,6 +356,10 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetFrostPayload() {
 		_frostPayload.value = null
+	}
+
+	fun resetAuthPayload() {
+		_authPayload.value = null
 	}
 
 	fun resetPenumbraSignRequest() {

@@ -265,6 +265,40 @@ struct CameraView: View {
             }
         }
         .fullScreenModal(
+            isPresented: $viewModel.isPresentingAuth,
+            onDismiss: {
+                model.payload = nil
+                model.start()
+                viewModel.clearTransactionState()
+            }
+        ) {
+            if let jsonString = viewModel.authJsonPayload,
+               let data = jsonString.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let domain = json["domain"] as? String ?? ""
+                let nonce = json["nonce"] as? String ?? ""
+                let ts = json["ts"] as? UInt64 ?? 0
+                let seedPhrase = viewModel.getFirstSeedPhrase()
+                if !seedPhrase.isEmpty {
+                    AuthChallengeView(
+                        viewModel: .init(
+                            domain: domain,
+                            nonce: nonce,
+                            timestamp: ts,
+                            seedPhrase: seedPhrase,
+                            onCompletion: {
+                                viewModel.isPresentingAuth = false
+                                viewModel.authJsonPayload = nil
+                                model.payload = nil
+                                model.start()
+                                viewModel.clearTransactionState()
+                            }
+                        )
+                    )
+                }
+            }
+        }
+        .fullScreenModal(
             isPresented: $viewModel.isPresentingFrost,
             onDismiss: {
                 model.payload = nil
@@ -354,10 +388,12 @@ extension CameraView {
         @Published var isPresentingZcashNoteSync: Bool = false
         @Published var isPresentingFrost: Bool = false
         @Published var isPresentingZcashPczt: Bool = false
+        @Published var isPresentingAuth: Bool = false
         var penumbraQrHex: String?
         var zcashNotesUrFrames: [String]?
         var zcashPcztUrFrames: [String]?
         var frostJsonPayload: String?
+        var authJsonPayload: String?
 
         // Banana split flow
         @Published var isPresentingEnterBananaSplitPassword: Bool = false
@@ -424,6 +460,9 @@ extension CameraView {
             case let .zcashPczt(urFrames):
                 zcashPcztUrFrames = urFrames
                 isPresentingZcashPczt = true
+            case let .auth(jsonString):
+                authJsonPayload = jsonString
+                isPresentingAuth = true
             case let .dynamicDerivations(data):
                 guard runtimePropertiesProvider.dynamicDerivationsEnabled else {
                     presentableError = .featureNotAvailable()
@@ -585,6 +624,11 @@ extension CameraView {
                 ()
             }
             resumeCamera()
+        }
+
+        func getFirstSeedPhrase() -> String {
+            guard let name = seedsMediator.seedNames.first else { return "" }
+            return seedsMediator.getSeed(seedName: name)
         }
 
         private func resumeCamera() {

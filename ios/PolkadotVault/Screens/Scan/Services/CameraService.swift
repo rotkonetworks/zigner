@@ -17,6 +17,7 @@ enum DecodedPayloadType: Equatable {
     case zcashNotes
     case frost
     case zcashPczt
+    case auth
 }
 
 enum DecodedPayload: Equatable {
@@ -27,6 +28,7 @@ enum DecodedPayload: Equatable {
     case zcashNotes([String])
     case frost(String) // raw JSON string with "frost" key
     case zcashPczt([String]) // UR frames for PCZT signing
+    case auth(String) // raw JSON string with "auth" key
 
     var type: DecodedPayloadType {
         switch self {
@@ -42,6 +44,8 @@ enum DecodedPayload: Equatable {
             DecodedPayloadType.frost
         case .zcashPczt:
             DecodedPayloadType.zcashPczt
+        case .auth:
+            DecodedPayloadType.auth
         case .zcashNotes:
             DecodedPayloadType.zcashNotes
         }
@@ -154,6 +158,16 @@ private extension CameraService {
            json["frost"] != nil {
             callbackQueue.async {
                 self.payload = .frost(trimmed)
+                self.shutdown()
+            }
+            return
+        }
+        if trimmed.hasPrefix("{"),
+           let data2 = trimmed.data(using: .utf8),
+           let json2 = try? JSONSerialization.jsonObject(with: data2) as? [String: Any],
+           json2["auth"] as? String == "challenge" {
+            callbackQueue.async {
+                self.payload = .auth(trimmed)
                 self.shutdown()
             }
             return

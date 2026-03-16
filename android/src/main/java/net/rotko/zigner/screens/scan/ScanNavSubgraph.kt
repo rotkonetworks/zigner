@@ -25,6 +25,7 @@ import net.rotko.zigner.screens.scan.errors.LocalErrorBottomSheet
 import net.rotko.zigner.screens.scan.errors.LocalErrorSheetModel
 import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
 import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
+import net.rotko.zigner.screens.scan.transaction.AuthChallengeScreen
 import net.rotko.zigner.screens.scan.transaction.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
@@ -132,6 +133,29 @@ fun ScanNavSubgraph(
 				// Unknown frost type, clear
 				scanViewModel.frostPayload.value = null
 			}
+		}
+	} else if (scanViewModel.authPayload.collectAsStateWithLifecycle().value != null) {
+		val authJson = scanViewModel.authPayload.collectAsStateWithLifecycle().value!!
+		// Auth requires seed phrase — use first available seed
+		// TODO: seed selection UI
+		val seedPhrase = remember {
+			kotlinx.coroutines.runBlocking {
+				when (val result = scanViewModel.seedRepository.getAllSeeds()) {
+					is net.rotko.zigner.domain.backend.RepoResult.Success ->
+						result.result.values.firstOrNull() ?: ""
+					else -> ""
+				}
+			}
+		}
+		if (seedPhrase.isNotEmpty()) {
+			AuthChallengeScreen(
+				domain = authJson.optString("domain", ""),
+				nonce = authJson.optString("nonce", ""),
+				timestamp = authJson.optLong("ts", 0).toULong(),
+				seedPhrase = seedPhrase,
+				modifier = Modifier.statusBarsPadding(),
+				onDone = { scanViewModel.authPayload.value = null },
+			)
 		}
 	} else if (zcashNoteSyncResult.value != null) {
 		ZcashNoteSyncScreen(
@@ -276,6 +300,9 @@ fun ScanNavSubgraph(
 			},
 			onFrost = { json ->
 				scanViewModel.frostPayload.value = json
+			},
+			onAuth = { json ->
+				scanViewModel.authPayload.value = json
 			},
 		)
 	} else {
