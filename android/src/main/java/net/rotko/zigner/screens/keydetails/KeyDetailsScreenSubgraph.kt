@@ -34,6 +34,8 @@ import net.rotko.zigner.screens.keydetails.exportprivatekey.ConfirmExportPrivate
 import net.rotko.zigner.screens.keydetails.exportprivatekey.PrivateKeyExportBottomSheet
 import net.rotko.zigner.screens.keydetails.exportprivatekey.PrivateKeyExportModel
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
+import io.parity.signer.uniffi.ZcashSyncInfo
+import io.parity.signer.uniffi.ZcashVerifiedNoteDisplay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -63,6 +65,20 @@ fun KeyDetailsScreenSubgraph(
 	var zcashDiversifiedLoading by remember { mutableStateOf(false) }
 	var zcashTransparentAddress by remember { mutableStateOf<String?>(null) }
 	var zcashTransparentLoading by remember { mutableStateOf(false) }
+
+	// Zcash verified balance + notes (from note sync)
+	val isZcash = model.networkInfo.networkLogo.lowercase().contains("zcash")
+	var zcashVerifiedBalance by remember { mutableStateOf<ULong?>(null) }
+	var zcashVerifiedNotes by remember { mutableStateOf<List<ZcashVerifiedNoteDisplay>>(emptyList()) }
+	var zcashSyncInfo by remember { mutableStateOf<ZcashSyncInfo?>(null) }
+
+	LaunchedEffect(isZcash) {
+		if (isZcash) {
+			zcashVerifiedBalance = vm.getZcashVerifiedBalance()
+			zcashVerifiedNotes = vm.getZcashVerifiedNotesList()
+			zcashSyncInfo = vm.getZcashSyncMetadata()
+		}
+	}
 
 	Box(modifier = Modifier.statusBarsPadding()) {
 		KeyDetailsPublicKeyScreen(
@@ -109,6 +125,9 @@ fun KeyDetailsScreenSubgraph(
 					zcashTransparentLoading = false
 				}
 			},
+			zcashVerifiedBalance = zcashVerifiedBalance,
+			zcashVerifiedNotes = zcashVerifiedNotes,
+			zcashSyncedAt = zcashSyncInfo?.syncedAt,
 		)
 	}
 

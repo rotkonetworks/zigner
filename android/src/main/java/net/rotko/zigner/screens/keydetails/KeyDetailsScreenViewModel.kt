@@ -9,12 +9,17 @@ import net.rotko.zigner.domain.backend.UniffiResult
 import net.rotko.zigner.domain.storage.RepoResult
 import net.rotko.zigner.screens.keydetails.exportprivatekey.PrivateKeyExportModel
 import io.parity.signer.uniffi.MKeyDetails
+import io.parity.signer.uniffi.ZcashVerifiedNoteDisplay
 import io.parity.signer.uniffi.encodeToQr
 import io.parity.signer.uniffi.exportZcashFvk
 import io.parity.signer.uniffi.exportPenumbraFvk
 import io.parity.signer.uniffi.exportCosmosAccounts
 import io.parity.signer.uniffi.getZcashDiversifiedAddress
 import io.parity.signer.uniffi.getZcashTransparentAddress
+import io.parity.signer.uniffi.ZcashSyncInfo
+import io.parity.signer.uniffi.getZcashSyncInfo
+import io.parity.signer.uniffi.getZcashVerifiedBalance
+import io.parity.signer.uniffi.getZcashVerifiedNotes
 
 
 class KeyDetailsScreenViewModel : ViewModel() {
@@ -169,6 +174,30 @@ class KeyDetailsScreenViewModel : ViewModel() {
 					null
 				}
 			}
+		}
+	}
+
+	fun getZcashVerifiedBalance(): ULong? {
+		return try {
+			getZcashVerifiedBalance()
+		} catch (e: Exception) {
+			null
+		}
+	}
+
+	fun getZcashVerifiedNotesList(): List<ZcashVerifiedNoteDisplay> {
+		return try {
+			getZcashVerifiedNotes()
+		} catch (e: Exception) {
+			emptyList()
+		}
+	}
+
+	fun getZcashSyncMetadata(): ZcashSyncInfo? {
+		return try {
+			getZcashSyncInfo()
+		} catch (e: Exception) {
+			null
 		}
 	}
 

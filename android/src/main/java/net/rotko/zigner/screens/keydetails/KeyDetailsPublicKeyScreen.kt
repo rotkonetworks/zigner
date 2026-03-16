@@ -67,9 +67,12 @@ import net.rotko.zigner.ui.theme.red500
 import net.rotko.zigner.ui.theme.red500fill12
 import net.rotko.zigner.ui.theme.textTertiary
 import io.parity.signer.uniffi.Action
+import io.parity.signer.uniffi.ZcashVerifiedNoteDisplay
 import io.parity.signer.uniffi.encodeToQr
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.text.NumberFormat
+import java.util.Locale
 
 /**
  * Check if network uses export QR (Penumbra, Zcash, Cosmos) - these show export QR instead of address
@@ -103,6 +106,9 @@ fun KeyDetailsPublicKeyScreen(
 	zcashTransparentAddress: String? = null,
 	zcashTransparentLoading: Boolean = false,
 	onRequestZcashTransparentAddress: Callback = {},
+	zcashVerifiedBalance: ULong? = null,
+	zcashVerifiedNotes: List<ZcashVerifiedNoteDisplay> = emptyList(),
+	zcashSyncedAt: ULong? = null,
 ) {
 	val isFvkNetwork = isFvkNetwork(model.networkInfo.networkLogo)
 	val isZcash = model.networkInfo.networkLogo.lowercase().contains("zcash")
@@ -439,7 +445,91 @@ fun KeyDetailsPublicKeyScreen(
 					}
 				}
 
+				// Zcash verified balance + notes
+				if (isZcash && zcashVerifiedBalance != null) {
+					ZcashVerifiedBalanceSection(
+						balance = zcashVerifiedBalance,
+						notes = zcashVerifiedNotes,
+						syncedAt = zcashSyncedAt,
+					)
+				}
+
 				BottomKeyPlate(plateShape, model, isFvkNetwork)
+			}
+		}
+	}
+}
+
+@Composable
+private fun ZcashVerifiedBalanceSection(
+	balance: ULong,
+	notes: List<ZcashVerifiedNoteDisplay>,
+	syncedAt: ULong? = null,
+) {
+	val plateShape = RoundedCornerShape(dimensionResource(id = R.dimen.qrShapeCornerRadius))
+	Column(
+		modifier = Modifier
+			.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+			.clip(plateShape)
+			.background(MaterialTheme.colors.fill6, plateShape)
+			.padding(16.dp),
+		verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+	) {
+		Row(
+			modifier = Modifier.fillMaxWidth(),
+			horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			Text(
+				text = "Verified Balance",
+				style = SignerTypeface.LabelM,
+				color = MaterialTheme.colors.textTertiary
+			)
+			if (syncedAt != null && syncedAt.toLong() > 0) {
+				Text(
+					text = formatTimeAgo(syncedAt.toLong()),
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textTertiary
+				)
+			}
+		}
+		val zec = balance.toLong() / 100_000_000.0
+		Text(
+			text = "%.8f ZEC".format(zec),
+			style = SignerTypeface.TitleL,
+			color = MaterialTheme.colors.primary
+		)
+		if (notes.isNotEmpty()) {
+			SignerDivider(sidePadding = 0.dp)
+			Text(
+				text = "${notes.size} note${if (notes.size == 1) "" else "s"}",
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textTertiary
+			)
+			for (note in notes.take(10)) {
+				val noteZec = note.value.toLong() / 100_000_000.0
+				Row(
+					modifier = Modifier.fillMaxWidth(),
+					horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+				) {
+					Text(
+						text = "%.8f ZEC".format(noteZec),
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.primary
+					)
+					Text(
+						text = "height ${NumberFormat.getNumberInstance(Locale.US).format(note.blockHeight.toLong())}",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary
+					)
+				}
+			}
+			if (notes.size > 10) {
+				Text(
+					text = "...and ${notes.size - 10} more",
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textTertiary
+				)
 			}
 		}
 	}
@@ -557,6 +647,18 @@ private fun ExposedKeyAlarm() {
 	}
 }
 
+
+private fun formatTimeAgo(unixSeconds: Long): String {
+	val now = System.currentTimeMillis() / 1000
+	val diff = now - unixSeconds
+	return when {
+		diff < 60 -> "just now"
+		diff < 3600 -> "${diff / 60}m ago"
+		diff < 86400 -> "${diff / 3600}h ago"
+		diff < 604800 -> "${diff / 86400}d ago"
+		else -> "${diff / 604800}w ago"
+	}
+}
 
 @Preview(
 	name = "light", group = "general", uiMode = Configuration.UI_MODE_NIGHT_NO,

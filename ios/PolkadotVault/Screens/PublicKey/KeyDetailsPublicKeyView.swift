@@ -73,6 +73,15 @@ struct KeyDetailsPublicKeyView: View {
                             zcashReceiveControls()
                         }
 
+                        // Zcash verified balance
+                        if viewModel.isZcash, let balance = viewModel.zcashVerifiedBalance {
+                            zcashVerifiedBalanceSection(
+                                balance: balance,
+                                notes: viewModel.zcashVerifiedNotes,
+                                syncedAt: viewModel.zcashSyncedAt
+                            )
+                        }
+
                         // Key data
                         keyDetails()
                             .padding(.bottom, Spacing.extraExtraLarge)
@@ -303,6 +312,60 @@ private extension KeyDetailsPublicKeyView {
 
 private extension KeyDetailsPublicKeyView {
     @ViewBuilder
+    func zcashVerifiedBalanceSection(balance: UInt64, notes: [ZcashVerifiedNoteDisplay], syncedAt: UInt64 = 0) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            HStack {
+                Text("Verified Balance")
+                    .font(PrimaryFont.labelM.font)
+                    .foregroundColor(.textAndIconsTertiary)
+                Spacer()
+                if syncedAt > 0 {
+                    Text(formatTimeAgo(unixSeconds: syncedAt))
+                        .font(PrimaryFont.captionM.font)
+                        .foregroundColor(.textAndIconsTertiary)
+                }
+            }
+            let zec = Double(balance) / 100_000_000.0
+            Text(String(format: "%.8f ZEC", zec))
+                .font(PrimaryFont.titleL.font)
+                .foregroundColor(.textAndIconsPrimary)
+            if !notes.isEmpty {
+                Divider()
+                Text("\(notes.count) note\(notes.count == 1 ? "" : "s")")
+                    .font(PrimaryFont.captionM.font)
+                    .foregroundColor(.textAndIconsTertiary)
+                ForEach(notes.prefix(10), id: \.nullifierHex) { note in
+                    HStack {
+                        let noteZec = Double(note.value) / 100_000_000.0
+                        Text(String(format: "%.8f ZEC", noteZec))
+                            .font(PrimaryFont.captionM.font)
+                            .foregroundColor(.textAndIconsPrimary)
+                        Spacer()
+                        Text("height \(note.blockHeight)")
+                            .font(PrimaryFont.captionM.font)
+                            .foregroundColor(.textAndIconsTertiary)
+                    }
+                }
+                if notes.count > 10 {
+                    Text("...and \(notes.count - 10) more")
+                        .font(PrimaryFont.captionM.font)
+                        .foregroundColor(.textAndIconsTertiary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: CornerRadius.medium)
+                .stroke(.fill12, lineWidth: 1)
+                .background(.fill6)
+                .cornerRadius(CornerRadius.medium)
+        )
+    }
+}
+
+private extension KeyDetailsPublicKeyView {
+    @ViewBuilder
     func keyDetails() -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
@@ -396,6 +459,11 @@ extension KeyDetailsPublicKeyView {
         @Published var isPresentingError: Bool = false
         @Published var presentableError: ErrorBottomModalViewModel = .alertError(message: "")
 
+        // Zcash verified balance (from note sync)
+        @Published var zcashVerifiedBalance: UInt64?
+        @Published var zcashVerifiedNotes: [ZcashVerifiedNoteDisplay] = []
+        @Published var zcashSyncedAt: UInt64 = 0
+
         // Zcash receive mode state
         @Published var isReceiveMode: Bool = false
         @Published var diversifierIndex: Int = 0
@@ -437,6 +505,9 @@ extension KeyDetailsPublicKeyView {
             self.seedsMediator = seedsMediator
             self.onCompletion = onCompletion
             _renderable = .init(initialValue: KeyDetailsPublicKeyViewRenderable(keyDetails))
+            if keyDetails.networkInfo.networkLogo.lowercased().contains("zcash") {
+                loadZcashVerifiedBalance()
+            }
         }
 
         func onMoreButtonTap() {
@@ -502,6 +573,26 @@ extension KeyDetailsPublicKeyView {
             }
         }
 
+        // MARK: - Zcash Verified Balance
+
+        func loadZcashVerifiedBalance() {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                do {
+                    let balance = try getZcashVerifiedBalance()
+                    let notes = try getZcashVerifiedNotes()
+                    let syncInfo = try getZcashSyncInfo()
+                    DispatchQueue.main.async {
+                        self.zcashVerifiedBalance = balance
+                        self.zcashVerifiedNotes = notes
+                        self.zcashSyncedAt = syncInfo?.syncedAt ?? 0
+                    }
+                } catch {
+                    // No verified notes stored yet — that's fine
+                }
+            }
+        }
+
         // MARK: - Zcash Address Generation
 
         func requestDiversifiedAddress() {
@@ -561,6 +652,18 @@ extension KeyDetailsPublicKeyView {
             let bytes = Array(address.utf8).map { UInt8($0) }
             return try? encodeToQr(payload: bytes, isDanger: false)
         }
+    }
+}
+
+private func formatTimeAgo(unixSeconds: UInt64) -> String {
+    let now = UInt64(Date().timeIntervalSince1970)
+    let diff = now > unixSeconds ? now - unixSeconds : 0
+    switch diff {
+    case 0..<60: return "just now"
+    case 60..<3600: return "\(diff / 60)m ago"
+    case 3600..<86400: return "\(diff / 3600)h ago"
+    case 86400..<604800: return "\(diff / 86400)d ago"
+    default: return "\(diff / 604800)w ago"
     }
 }
 
