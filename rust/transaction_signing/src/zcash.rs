@@ -632,6 +632,556 @@ pub const QR_TYPE_ZCASH_FVK_EXPORT: u8 = 0x01;
 pub const QR_TYPE_ZCASH_SIGN_REQUEST: u8 = 0x02;
 /// QR code type for Zcash signatures response
 pub const QR_TYPE_ZCASH_SIGNATURES: u8 = 0x03;
+/// QR code type for Zcash notes sync (ur:zcash-notes)
+pub const QR_TYPE_ZCASH_NOTES: u8 = 0x04;
+
+// ============================================================================
+// zcash note sync types
+// ============================================================================
+
+/// A verified Zcash Orchard note (merkle path checked against anchor)
+#[derive(Debug, Clone)]
+pub struct ZcashVerifiedNote {
+    /// Note value in zatoshis
+    pub value: u64,
+    /// Nullifier (32 bytes, unique identifier for spend tracking)
+    pub nullifier: [u8; 32],
+    /// Note commitment x-coordinate (cmx)
+    pub cmx: [u8; 32],
+    /// Global position in the orchard commitment tree
+    pub position: u32,
+    /// Block height where this note was mined
+    pub block_height: u32,
+}
+
+/// A note with its merkle authentication path (pre-verification)
+#[derive(Debug, Clone)]
+pub struct ZcashNoteWithPath {
+    /// Note value in zatoshis
+    pub value: u64,
+    /// Nullifier
+    pub nullifier: [u8; 32],
+    /// Note commitment x-coordinate
+    pub cmx: [u8; 32],
+    /// Position in commitment tree
+    pub position: u32,
+    /// Block height
+    pub block_height: u32,
+    /// Merkle authentication path (32 sibling hashes, from leaf to root)
+    pub merkle_path: [[u8; 32]; 32],
+}
+
+/// Bundle of notes with anchor, received via QR
+#[derive(Debug, Clone)]
+pub struct ZcashNotesBundle {
+    /// Orchard tree root that all notes must verify against
+    pub anchor: [u8; 32],
+    /// Block height of the anchor
+    pub anchor_height: u32,
+    /// Network: true = mainnet
+    pub mainnet: bool,
+    /// Notes with merkle paths
+    pub notes: Vec<ZcashNoteWithPath>,
+}
+
+/// Result of note sync verification
+#[derive(Debug, Clone)]
+pub struct ZcashNoteSyncResult {
+    /// Number of notes that passed merkle verification
+    pub notes_verified: u32,
+    /// Total balance of verified notes (zatoshis)
+    pub total_balance: u64,
+    /// Anchor hex
+    pub anchor_hex: String,
+    /// Anchor height
+    pub anchor_height: u32,
+    /// Network
+    pub mainnet: bool,
+}
+
+// ============================================================================
+// merkle path verification
+// ============================================================================
+
+/// Verify a note's merkle path against the anchor
+///
+/// Uses orchard's MerklePath::root() which implements MerkleCRH^Orchard
+/// (Sinsemilla hash) per ZIP-244.
+#[cfg(feature = "zcash")]
+pub fn verify_merkle_path(
+    cmx_bytes: &[u8; 32],
+    position: u32,
+    path: &[[u8; 32]; 32],
+    anchor_bytes: &[u8; 32],
+) -> Result<bool> {
+    use orchard::note::ExtractedNoteCommitment;
+    use orchard::tree::{Anchor, MerkleHashOrchard, MerklePath};
+
+    // Parse cmx
+    let cmx = Option::from(ExtractedNoteCommitment::from_bytes(cmx_bytes))
+        .ok_or_else(|| Error::ZcashParsing("invalid cmx bytes".to_string()))?;
+
+    // Parse anchor
+    let anchor = Option::from(Anchor::from_bytes(*anchor_bytes))
+        .ok_or_else(|| Error::ZcashParsing("invalid anchor bytes".to_string()))?;
+
+    // Parse merkle path siblings
+    let empty = Option::from(MerkleHashOrchard::from_bytes(&[0u8; 32])).unwrap();
+    let mut auth_path = [empty; 32];
+    for (i, sibling) in path.iter().enumerate() {
+        auth_path[i] = Option::from(MerkleHashOrchard::from_bytes(sibling))
+            .ok_or_else(|| Error::ZcashParsing(format!("invalid merkle sibling at level {i}")))?;
+    }
+
+    let merkle_path = MerklePath::from_parts(position, auth_path);
+    let computed_root = merkle_path.root(cmx);
+
+    Ok(computed_root == anchor)
+}
+
+// ============================================================================
+// CBOR codec for zcash-notes bundle
+// ============================================================================
+
+/// Encode a ZcashNotesBundle to CBOR bytes
+///
+/// CBOR structure:
+/// ```text
+/// map(4) {
+///   1: bstr(32)     -- anchor
+///   2: uint          -- anchor_height
+///   3: bool          -- mainnet
+///   4: array [       -- notes
+///     map(6) {
+///       1: uint      -- value
+///       2: bstr(32)  -- nullifier
+///       3: bstr(32)  -- cmx
+///       4: uint      -- position
+///       5: uint      -- block_height
+///       6: array(32) [bstr(32)]  -- merkle_path
+///     }, ...
+///   ]
+/// }
+/// ```
+pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
+    let mut cbor = Vec::new();
+
+    // map(4)
+    cbor.push(0xa4);
+
+    // key 1: anchor (bstr 32)
+    cbor.push(0x01);
+    cbor.push(0x58); cbor.push(0x20); // bytes(32)
+    cbor.extend_from_slice(&bundle.anchor);
+
+    // key 2: anchor_height (uint)
+    cbor.push(0x02);
+    cbor_encode_uint(&mut cbor, bundle.anchor_height as u64);
+
+    // key 3: mainnet (bool)
+    cbor.push(0x03);
+    cbor.push(if bundle.mainnet { 0xf5 } else { 0xf4 }); // true / false
+
+    // key 4: notes array
+    cbor.push(0x04);
+    cbor_encode_array_len(&mut cbor, bundle.notes.len());
+
+    for note in &bundle.notes {
+        // map(6) per note
+        cbor.push(0xa6);
+
+        // 1: value
+        cbor.push(0x01);
+        cbor_encode_uint(&mut cbor, note.value);
+
+        // 2: nullifier
+        cbor.push(0x02);
+        cbor.push(0x58); cbor.push(0x20);
+        cbor.extend_from_slice(&note.nullifier);
+
+        // 3: cmx
+        cbor.push(0x03);
+        cbor.push(0x58); cbor.push(0x20);
+        cbor.extend_from_slice(&note.cmx);
+
+        // 4: position
+        cbor.push(0x04);
+        cbor_encode_uint(&mut cbor, note.position as u64);
+
+        // 5: block_height
+        cbor.push(0x05);
+        cbor_encode_uint(&mut cbor, note.block_height as u64);
+
+        // 6: merkle_path (array of 32 bstr(32))
+        cbor.push(0x06);
+        cbor.push(0x98); cbor.push(0x20); // array(32)
+        for sibling in &note.merkle_path {
+            cbor.push(0x58); cbor.push(0x20);
+            cbor.extend_from_slice(sibling);
+        }
+    }
+
+    cbor
+}
+
+/// Decode a ZcashNotesBundle from CBOR bytes
+pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
+    let mut offset = 0;
+
+    // map(4)
+    if data.is_empty() {
+        return Err(Error::ZcashParsing("empty CBOR data".to_string()));
+    }
+    let (map_len, consumed) = cbor_decode_map_len(data, offset)?;
+    offset = consumed;
+    if map_len < 4 {
+        return Err(Error::ZcashParsing(format!("expected map(4+), got map({map_len})")));
+    }
+
+    let mut anchor = [0u8; 32];
+    let mut anchor_height = 0u32;
+    let mut mainnet = true;
+    let mut notes = Vec::new();
+
+    for _ in 0..map_len {
+        let (key, consumed) = cbor_decode_uint(data, offset)?;
+        offset = consumed;
+
+        match key {
+            1 => {
+                // anchor: bstr(32)
+                let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
+                offset = consumed;
+                if bytes.len() != 32 {
+                    return Err(Error::ZcashParsing(format!("anchor must be 32 bytes, got {}", bytes.len())));
+                }
+                anchor.copy_from_slice(&bytes);
+            }
+            2 => {
+                // anchor_height: uint
+                let (val, consumed) = cbor_decode_uint(data, offset)?;
+                offset = consumed;
+                anchor_height = val as u32;
+            }
+            3 => {
+                // mainnet: bool
+                if offset >= data.len() {
+                    return Err(Error::ZcashParsing("truncated bool".to_string()));
+                }
+                mainnet = match data[offset] {
+                    0xf5 => true,
+                    0xf4 => false,
+                    b => return Err(Error::ZcashParsing(format!("expected bool, got 0x{b:02x}"))),
+                };
+                offset += 1;
+            }
+            4 => {
+                // notes: array
+                let (arr_len, consumed) = cbor_decode_array_len(data, offset)?;
+                offset = consumed;
+
+                for _ in 0..arr_len {
+                    let (note, consumed) = cbor_decode_note_with_path(data, offset)?;
+                    offset = consumed;
+                    notes.push(note);
+                }
+            }
+            _ => {
+                // skip unknown keys
+                let consumed = cbor_skip_value(data, offset)?;
+                offset = consumed;
+            }
+        }
+    }
+
+    Ok(ZcashNotesBundle {
+        anchor,
+        anchor_height,
+        mainnet,
+        notes,
+    })
+}
+
+// ============================================================================
+// CBOR helpers
+// ============================================================================
+
+fn cbor_encode_uint(buf: &mut Vec<u8>, val: u64) {
+    if val <= 23 {
+        buf.push(val as u8);
+    } else if val <= 0xff {
+        buf.push(0x18);
+        buf.push(val as u8);
+    } else if val <= 0xffff {
+        buf.push(0x19);
+        buf.extend_from_slice(&(val as u16).to_be_bytes());
+    } else if val <= 0xffff_ffff {
+        buf.push(0x1a);
+        buf.extend_from_slice(&(val as u32).to_be_bytes());
+    } else {
+        buf.push(0x1b);
+        buf.extend_from_slice(&val.to_be_bytes());
+    }
+}
+
+fn cbor_encode_array_len(buf: &mut Vec<u8>, len: usize) {
+    if len <= 23 {
+        buf.push(0x80 | len as u8);
+    } else if len <= 0xff {
+        buf.push(0x98);
+        buf.push(len as u8);
+    } else if len <= 0xffff {
+        buf.push(0x99);
+        buf.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        buf.push(0x9a);
+        buf.extend_from_slice(&(len as u32).to_be_bytes());
+    }
+}
+
+fn cbor_decode_uint(data: &[u8], offset: usize) -> Result<(u64, usize)> {
+    if offset >= data.len() {
+        return Err(Error::ZcashParsing("truncated uint".to_string()));
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    let additional = first & 0x1f;
+
+    if major != 0 {
+        return Err(Error::ZcashParsing(format!("expected uint (major 0), got major {major}")));
+    }
+
+    match additional {
+        0..=23 => Ok((additional as u64, offset + 1)),
+        24 => {
+            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
+            Ok((data[offset + 1] as u64, offset + 2))
+        }
+        25 => {
+            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
+            Ok((u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as u64, offset + 3))
+        }
+        26 => {
+            if offset + 5 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
+            Ok((u32::from_be_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4]]) as u64, offset + 5))
+        }
+        27 => {
+            if offset + 9 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
+            Ok((u64::from_be_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7], data[offset + 8]]), offset + 9))
+        }
+        _ => Err(Error::ZcashParsing(format!("unsupported uint additional {additional}"))),
+    }
+}
+
+fn cbor_decode_bstr(data: &[u8], offset: usize) -> Result<(Vec<u8>, usize)> {
+    if offset >= data.len() {
+        return Err(Error::ZcashParsing("truncated bstr".to_string()));
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    let additional = first & 0x1f;
+
+    if major != 2 {
+        return Err(Error::ZcashParsing(format!("expected bstr (major 2), got major {major}")));
+    }
+
+    let (len, header_end) = match additional {
+        0..=23 => (additional as usize, offset + 1),
+        24 => {
+            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated bstr len".to_string())); }
+            (data[offset + 1] as usize, offset + 2)
+        }
+        25 => {
+            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated bstr len".to_string())); }
+            (u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize, offset + 3)
+        }
+        _ => return Err(Error::ZcashParsing(format!("unsupported bstr additional {additional}"))),
+    };
+
+    if header_end + len > data.len() {
+        return Err(Error::ZcashParsing("truncated bstr data".to_string()));
+    }
+    Ok((data[header_end..header_end + len].to_vec(), header_end + len))
+}
+
+fn cbor_decode_map_len(data: &[u8], offset: usize) -> Result<(usize, usize)> {
+    if offset >= data.len() {
+        return Err(Error::ZcashParsing("truncated map".to_string()));
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    let additional = first & 0x1f;
+
+    if major != 5 {
+        return Err(Error::ZcashParsing(format!("expected map (major 5), got major {major}")));
+    }
+
+    match additional {
+        0..=23 => Ok((additional as usize, offset + 1)),
+        24 => {
+            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated map len".to_string())); }
+            Ok((data[offset + 1] as usize, offset + 2))
+        }
+        _ => Err(Error::ZcashParsing(format!("unsupported map additional {additional}"))),
+    }
+}
+
+fn cbor_decode_array_len(data: &[u8], offset: usize) -> Result<(usize, usize)> {
+    if offset >= data.len() {
+        return Err(Error::ZcashParsing("truncated array".to_string()));
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    let additional = first & 0x1f;
+
+    if major != 4 {
+        return Err(Error::ZcashParsing(format!("expected array (major 4), got major {major}")));
+    }
+
+    match additional {
+        0..=23 => Ok((additional as usize, offset + 1)),
+        24 => {
+            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated array len".to_string())); }
+            Ok((data[offset + 1] as usize, offset + 2))
+        }
+        25 => {
+            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated array len".to_string())); }
+            Ok((u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize, offset + 3))
+        }
+        _ => Err(Error::ZcashParsing(format!("unsupported array additional {additional}"))),
+    }
+}
+
+fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWithPath, usize)> {
+    let (map_len, mut offset) = cbor_decode_map_len(data, offset)?;
+    if map_len < 6 {
+        return Err(Error::ZcashParsing(format!("expected note map(6+), got map({map_len})")));
+    }
+
+    let mut value = 0u64;
+    let mut nullifier = [0u8; 32];
+    let mut cmx = [0u8; 32];
+    let mut position = 0u32;
+    let mut block_height = 0u32;
+    let mut merkle_path = [[0u8; 32]; 32];
+
+    for _ in 0..map_len {
+        let (key, consumed) = cbor_decode_uint(data, offset)?;
+        offset = consumed;
+
+        match key {
+            1 => {
+                let (val, consumed) = cbor_decode_uint(data, offset)?;
+                offset = consumed;
+                value = val;
+            }
+            2 => {
+                let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
+                offset = consumed;
+                if bytes.len() != 32 {
+                    return Err(Error::ZcashParsing("nullifier must be 32 bytes".to_string()));
+                }
+                nullifier.copy_from_slice(&bytes);
+            }
+            3 => {
+                let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
+                offset = consumed;
+                if bytes.len() != 32 {
+                    return Err(Error::ZcashParsing("cmx must be 32 bytes".to_string()));
+                }
+                cmx.copy_from_slice(&bytes);
+            }
+            4 => {
+                let (val, consumed) = cbor_decode_uint(data, offset)?;
+                offset = consumed;
+                position = val as u32;
+            }
+            5 => {
+                let (val, consumed) = cbor_decode_uint(data, offset)?;
+                offset = consumed;
+                block_height = val as u32;
+            }
+            6 => {
+                let (arr_len, consumed) = cbor_decode_array_len(data, offset)?;
+                offset = consumed;
+                if arr_len != 32 {
+                    return Err(Error::ZcashParsing(format!("merkle path must have 32 siblings, got {arr_len}")));
+                }
+                for i in 0..32 {
+                    let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
+                    offset = consumed;
+                    if bytes.len() != 32 {
+                        return Err(Error::ZcashParsing("merkle sibling must be 32 bytes".to_string()));
+                    }
+                    merkle_path[i].copy_from_slice(&bytes);
+                }
+            }
+            _ => {
+                offset = cbor_skip_value(data, offset)?;
+            }
+        }
+    }
+
+    Ok((ZcashNoteWithPath {
+        value,
+        nullifier,
+        cmx,
+        position,
+        block_height,
+        merkle_path,
+    }, offset))
+}
+
+/// Skip a single CBOR value (for unknown map keys)
+fn cbor_skip_value(data: &[u8], offset: usize) -> Result<usize> {
+    if offset >= data.len() {
+        return Err(Error::ZcashParsing("truncated CBOR value".to_string()));
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    let additional = first & 0x1f;
+
+    let (content_len, header_end) = match additional {
+        0..=23 => (additional as usize, offset + 1),
+        24 => {
+            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated".to_string())); }
+            (data[offset + 1] as usize, offset + 2)
+        }
+        25 => {
+            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated".to_string())); }
+            (u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize, offset + 3)
+        }
+        26 => {
+            if offset + 5 > data.len() { return Err(Error::ZcashParsing("truncated".to_string())); }
+            (u32::from_be_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4]]) as usize, offset + 5)
+        }
+        _ => return Err(Error::ZcashParsing(format!("unsupported CBOR additional {additional}"))),
+    };
+
+    match major {
+        0 | 1 => Ok(header_end), // uint/negint: no content beyond header
+        2 | 3 => Ok(header_end + content_len), // bstr/tstr: skip content bytes
+        4 => {
+            // array: skip N items
+            let mut pos = header_end;
+            for _ in 0..content_len {
+                pos = cbor_skip_value(data, pos)?;
+            }
+            Ok(pos)
+        }
+        5 => {
+            // map: skip N key-value pairs
+            let mut pos = header_end;
+            for _ in 0..content_len {
+                pos = cbor_skip_value(data, pos)?; // key
+                pos = cbor_skip_value(data, pos)?; // value
+            }
+            Ok(pos)
+        }
+        7 => Ok(offset + 1), // simple values (true/false/null) or floats
+        _ => Err(Error::ZcashParsing(format!("unsupported CBOR major type {major}"))),
+    }
+}
 
 // ============================================================================
 // sign request parsing (from online wallet)
@@ -1479,6 +2029,75 @@ mod tests {
         println!("sign request: {} bytes", request_data.len());
         println!("signature response: {} bytes", response_bytes.len());
         println!("orchard signature: {}", hex::encode(sig));
+    }
+
+    #[test]
+    fn test_notes_cbor_roundtrip() {
+        let bundle = ZcashNotesBundle {
+            anchor: [0xAA; 32],
+            anchor_height: 2_500_000,
+            mainnet: true,
+            notes: vec![
+                ZcashNoteWithPath {
+                    value: 100_000_000, // 1 ZEC
+                    nullifier: [0x11; 32],
+                    cmx: [0x22; 32],
+                    position: 42,
+                    block_height: 2_499_999,
+                    merkle_path: {
+                        let mut path = [[0u8; 32]; 32];
+                        for (i, p) in path.iter_mut().enumerate() {
+                            p[0] = i as u8;
+                        }
+                        path
+                    },
+                },
+                ZcashNoteWithPath {
+                    value: 50_000_000, // 0.5 ZEC
+                    nullifier: [0x33; 32],
+                    cmx: [0x44; 32],
+                    position: 100,
+                    block_height: 2_499_990,
+                    merkle_path: [[0x55; 32]; 32],
+                },
+            ],
+        };
+
+        let cbor = encode_notes_bundle_to_cbor(&bundle);
+        let decoded = decode_notes_bundle_from_cbor(&cbor).unwrap();
+
+        assert_eq!(decoded.anchor, bundle.anchor);
+        assert_eq!(decoded.anchor_height, bundle.anchor_height);
+        assert_eq!(decoded.mainnet, bundle.mainnet);
+        assert_eq!(decoded.notes.len(), 2);
+        assert_eq!(decoded.notes[0].value, 100_000_000);
+        assert_eq!(decoded.notes[0].nullifier, [0x11; 32]);
+        assert_eq!(decoded.notes[0].cmx, [0x22; 32]);
+        assert_eq!(decoded.notes[0].position, 42);
+        assert_eq!(decoded.notes[0].block_height, 2_499_999);
+        assert_eq!(decoded.notes[0].merkle_path[0][0], 0);
+        assert_eq!(decoded.notes[0].merkle_path[31][0], 31);
+        assert_eq!(decoded.notes[1].value, 50_000_000);
+        assert_eq!(decoded.notes[1].nullifier, [0x33; 32]);
+        assert_eq!(decoded.notes[1].merkle_path, [[0x55; 32]; 32]);
+    }
+
+    #[test]
+    fn test_notes_cbor_empty_bundle() {
+        let bundle = ZcashNotesBundle {
+            anchor: [0xFF; 32],
+            anchor_height: 0,
+            mainnet: false,
+            notes: vec![],
+        };
+
+        let cbor = encode_notes_bundle_to_cbor(&bundle);
+        let decoded = decode_notes_bundle_from_cbor(&cbor).unwrap();
+
+        assert_eq!(decoded.anchor, [0xFF; 32]);
+        assert_eq!(decoded.anchor_height, 0);
+        assert!(!decoded.mainnet);
+        assert!(decoded.notes.is_empty());
     }
 
     #[test]

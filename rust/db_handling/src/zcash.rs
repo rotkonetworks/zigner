@@ -2,7 +2,7 @@
 //! Uses ZIP-32 derivation for Orchard keys
 
 use crate::error::{Error, Result};
-use constants::ZCASH_ADDRESS_TREE;
+use constants::{ZCASH_ADDRESS_TREE, ZCASH_NOTES_TREE};
 use zeroize::Zeroize;
 
 /// Store Zcash address in database (keyed by public key hex)
@@ -116,6 +116,124 @@ fn parse_account_from_path(path: &str) -> Result<u32> {
 
     // Default to account 0 if we can't parse
     Ok(0)
+}
+
+// ============================================================================
+// Verified note storage (synced via animated QR)
+// ============================================================================
+
+/// Stored note value in sled: CBOR-encoded { value, cmx, position, block_height }
+/// Key: nullifier (32 bytes)
+
+/// Store verified notes in the database (clear-and-replace model)
+///
+/// Also stores anchor and height in special keys prefixed with 0xff.
+pub fn store_verified_notes(
+    database: &sled::Db,
+    notes: &[(u64, [u8; 32], [u8; 32], u32, u32)], // (value, nullifier, cmx, position, block_height)
+    anchor: &[u8; 32],
+    anchor_height: u32,
+    mainnet: bool,
+) -> Result<()> {
+    let tree = database.open_tree(ZCASH_NOTES_TREE)?;
+
+    // Clear existing data
+    tree.clear()?;
+
+    // Store anchor metadata under special key
+    // Format: anchor(32) + height(4) + mainnet(1) + synced_at(8)
+    let synced_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let mut meta = Vec::with_capacity(45);
+    meta.extend_from_slice(anchor);
+    meta.extend_from_slice(&anchor_height.to_le_bytes());
+    meta.push(if mainnet { 1 } else { 0 });
+    meta.extend_from_slice(&synced_at.to_le_bytes());
+    tree.insert(b"__anchor__", meta.as_slice())?;
+
+    // Store each note keyed by nullifier
+    for (value, nullifier, cmx, position, block_height) in notes {
+        let mut note_data = Vec::with_capacity(72);
+        note_data.extend_from_slice(&value.to_le_bytes()); // 8 bytes
+        note_data.extend_from_slice(cmx);                  // 32 bytes
+        note_data.extend_from_slice(&position.to_le_bytes()); // 4 bytes
+        note_data.extend_from_slice(&block_height.to_le_bytes()); // 4 bytes
+        tree.insert(&nullifier[..], note_data.as_slice())?;
+    }
+
+    tree.flush()?;
+    Ok(())
+}
+
+/// Retrieve all verified notes from the database
+/// Returns: Vec<(value, nullifier_hex, cmx, position, block_height)>
+pub fn get_verified_notes(
+    database: &sled::Db,
+) -> Result<Vec<(u64, String, [u8; 32], u32, u32)>> {
+    let tree = database.open_tree(ZCASH_NOTES_TREE)?;
+    let mut notes = Vec::new();
+
+    for entry in tree.iter() {
+        let (key, value) = entry?;
+        // Skip metadata keys
+        if key.as_ref() == b"__anchor__" {
+            continue;
+        }
+        if value.len() < 48 {
+            continue;
+        }
+
+        let val = u64::from_le_bytes(value[0..8].try_into().unwrap());
+        let mut cmx = [0u8; 32];
+        cmx.copy_from_slice(&value[8..40]);
+        let position = u32::from_le_bytes(value[40..44].try_into().unwrap());
+        let block_height = u32::from_le_bytes(value[44..48].try_into().unwrap());
+        let nullifier_hex = hex::encode(key.as_ref());
+
+        notes.push((val, nullifier_hex, cmx, position, block_height));
+    }
+
+    Ok(notes)
+}
+
+/// Get the sum of all verified note values
+pub fn get_verified_balance(database: &sled::Db) -> Result<u64> {
+    let notes = get_verified_notes(database)?;
+    Ok(notes.iter().map(|(value, _, _, _, _)| value).sum())
+}
+
+/// Get the stored anchor, height, mainnet flag, and sync timestamp
+pub fn get_verified_anchor(database: &sled::Db) -> Result<Option<([u8; 32], u32, bool, u64)>> {
+    let tree = database.open_tree(ZCASH_NOTES_TREE)?;
+    match tree.get(b"__anchor__")? {
+        Some(data) => {
+            if data.len() < 37 {
+                return Ok(None);
+            }
+            let mut anchor = [0u8; 32];
+            anchor.copy_from_slice(&data[0..32]);
+            let height = u32::from_le_bytes(data[32..36].try_into().unwrap());
+            let mainnet = data[36] == 1;
+            // synced_at was added later; old entries won't have it
+            let synced_at = if data.len() >= 45 {
+                u64::from_le_bytes(data[37..45].try_into().unwrap())
+            } else {
+                0
+            };
+            Ok(Some((anchor, height, mainnet, synced_at)))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Clear all zcash notes from the database
+pub fn clear_zcash_notes(database: &sled::Db) -> Result<()> {
+    let tree = database.open_tree(ZCASH_NOTES_TREE)?;
+    tree.clear()?;
+    tree.flush()?;
+    Ok(())
 }
 
 #[cfg(test)]

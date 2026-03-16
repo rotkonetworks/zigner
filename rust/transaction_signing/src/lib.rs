@@ -48,7 +48,9 @@ pub use zcash::{
     OrchardSpendingKey as ZcashOrchardKey, PcztSignerInput, PcztSignerOutput,
     TransparentSpendingKey as ZcashTransparentKey, ZcashAuthorizationData, ZcashFvkExportData,
     ZcashSignRequest, ZcashSignatureResponse, QR_TYPE_ZCASH_FVK_EXPORT, QR_TYPE_ZCASH_SIGNATURES,
-    QR_TYPE_ZCASH_SIGN_REQUEST, ZCASH_COIN_TYPE,
+    QR_TYPE_ZCASH_SIGN_REQUEST, QR_TYPE_ZCASH_NOTES, ZCASH_COIN_TYPE,
+    ZcashVerifiedNote, ZcashNoteWithPath, ZcashNotesBundle, ZcashNoteSyncResult,
+    verify_merkle_path, encode_notes_bundle_to_cbor, decode_notes_bundle_from_cbor,
 };
 
 pub use sign_transaction::{create_signature, SignatureAndChecksum, SignatureType};

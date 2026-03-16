@@ -1053,6 +1053,30 @@ pub struct ZcashSignatureResponse {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashVerifiedNoteDisplay {
+    pub value: u64,
+    pub nullifier_hex: String,
+    pub block_height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashNoteSyncResult {
+    pub notes_verified: u32,
+    pub total_balance: u64,
+    pub anchor_hex: String,
+    pub anchor_height: u32,
+    pub mainnet: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashSyncInfo {
+    pub anchor_hex: String,
+    pub anchor_height: u32,
+    pub mainnet: bool,
+    pub synced_at: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Card {
     AuthorCard {
         f: MAddressCard,

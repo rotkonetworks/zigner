@@ -536,6 +536,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-polyfill"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
+dependencies = [
+ "critical-section",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1215,6 +1224,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const-crc32-nostd"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "808ac43170e95b11dd23d78aa9eaac5bea45776a602955552c4e833f3f0f823d"
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1328,6 +1343,12 @@ checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "crossbeam-deque"
@@ -1592,6 +1613,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "debugless-unwrap"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f400d0750c0c069e8493f2256cb4da6f604b6d2eeb69a0ca8863acde352f8400"
+
+[[package]]
 name = "decaf377"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1727,6 +1754,17 @@ dependencies = [
  "proc-macro2 1.0.93",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "derive-getters"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74ef43543e701c01ad77d3a5922755c6a1d71b22d942cb8042be4994b380caff"
+dependencies = [
+ "proc-macro2 1.0.93",
+ "quote",
+ "syn 2.0.98",
 ]
 
 [[package]]
@@ -1910,7 +1948,9 @@ dependencies = [
  "curve25519-dalek-ng",
  "hex",
  "rand_core 0.6.4",
+ "serde",
  "sha2 0.9.9",
+ "thiserror 1.0.69",
  "zeroize",
 ]
 
@@ -2208,6 +2248,54 @@ dependencies = [
  "cfg-if",
  "parity-scale-codec",
  "scale-info",
+]
+
+[[package]]
+name = "frost-core"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2619366c227233c0f817ae01156bd21b8cf74d2bd96cbe0889f4c2e266724e44"
+dependencies = [
+ "byteorder",
+ "const-crc32-nostd",
+ "debugless-unwrap",
+ "derive-getters",
+ "document-features",
+ "hex",
+ "itertools 0.14.0",
+ "postcard",
+ "rand_core 0.6.4",
+ "serde",
+ "serdect",
+ "thiserror 2.0.17",
+ "visibility",
+ "zeroize",
+]
+
+[[package]]
+name = "frost-rerandomized"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c5eb1ea58c0250b7ce834337f7b19e0417686d14ffc7f626137dea9149762d4"
+dependencies = [
+ "derive-getters",
+ "document-features",
+ "frost-core",
+ "hex",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "frost-spend"
+version = "0.1.0"
+dependencies = [
+ "ed25519-consensus",
+ "hex",
+ "orchard 0.10.1",
+ "rand_core 0.6.4",
+ "reddsa 0.5.1 (git+https://github.com/ZcashFoundation/reddsa.git?rev=475a552)",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2601,6 +2689,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c35f58762feb77d74ebe43bdbc3210f09be9fe6742234d573bacc26ed92b67"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "hash_hasher"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2639,6 +2736,20 @@ name = "hashbrown"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
+
+[[package]]
+name = "heapless"
+version = "0.7.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
+dependencies = [
+ "atomic-polyfill",
+ "hash32",
+ "rustc_version",
+ "serde",
+ "spin",
+ "stable_deref_trait",
+]
 
 [[package]]
 name = "heck"
@@ -3484,6 +3595,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4212,6 +4332,40 @@ checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "orchard"
+version = "0.10.1"
+source = "git+https://github.com/conradoplg/orchard.git?rev=f0c88b78a1d70d55ce6bb480566d132e57d5607b#f0c88b78a1d70d55ce6bb480566d132e57d5607b"
+dependencies = [
+ "aes",
+ "bitvec",
+ "blake2b_simd 1.0.3",
+ "core2",
+ "ff",
+ "fpe",
+ "getset",
+ "group",
+ "halo2_gadgets 0.3.1",
+ "halo2_poseidon",
+ "halo2_proofs",
+ "hex",
+ "incrementalmerkletree 0.7.1",
+ "lazy_static",
+ "memuse",
+ "nonempty 0.7.0",
+ "pasta_curves",
+ "rand 0.8.5",
+ "reddsa 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde",
+ "sinsemilla",
+ "subtle",
+ "tracing",
+ "visibility",
+ "zcash_note_encryption",
+ "zcash_spec 0.1.2",
+ "zip32 0.1.3",
+]
+
+[[package]]
+name = "orchard"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2f4cf75baf85bbd6f15eb919b7e70afdc4a311eef0a3e8a053e65542fe2b58e"
@@ -4234,7 +4388,7 @@ dependencies = [
  "nonempty 0.7.0",
  "pasta_curves",
  "rand 0.8.5",
- "reddsa",
+ "reddsa 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "sinsemilla",
  "subtle",
@@ -4270,7 +4424,7 @@ dependencies = [
  "pasta_curves",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "reddsa",
+ "reddsa 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "sinsemilla",
  "subtle",
@@ -5449,6 +5603,7 @@ dependencies = [
  "cobs",
  "embedded-io 0.4.0",
  "embedded-io 0.6.1",
+ "heapless",
  "serde",
 ]
 
@@ -5896,13 +6051,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "reddsa"
+version = "0.5.1"
+source = "git+https://github.com/ZcashFoundation/reddsa.git?rev=475a552#475a552c6176dc03b0aebc9605e3810f1360dd91"
+dependencies = [
+ "blake2b_simd 1.0.3",
+ "byteorder",
+ "frost-rerandomized",
+ "group",
+ "hex",
+ "jubjub",
+ "pasta_curves",
+ "rand_core 0.6.4",
+ "serde",
+ "thiserror 2.0.17",
+ "zeroize",
+]
+
+[[package]]
 name = "redjubjub"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89b0ac1bc6bb3696d2c6f52cff8fba57238b81da8c0214ee6cd146eb8fde364e"
 dependencies = [
  "rand_core 0.6.4",
- "reddsa",
+ "reddsa 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "zeroize",
 ]
 
@@ -6670,6 +6843,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serdect"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
+dependencies = [
+ "base16ct",
+ "serde",
+]
+
+[[package]]
 name = "sha-1"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6794,6 +6977,7 @@ dependencies = [
  "definitions",
  "env_logger",
  "ffi-support",
+ "frost-spend",
  "generate_message",
  "hex",
  "lazy_static",
@@ -7329,6 +7513,9 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "spki"

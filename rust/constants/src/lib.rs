@@ -90,6 +90,10 @@ pub const PENUMBRA_ADDRS: &[u8] = b"penumbra_addresses";
 /// Key: hex-encoded FVK prefix (32 bytes), Value: unified address string
 pub const ZCASH_ADDRESS_TREE: &[u8] = b"zcash_addresses";
 
+/// Tree name for the tree storing verified Zcash notes (synced via QR)
+/// Key: nullifier (32 bytes), Value: CBOR-encoded note data
+pub const ZCASH_NOTES_TREE: &[u8] = b"zcash_notes";
+
 /// Tree name for the tree storing database settings
 ///
 /// In cold database, the settings tree contains general verifier, types
