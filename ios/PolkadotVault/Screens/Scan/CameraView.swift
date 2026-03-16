@@ -264,6 +264,53 @@ struct CameraView: View {
                 )
             }
         }
+        .fullScreenModal(
+            isPresented: $viewModel.isPresentingFrost,
+            onDismiss: {
+                model.payload = nil
+                model.start()
+                viewModel.clearTransactionState()
+            }
+        ) {
+            if let jsonString = viewModel.frostJsonPayload,
+               let data = jsonString.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let frostType = json["frost"] as? String {
+                switch frostType {
+                case "dkg1":
+                    FrostDkgView(
+                        viewModel: .init(
+                            maxSigners: UInt16(json["n"] as? Int ?? 3),
+                            minSigners: UInt16(json["t"] as? Int ?? 2),
+                            label: json["label"] as? String ?? "",
+                            mainnet: json["mainnet"] as? Bool ?? true,
+                            onCompletion: {
+                                viewModel.isPresentingFrost = false
+                                viewModel.frostJsonPayload = nil
+                                model.payload = nil
+                                model.start()
+                                viewModel.clearTransactionState()
+                            }
+                        )
+                    )
+                case "sign1":
+                    FrostSignView(
+                        viewModel: .init(
+                            walletId: json["wallet"] as? String ?? "",
+                            onCompletion: {
+                                viewModel.isPresentingFrost = false
+                                viewModel.frostJsonPayload = nil
+                                model.payload = nil
+                                model.start()
+                                viewModel.clearTransactionState()
+                            }
+                        )
+                    )
+                default:
+                    EmptyView()
+                }
+            }
+        }
         .bottomSnackbar(
             viewModel.snackbarViewModel,
             isPresented: $viewModel.isSnackbarPresented
@@ -306,9 +353,11 @@ extension CameraView {
         @Published var isPresentingPenumbraTransaction: Bool = false
         @Published var isPresentingZcashTransaction: Bool = false
         @Published var isPresentingZcashNoteSync: Bool = false
+        @Published var isPresentingFrost: Bool = false
         var penumbraQrHex: String?
         var zcashQrHex: String?
         var zcashNotesUrFrames: [String]?
+        var frostJsonPayload: String?
 
         // Banana split flow
         @Published var isPresentingEnterBananaSplitPassword: Bool = false
@@ -372,6 +421,9 @@ extension CameraView {
             case let .zcashNotes(urFrames):
                 zcashNotesUrFrames = urFrames
                 isPresentingZcashNoteSync = true
+            case let .frost(jsonString):
+                frostJsonPayload = jsonString
+                isPresentingFrost = true
             case let .dynamicDerivations(data):
                 guard runtimePropertiesProvider.dynamicDerivationsEnabled else {
                     presentableError = .featureNotAvailable()

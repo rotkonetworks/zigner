@@ -15,6 +15,7 @@ import io.parity.signer.uniffi.qrparserTryDecodeQrSequence
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
 import timber.log.Timber
 
 
@@ -56,6 +57,10 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashNotesFrames = MutableStateFlow<List<String>>(emptyList())
 	private val _zcashNotesComplete = MutableStateFlow<List<String>?>(null)
 	val zcashNotesComplete: StateFlow<List<String>?> = _zcashNotesComplete.asStateFlow()
+
+	// FROST multisig JSON payload (detected by {"frost":...} prefix)
+	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
+	val frostPayload: StateFlow<JSONObject?> = _frostPayload.asStateFlow()
 
 	private val _dynamicDerivationPayload =
 		MutableStateFlow<String?>(null)
@@ -102,6 +107,18 @@ class CameraViewModel() : ViewModel() {
 					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
 						processUrFrame(textValue)
 						return@forEach
+					}
+
+					// Check for FROST JSON QR codes ({"frost":...})
+					if (textValue != null && textValue.trimStart().startsWith("{")) {
+						try {
+							val json = JSONObject(textValue)
+							if (json.has("frost")) {
+								resetScanValues()
+								_frostPayload.value = json
+								return@forEach
+							}
+						} catch (_: Exception) { /* not valid JSON, continue */ }
 					}
 
 					// Try rawBytes first; fall back to rawValue for byte-mode QR codes
@@ -317,6 +334,7 @@ class CameraViewModel() : ViewModel() {
 		_urBackupComplete.value = null
 		_zcashNotesFrames.value = emptyList()
 		_zcashNotesComplete.value = null
+		_frostPayload.value = null
 		resetScanValues()
 	}
 
@@ -328,6 +346,10 @@ class CameraViewModel() : ViewModel() {
 	fun resetZcashNotes() {
 		_zcashNotesFrames.value = emptyList()
 		_zcashNotesComplete.value = null
+	}
+
+	fun resetFrostPayload() {
+		_frostPayload.value = null
 	}
 
 	fun resetZcashSignRequest() {

@@ -25,6 +25,8 @@ import net.rotko.zigner.screens.scan.errors.LocalErrorBottomSheet
 import net.rotko.zigner.screens.scan.errors.LocalErrorSheetModel
 import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
 import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
+import net.rotko.zigner.screens.scan.transaction.FrostDkgScreen
+import net.rotko.zigner.screens.scan.transaction.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
@@ -101,7 +103,35 @@ fun ScanNavSubgraph(
 	val dynamicDerivationsData = dynamicDerivations.value
 	val urBackupData = urBackupFrames.value
 
-	if (zcashNoteSyncResult.value != null) {
+	val frostData = scanViewModel.frostPayload.collectAsStateWithLifecycle()
+
+	if (frostData.value != null) {
+		val json = frostData.value!!
+		val frostType = json.optString("frost", "")
+		when (frostType) {
+			"dkg1" -> {
+				FrostDkgScreen(
+					maxSigners = json.optInt("n", 3).toUShort(),
+					minSigners = json.optInt("t", 2).toUShort(),
+					label = json.optString("label", ""),
+					mainnet = json.optBoolean("mainnet", true),
+					modifier = Modifier.statusBarsPadding(),
+					onDone = { scanViewModel.frostPayload.value = null },
+				)
+			}
+			"sign1" -> {
+				FrostSignScreen(
+					walletId = json.optString("wallet", ""),
+					modifier = Modifier.statusBarsPadding(),
+					onDone = { scanViewModel.frostPayload.value = null },
+				)
+			}
+			else -> {
+				// Unknown frost type, clear
+				scanViewModel.frostPayload.value = null
+			}
+		}
+	} else if (zcashNoteSyncResult.value != null) {
 		ZcashNoteSyncScreen(
 			result = zcashNoteSyncResult.value!!,
 			modifier = Modifier.statusBarsPadding(),
@@ -264,6 +294,9 @@ fun ScanNavSubgraph(
 			},
 			onZcashNotes = { urFrames ->
 				scanViewModel.performZcashNoteSync(urFrames, context)
+			},
+			onFrost = { json ->
+				scanViewModel.frostPayload.value = json
 			},
 		)
 	} else {

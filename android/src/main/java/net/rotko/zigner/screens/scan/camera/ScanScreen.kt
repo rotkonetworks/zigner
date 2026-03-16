@@ -43,6 +43,7 @@ fun ScanScreen(
 	onCosmosSignRequest: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 	onZcashNotes: (List<String>) -> Unit = {},
+	onFrost: (org.json.JSONObject) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
 
@@ -60,6 +61,7 @@ fun ScanScreen(
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
+	val currentOnFrost by rememberUpdatedState(onFrost)
 
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
@@ -154,6 +156,16 @@ fun ScanScreen(
 				.collect { urFrames ->
 					currentOnZcashNotes(urFrames)
 					viewModel.resetZcashNotes()
+				}
+		}
+
+		// FROST multisig handler
+		launch {
+			viewModel.frostPayload
+				.filterNotNull()
+				.collect { json ->
+					currentOnFrost(json)
+					viewModel.resetFrostPayload()
 				}
 		}
 	}

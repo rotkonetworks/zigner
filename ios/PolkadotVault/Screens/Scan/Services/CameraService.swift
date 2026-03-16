@@ -16,6 +16,7 @@ enum DecodedPayloadType: Equatable {
     case penumbraTransaction
     case zcashSignRequest
     case zcashNotes
+    case frost
 }
 
 enum DecodedPayload: Equatable {
@@ -25,6 +26,7 @@ enum DecodedPayload: Equatable {
     case penumbraTransaction(String)
     case zcashSignRequest(String)
     case zcashNotes([String])
+    case frost(String) // raw JSON string with "frost" key
 
     var type: DecodedPayloadType {
         switch self {
@@ -38,6 +40,8 @@ enum DecodedPayload: Equatable {
             DecodedPayloadType.penumbraTransaction
         case .zcashSignRequest:
             DecodedPayloadType.zcashSignRequest
+        case .frost:
+            DecodedPayloadType.frost
         case .zcashNotes:
             DecodedPayloadType.zcashNotes
         }
@@ -132,6 +136,19 @@ private extension CameraService {
         // Handle UR-encoded animated QR codes (text starting with "ur:")
         if qrCodePayload.lowercased().hasPrefix("ur:zcash-notes") {
             handleUrZcashNotesFrame(qrCodePayload)
+            return
+        }
+
+        // Handle FROST JSON QR codes ({"frost":...})
+        let trimmed = qrCodePayload.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("{"),
+           let data = trimmed.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           json["frost"] != nil {
+            callbackQueue.async {
+                self.payload = .frost(trimmed)
+                self.shutdown()
+            }
             return
         }
 

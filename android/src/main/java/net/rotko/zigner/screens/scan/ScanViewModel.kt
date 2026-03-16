@@ -103,6 +103,9 @@ class ScanViewModel : ViewModel() {
 	var zcashNoteSyncResult: MutableStateFlow<ZcashNoteSyncResult?> = MutableStateFlow(null)
 	var zcashNoteSyncFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
 
+	// FROST multisig state
+	var frostPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
+
 	private val transactionIsInProgress = MutableStateFlow<Boolean>(false)
 
 	suspend fun performTransactionPayload(payload: String, context: Context) {
@@ -413,6 +416,7 @@ class ScanViewModel : ViewModel() {
 		urBackupFrames.value = null
 		zcashNoteSyncResult.value = null
 		zcashNoteSyncFrames.value = null
+		frostPayload.value = null
 	}
 
 	private suspend fun signTransaction(
