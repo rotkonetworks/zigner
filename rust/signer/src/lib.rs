@@ -30,6 +30,7 @@
 use zcash_transparent as _;
 
 mod ffi_types;
+pub mod auth;
 pub mod frost_multisig;
 
 use crate::ffi_types::*;
@@ -2371,6 +2372,44 @@ fn init_logging(_tag: String) {
 #[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
 fn init_logging(_tag: String) {
     env_logger::init();
+}
+
+// ── QR-based ed25519 authentication ──
+
+fn auth_derive_identity(
+    seed_phrase: &str,
+    domain: &str,
+    index: u32,
+) -> Result<String, ErrorDisplayed> {
+    auth::derive_auth_identity(seed_phrase, domain, index)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn auth_sign_challenge(
+    seed_phrase: &str,
+    domain: &str,
+    index: u32,
+    nonce: &str,
+    timestamp: u64,
+) -> Result<AuthSignResult, ErrorDisplayed> {
+    let (pubkey, sig) = auth::sign_auth_challenge(seed_phrase, domain, index, nonce, timestamp)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    Ok(AuthSignResult {
+        pubkey_hex: pubkey,
+        signature_hex: sig,
+        domain: domain.to_string(),
+    })
+}
+
+fn auth_verify(
+    pubkey_hex: &str,
+    signature_hex: &str,
+    domain: &str,
+    nonce: &str,
+    timestamp: u64,
+) -> Result<bool, ErrorDisplayed> {
+    auth::verify_auth_signature(pubkey_hex, signature_hex, domain, nonce, timestamp)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 // ── FROST threshold multisig ──

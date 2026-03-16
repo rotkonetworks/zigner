@@ -857,6 +857,22 @@ namespace signer {
     sequence<string> sign_zcash_pczt_ur([ByRef] string seed_phrase, u32 account_index, sequence<string> ur_parts, u32 max_fragment_len);
 
     // ========================================================================
+    // QR-based ed25519 authentication (rotatable identities)
+    // ========================================================================
+
+    // Derive auth identity (ed25519 pubkey) for a domain + rotation index
+    [Throws=ErrorDisplayed]
+    string auth_derive_identity([ByRef] string seed_phrase, [ByRef] string domain, u32 index);
+
+    // Sign an auth challenge — returns pubkey + signature
+    [Throws=ErrorDisplayed]
+    AuthSignResult auth_sign_challenge([ByRef] string seed_phrase, [ByRef] string domain, u32 index, [ByRef] string nonce, u64 timestamp);
+
+    // Verify an auth signature (for self-verification)
+    [Throws=ErrorDisplayed]
+    boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
+
+    // ========================================================================
     // FROST threshold multisig (t-of-n)
     // All inputs/outputs are JSON strings with hex-encoded FROST data.
     // ========================================================================
@@ -1262,6 +1278,13 @@ dictionary ZcashTransactionSummary {
     u64 output_count;
     string sighash;
     string anchor;
+};
+
+// Auth sign result
+dictionary AuthSignResult {
+    string pubkey_hex;
+    string signature_hex;
+    string domain;
 };
 
 // Signing context: what the signer knows about its balance

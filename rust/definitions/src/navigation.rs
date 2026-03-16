@@ -1051,6 +1051,13 @@ pub struct ZcashNoteSyncResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthSignResult {
+    pub pubkey_hex: String,
+    pub signature_hex: String,
+    pub domain: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashSignContext {
     pub verified_balance: u64,
     pub note_count: u32,
