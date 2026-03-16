@@ -30,6 +30,7 @@
 use zcash_transparent as _;
 
 mod ffi_types;
+pub mod frost_multisig;
 
 use crate::ffi_types::*;
 use db_handling::identities::{import_all_addrs, inject_derivations_has_pwd};
@@ -1655,6 +1656,20 @@ fn sign_zcash_transaction(
 ) -> Result<ZcashSignatureResponse, ErrorDisplayed> {
     use transaction_signing::zcash::ZcashSignRequest as RustSignRequest;
 
+    // Require verified notes before signing (no blind signing)
+    {
+        let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+        if let Some(database) = db_guard.as_ref() {
+            let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
+            let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
+            if anchor.is_none() || balance == 0 {
+                return Err(ErrorDisplayed::Str {
+                    s: "No verified notes. Sync notes from zcli before signing (zcli export-notes → scan QR).".to_string(),
+                });
+            }
+        }
+    }
+
     // Convert back to Rust type
     let sighash: [u8; 32] = hex::decode(&request.sighash)
         .map_err(|e| ErrorDisplayed::Str {
@@ -1983,6 +1998,20 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
+    // Require verified notes before signing (no blind signing)
+    {
+        let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+        if let Some(database) = db_guard.as_ref() {
+            let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
+            let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
+            if anchor.is_none() || balance == 0 {
+                return Err(ErrorDisplayed::Str {
+                    s: "No verified notes. Sync notes from zcli before signing (zcli export-notes → scan QR).".to_string(),
+                });
+            }
+        }
+    }
+
     // Parse the PCZT to get action count first
     let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to parse PCZT: {:?}", e),
@@ -2099,6 +2128,205 @@ fn encode_pczt_to_cbor(pczt_bytes: &[u8]) -> Vec<u8> {
     cbor
 }
 
+// ========================================================================
+// Zcash note sync (verified balance via animated QR)
+// ========================================================================
+
+/// Decode UR-encoded zcash-notes, verify merkle paths, store in sled
+fn decode_and_verify_zcash_notes(
+    ur_parts: Vec<String>,
+) -> Result<ZcashNoteSyncResult, ErrorDisplayed> {
+    use transaction_signing::zcash::{
+        decode_notes_bundle_from_cbor, verify_merkle_path,
+    };
+
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "No UR parts provided".to_string(),
+        });
+    }
+
+    // Decode UR (same fountain code pattern as decode_ur_zcash_pczt)
+    let cbor_data = decode_ur_payload(&ur_parts, "zcash-notes")?;
+
+    // Parse CBOR to ZcashNotesBundle
+    let bundle = decode_notes_bundle_from_cbor(&cbor_data).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse notes CBOR: {e}"),
+    })?;
+
+    // Verify each note's merkle path against anchor
+    let mut verified_notes = Vec::new();
+    for (i, note) in bundle.notes.iter().enumerate() {
+        let valid = verify_merkle_path(
+            &note.cmx,
+            note.position,
+            &note.merkle_path,
+            &bundle.anchor,
+        ).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Merkle verification error for note {i}: {e}"),
+        })?;
+
+        if !valid {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Note {i} failed merkle verification (cmx={}, pos={})",
+                    hex::encode(note.cmx),
+                    note.position
+                ),
+            });
+        }
+
+        verified_notes.push((
+            note.value,
+            note.nullifier,
+            note.cmx,
+            note.position,
+            note.block_height,
+        ));
+    }
+
+    let total_balance: u64 = verified_notes.iter().map(|(v, _, _, _, _)| v).sum();
+    let notes_verified = verified_notes.len() as u32;
+
+    // Store in sled (clear-and-replace)
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    db_handling::zcash::store_verified_notes(
+        database,
+        &verified_notes,
+        &bundle.anchor,
+        bundle.anchor_height,
+        bundle.mainnet,
+    ).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to store notes: {e}"),
+    })?;
+
+    Ok(ZcashNoteSyncResult {
+        notes_verified,
+        total_balance,
+        anchor_hex: hex::encode(bundle.anchor),
+        anchor_height: bundle.anchor_height,
+        mainnet: bundle.mainnet,
+    })
+}
+
+/// Get all verified zcash notes from sled
+fn get_zcash_verified_notes() -> Result<Vec<ZcashVerifiedNoteDisplay>, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let notes = db_handling::zcash::get_verified_notes(database).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Failed to get notes: {e}"),
+        }
+    })?;
+
+    Ok(notes
+        .into_iter()
+        .map(|(value, nullifier_hex, _cmx, _position, block_height)| {
+            ZcashVerifiedNoteDisplay {
+                value,
+                nullifier_hex,
+                block_height,
+            }
+        })
+        .collect())
+}
+
+/// Get total verified zcash balance
+fn get_zcash_verified_balance() -> Result<u64, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    db_handling::zcash::get_verified_balance(database).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to get balance: {e}"),
+    })
+}
+
+/// Get zcash sync info (anchor, height, timestamp)
+fn get_zcash_sync_info() -> Result<Option<ZcashSyncInfo>, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    match db_handling::zcash::get_verified_anchor(database) {
+        Ok(Some((anchor, height, mainnet, synced_at))) => Ok(Some(ZcashSyncInfo {
+            anchor_hex: hex::encode(anchor),
+            anchor_height: height,
+            mainnet,
+            synced_at,
+        })),
+        Ok(None) => Ok(None),
+        Err(e) => Err(ErrorDisplayed::Str {
+            s: format!("Failed to get sync info: {e}"),
+        }),
+    }
+}
+
+/// Clear all stored zcash notes
+fn clear_zcash_notes() -> Result<(), ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    db_handling::zcash::clear_zcash_notes(database).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to clear notes: {e}"),
+    })
+}
+
+/// Generic UR decoder that handles both single-part and multi-part (fountain) URs
+fn decode_ur_payload(ur_parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    use ur::ur::decode;
+
+    let expected_prefix = format!("ur:{}/", expected_type);
+
+    // Verify UR type
+    let lower = ur_parts[0].to_lowercase();
+    if !lower.starts_with(&expected_prefix) {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Expected ur:{}/... got: {}",
+                expected_type,
+                ur_parts[0].chars().take(40).collect::<String>()
+            ),
+        });
+    }
+
+    if ur_parts.len() == 1 {
+        let (_kind, data) = decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to decode UR: {:?}", e),
+        })?;
+        Ok(data)
+    } else {
+        let mut decoder = ur::ur::Decoder::default();
+        for part in ur_parts {
+            decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to receive UR part: {:?}", e),
+            })?;
+            if decoder.complete() {
+                break;
+            }
+        }
+
+        if !decoder.complete() {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Incomplete UR sequence: received {} parts but not complete",
+                    ur_parts.len()
+                ),
+            });
+        }
+
+        decoder
+            .message()
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to get UR message: {:?}", e),
+            })?
+            .ok_or_else(|| ErrorDisplayed::Str {
+                s: "UR decoder returned None despite being complete".to_string(),
+            })
+    }
+}
+
 /// High-level function to sign a PCZT from UR-encoded QR data
 /// This is the main entry point for Zashi compatibility
 fn sign_zcash_pczt_ur(
@@ -2151,6 +2379,67 @@ fn init_logging(_tag: String) {
 #[cfg(all(not(target_os = "ios"), not(target_os = "android")))]
 fn init_logging(_tag: String) {
     env_logger::init();
+}
+
+// ── FROST threshold multisig ──
+
+fn frost_dkg_part1(max_signers: u16, min_signers: u16) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_dkg_part1(max_signers, min_signers)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_dkg_part2(secret_hex: &str, peer_broadcasts_json: &str) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_dkg_part2(secret_hex, peer_broadcasts_json)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_dkg_part3(
+    secret_hex: &str,
+    round1_broadcasts_json: &str,
+    round2_packages_json: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_dkg_part3(secret_hex, round1_broadcasts_json, round2_packages_json)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_sign_round1(
+    ephemeral_seed_hex: &str,
+    key_package_hex: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_sign_round1(ephemeral_seed_hex, key_package_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_spend_sign_round2(
+    key_package_hex: &str,
+    nonces_hex: &str,
+    sighash_hex: &str,
+    alpha_hex: &str,
+    commitments_json: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_spend_sign_round2(
+        key_package_hex, nonces_hex, sighash_hex, alpha_hex, commitments_json,
+    ).map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_spend_sign_actions(
+    key_package_hex: &str,
+    nonces_hex: &str,
+    sighash_hex: &str,
+    alphas_json: &str,
+    commitments_json: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_spend_sign_actions(
+        key_package_hex, nonces_hex, sighash_hex, alphas_json, commitments_json,
+    ).map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_derive_address_raw(
+    public_key_package_hex: &str,
+    diversifier_index: u32,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_derive_address_raw(public_key_package_hex, diversifier_index)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 ffi_support::define_string_destructor!(signer_destroy_string);

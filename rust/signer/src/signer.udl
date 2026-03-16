@@ -813,6 +813,30 @@ namespace signer {
     string generate_test_zcash_sign_request(u32 account_index, u32 action_count, boolean mainnet, [ByRef] string summary);
 
     // ========================================================================
+    // Zcash note sync (verified balance via animated QR)
+    // ========================================================================
+
+    // Decode UR-encoded zcash-notes, verify merkle paths, store verified notes
+    [Throws=ErrorDisplayed]
+    ZcashNoteSyncResult decode_and_verify_zcash_notes(sequence<string> ur_parts);
+
+    // Get all verified zcash notes
+    [Throws=ErrorDisplayed]
+    sequence<ZcashVerifiedNoteDisplay> get_zcash_verified_notes();
+
+    // Get total verified zcash balance (zatoshis)
+    [Throws=ErrorDisplayed]
+    u64 get_zcash_verified_balance();
+
+    // Get sync info (anchor, height, timestamp) — null if never synced
+    [Throws=ErrorDisplayed]
+    ZcashSyncInfo? get_zcash_sync_info();
+
+    // Clear all stored zcash notes
+    [Throws=ErrorDisplayed]
+    void clear_zcash_notes();
+
+    // ========================================================================
     // PCZT/UR functions for Zashi hardware wallet compatibility
     // ========================================================================
 
@@ -836,6 +860,46 @@ namespace signer {
     // This is the main entry point for Zashi compatibility
     [Throws=ErrorDisplayed]
     sequence<string> sign_zcash_pczt_ur([ByRef] string seed_phrase, u32 account_index, sequence<string> ur_parts, u32 max_fragment_len);
+
+    // ========================================================================
+    // FROST threshold multisig (t-of-n)
+    // All inputs/outputs are JSON strings with hex-encoded FROST data.
+    // ========================================================================
+
+    // DKG round 1: generate ephemeral identity + signed commitment
+    // Returns JSON: { "secret": hex, "broadcast": hex }
+    [Throws=ErrorDisplayed]
+    string frost_dkg_part1(u16 max_signers, u16 min_signers);
+
+    // DKG round 2: process signed round1 broadcasts
+    // peer_broadcasts_json: JSON array of hex strings
+    // Returns JSON: { "secret": hex, "peer_packages": [hex, ...] }
+    [Throws=ErrorDisplayed]
+    string frost_dkg_part2([ByRef] string secret_hex, [ByRef] string peer_broadcasts_json);
+
+    // DKG round 3: finalize — returns key package + public key package
+    // Returns JSON: { "key_package": hex, "public_key_package": hex, "ephemeral_seed": hex }
+    [Throws=ErrorDisplayed]
+    string frost_dkg_part3([ByRef] string secret_hex, [ByRef] string round1_broadcasts_json, [ByRef] string round2_packages_json);
+
+    // Signing round 1: generate nonces + signed commitments
+    // Returns JSON: { "nonces": hex, "commitments": hex }
+    [Throws=ErrorDisplayed]
+    string frost_sign_round1([ByRef] string ephemeral_seed_hex, [ByRef] string key_package_hex);
+
+    // Spend-authorize round 2: produce FROST share for one Orchard action
+    // sighash + alpha are bound — alpha IS the FROST randomizer
+    [Throws=ErrorDisplayed]
+    string frost_spend_sign_round2([ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alpha_hex, [ByRef] string commitments_json);
+
+    // Sign multiple actions at once (one share per alpha)
+    // Returns JSON: { "shares": [hex, ...] }
+    [Throws=ErrorDisplayed]
+    string frost_spend_sign_actions([ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alphas_json, [ByRef] string commitments_json);
+
+    // Derive raw Orchard address from FROST group key (hex-encoded 43 bytes)
+    [Throws=ErrorDisplayed]
+    string frost_derive_address_raw([ByRef] string public_key_package_hex, u32 diversifier_index);
 };
 
 dictionary MKeysNew {
@@ -1200,6 +1264,30 @@ dictionary ZcashFvkExport {
     string ufvk;
     sequence<u8> qr_data;
     string ur_string;
+};
+
+// Zcash sync metadata
+dictionary ZcashSyncInfo {
+    string anchor_hex;
+    u32 anchor_height;
+    boolean mainnet;
+    u64 synced_at;  // unix timestamp (seconds)
+};
+
+// Zcash verified note display (from note sync)
+dictionary ZcashVerifiedNoteDisplay {
+    u64 value;
+    string nullifier_hex;
+    u32 block_height;
+};
+
+// Zcash note sync result
+dictionary ZcashNoteSyncResult {
+    u32 notes_verified;
+    u64 total_balance;
+    string anchor_hex;
+    u32 anchor_height;
+    boolean mainnet;
 };
 
 // Zcash sign request parsed from QR
