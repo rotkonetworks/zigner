@@ -4,9 +4,12 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -136,16 +139,9 @@ fun ScanNavSubgraph(
 		}
 	} else if (scanViewModel.authPayload.collectAsStateWithLifecycle().value != null) {
 		val authJson = scanViewModel.authPayload.collectAsStateWithLifecycle().value!!
-		// Auth requires seed phrase — use first available seed
-		// TODO: seed selection UI
-		val seedPhrase = remember {
-			kotlinx.coroutines.runBlocking {
-				when (val result = scanViewModel.seedRepository.getAllSeeds()) {
-					is net.rotko.zigner.domain.backend.RepoResult.Success ->
-						result.result.values.firstOrNull() ?: ""
-					else -> ""
-				}
-			}
+		var seedPhrase by remember { mutableStateOf("") }
+		LaunchedEffect(authJson) {
+			seedPhrase = scanViewModel.getFirstSeedPhrase()
 		}
 		if (seedPhrase.isNotEmpty()) {
 			AuthChallengeScreen(

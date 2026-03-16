@@ -61,6 +61,14 @@ class ScanViewModel : ViewModel() {
 	private val uniffiInteractor: UniffiInteractor =
 		ServiceLocator.uniffiInteractor
 	private val seedRepository: SeedRepository by lazy { ServiceLocator.activityScope!!.seedRepository }
+
+	/** Get first available seed phrase for auth signing */
+	suspend fun getFirstSeedPhrase(): String {
+		return when (val result = seedRepository.getAllSeeds()) {
+			is RepoResult.Success -> result.result.values.firstOrNull() ?: ""
+			is RepoResult.Failure -> ""
+		}
+	}
 	private val importKeysRepository: ImportDerivedKeysRepository by lazy {
 		ImportDerivedKeysRepository(seedRepository)
 	}
