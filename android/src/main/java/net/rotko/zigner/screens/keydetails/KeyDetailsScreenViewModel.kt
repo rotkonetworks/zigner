@@ -146,12 +146,12 @@ class KeyDetailsScreenViewModel : ViewModel() {
 		diversifierIndex: UInt = 0u,
 		mainnet: Boolean = true
 	): String? {
-		val seedResult = repo.getSeedPhraseForceAuth(seedName)
+		val seedResult = repo.getSeedPhrases(listOf(seedName))
 		return when (seedResult) {
 			is RepoResult.Failure -> null
 			is RepoResult.Success -> {
 				try {
-					getZcashDiversifiedAddress(seedResult.result, accountIndex, diversifierIndex, mainnet)
+					io.parity.signer.uniffi.getZcashDiversifiedAddress(seedResult.result, accountIndex, diversifierIndex, mainnet)
 				} catch (e: Exception) {
 					null
 				}
@@ -164,12 +164,12 @@ class KeyDetailsScreenViewModel : ViewModel() {
 		account: UInt = 0u,
 		mainnet: Boolean = true
 	): String? {
-		val seedResult = repo.getSeedPhraseForceAuth(seedName)
+		val seedResult = repo.getSeedPhrases(listOf(seedName))
 		return when (seedResult) {
 			is RepoResult.Failure -> null
 			is RepoResult.Success -> {
 				try {
-					getZcashTransparentAddress(seedResult.result, account, mainnet)
+					io.parity.signer.uniffi.getZcashTransparentAddress(seedResult.result, account, mainnet)
 				} catch (e: Exception) {
 					null
 				}
