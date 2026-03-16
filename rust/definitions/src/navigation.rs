@@ -1069,6 +1069,40 @@ pub struct ZcashNoteSyncResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashSignContext {
+    pub verified_balance: u64,
+    pub note_count: u32,
+    pub anchor_height: u32,
+    pub synced_at: u64,
+    pub has_notes: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashPcztInspection {
+    pub action_count: u32,
+    pub spends: Vec<ZcashPcztSpend>,
+    pub outputs: Vec<ZcashPcztOutput>,
+    pub net_value: i64,
+    pub anchor_matches: bool,
+    pub verified_balance: u64,
+    pub known_spends: u32,
+    pub anchor_hex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashPcztSpend {
+    pub value: u64,
+    pub nullifier_hex: String,
+    pub known: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashPcztOutput {
+    pub value: u64,
+    pub recipient_hex: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FrostWalletSummaryFFI {
     pub wallet_id: String,
     pub label: String,

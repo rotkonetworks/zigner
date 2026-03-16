@@ -856,6 +856,16 @@ namespace signer {
     [Throws=ErrorDisplayed]
     sequence<string> encode_signed_pczt_ur(sequence<u8> pczt_bytes, u32 max_fragment_len);
 
+    // Get signing context: verified balance + note count + anchor info
+    // Used by the sign review screen to show what the signer knows
+    [Throws=ErrorDisplayed]
+    ZcashSignContext get_zcash_sign_context();
+
+    // Inspect a PCZT: extract spend/output details, cross-reference against verified notes
+    // Returns a structured summary for display before signing
+    [Throws=ErrorDisplayed]
+    ZcashPcztInspection inspect_zcash_pczt(sequence<u8> pczt_bytes);
+
     // High-level: sign PCZT from UR QR and return signed UR QR parts
     // This is the main entry point for Zashi compatibility
     [Throws=ErrorDisplayed]
@@ -1267,6 +1277,44 @@ dictionary ZcashTransactionSummary {
     u64 output_count;
     string sighash;
     string anchor;
+};
+
+// Signing context: what the signer knows about its balance
+dictionary ZcashSignContext {
+    u64 verified_balance;
+    u32 note_count;
+    u32 anchor_height;
+    u64 synced_at;
+    boolean has_notes;
+};
+
+// PCZT inspection result for display before signing
+dictionary ZcashPcztInspection {
+    u32 action_count;
+    // spends: list of (value_zatoshis, nullifier_is_known) pairs
+    sequence<ZcashPcztSpend> spends;
+    // outputs: list of (value_zatoshis, recipient_hex) pairs
+    sequence<ZcashPcztOutput> outputs;
+    // net value (spends - outputs) in zatoshis = fee
+    i64 net_value;
+    // anchor matches our verified anchor?
+    boolean anchor_matches;
+    // our verified balance (0 if no notes stored)
+    u64 verified_balance;
+    // how many spend nullifiers match our verified notes
+    u32 known_spends;
+    string anchor_hex;
+};
+
+dictionary ZcashPcztSpend {
+    u64 value;
+    string nullifier_hex;
+    boolean known;  // matches a verified note we stored
+};
+
+dictionary ZcashPcztOutput {
+    u64 value;
+    string recipient_hex;
 };
 
 // FROST multisig wallet summary (no secrets)

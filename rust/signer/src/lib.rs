@@ -1985,6 +1985,121 @@ fn parse_cbor_bytes(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
 
 /// Sign a PCZT and return the signed PCZT bytes
 ///
+/// Get signing context: what the signer knows about verified balance.
+fn get_zcash_sign_context() -> Result<ZcashSignContext, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
+    let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
+    let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
+
+    let (anchor_height, synced_at) = anchor
+        .map(|(_, h, _, ts)| (h, ts))
+        .unwrap_or((0, 0));
+
+    Ok(ZcashSignContext {
+        verified_balance: balance,
+        note_count: notes.len() as u32,
+        anchor_height,
+        synced_at,
+        has_notes: !notes.is_empty(),
+    })
+}
+
+/// Inspect a PCZT: extract spend/output details, cross-reference against verified notes.
+fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorDisplayed> {
+    use pczt::Pczt;
+
+    let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to parse PCZT: {:?}", e),
+    })?;
+
+    let orchard = pczt.orchard();
+    let action_count = orchard.actions().len() as u32;
+    let pczt_anchor = orchard.anchor();
+    let pczt_anchor_hex = hex::encode(pczt_anchor);
+
+    // Load verified notes for cross-reference
+    let (verified_balance, verified_anchor, verified_nullifiers, verified_notes_values) = {
+        let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+        if let Some(database) = db_guard.as_ref() {
+            let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
+            let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
+            let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
+            let nullifiers: std::collections::HashSet<String> =
+                notes.iter().map(|(_, nf_hex, _, _, _)| nf_hex.clone()).collect();
+            // Map nullifier_hex → value for spend amount lookup
+            let values: std::collections::HashMap<String, u64> =
+                notes.iter().map(|(val, nf_hex, _, _, _)| (nf_hex.clone(), *val)).collect();
+            (balance, anchor, nullifiers, values)
+        } else {
+            (0, None, std::collections::HashSet::new(), std::collections::HashMap::new())
+        }
+    };
+
+    // Check anchor match
+    let anchor_matches = verified_anchor
+        .as_ref()
+        .map(|(a, _, _, _)| hex::encode(a) == pczt_anchor_hex)
+        .unwrap_or(false);
+
+    // Extract spend details (value may be redacted in PCZT, use nullifier for cross-ref)
+    let mut spends = Vec::new();
+    let mut known_spends = 0u32;
+    for action in orchard.actions() {
+        let nullifier_hex = hex::encode(action.spend().nullifier());
+        let known = verified_nullifiers.contains(&nullifier_hex);
+        // Look up value from our verified notes if the PCZT doesn't expose it
+        let value = if known {
+            known_spends += 1;
+            // Find matching note value from our verified store
+            verified_notes_values.get(&nullifier_hex).copied().unwrap_or(0)
+        } else {
+            0
+        };
+        spends.push(ZcashPcztSpend {
+            value,
+            nullifier_hex,
+            known,
+        });
+    }
+
+    // Extract output details
+    let mut outputs = Vec::new();
+    for action in orchard.actions() {
+        let value = action.output().value().unwrap_or(0);
+        let recipient_hex = action
+            .output()
+            .recipient()
+            .map(|r| hex::encode(r))
+            .unwrap_or_default();
+        outputs.push(ZcashPcztOutput {
+            value,
+            recipient_hex,
+        });
+    }
+
+    // Net value from bundle's value_sum (authoritative)
+    let &(value_sum_magnitude, value_sum_is_negative) = orchard.value_sum();
+    let net_value = if value_sum_is_negative {
+        -(value_sum_magnitude as i64)
+    } else {
+        value_sum_magnitude as i64
+    };
+
+    Ok(ZcashPcztInspection {
+        action_count,
+        spends,
+        outputs,
+        net_value,
+        anchor_matches,
+        verified_balance,
+        known_spends,
+        anchor_hex: pczt_anchor_hex,
+    })
+}
+
 /// This function:
 /// 1. Parses the PCZT to extract orchard actions
 /// 2. Signs each action with the spending key derived from seed
