@@ -70,6 +70,13 @@ struct ZcashTransactionView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.small) {
+                    // Verified balance context
+                    if let balance = viewModel.verifiedBalance {
+                        verifiedBalanceBanner(balance: balance, syncedAt: viewModel.syncedAt)
+                    } else {
+                        noVerifiedBalanceWarning
+                    }
+
                     if let request = viewModel.request {
                         summaryCard(request: request)
                         ForEach(Array(request.alphas.enumerated()), id: \.offset) { index, _ in
@@ -175,6 +182,60 @@ struct ZcashTransactionView: View {
         .containerBackground()
     }
 
+    private func verifiedBalanceBanner(balance: UInt64, syncedAt: UInt64) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Verified Balance")
+                    .font(PrimaryFont.labelM.font)
+                    .foregroundColor(.textAndIconsTertiary)
+                let zec = Double(balance) / 100_000_000.0
+                Text(String(format: "%.8f ZEC", zec))
+                    .font(PrimaryFont.titleS.font)
+                    .foregroundColor(.textAndIconsPrimary)
+            }
+            Spacer()
+            if syncedAt > 0 {
+                let now = UInt64(Date().timeIntervalSince1970)
+                let diff = now > syncedAt ? now - syncedAt : 0
+                let label: String = {
+                    switch diff {
+                    case 0..<60: return "just now"
+                    case 60..<3600: return "\(diff / 60)m ago"
+                    case 3600..<86400: return "\(diff / 3600)h ago"
+                    case 86400..<604800: return "\(diff / 86400)d ago"
+                    default: return "\(diff / 604800)w ago"
+                    }
+                }()
+                Text(label)
+                    .font(PrimaryFont.captionM.font)
+                    .foregroundColor(diff > 86400 ? .accentRed300 : .textAndIconsTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.medium)
+        .containerBackground()
+    }
+
+    private var noVerifiedBalanceWarning: some View {
+        HStack(spacing: Spacing.extraSmall) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.accentRed300)
+                .font(.system(size: 16))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No verified balance")
+                    .font(PrimaryFont.labelM.font)
+                    .foregroundColor(.accentRed300)
+                Text("Sync notes first: zcli export-notes → scan QR")
+                    .font(PrimaryFont.captionM.font)
+                    .foregroundColor(.textAndIconsSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.medium)
+        .background(Color.accentRed300.opacity(0.12))
+        .cornerRadius(CornerRadius.medium)
+    }
+
     private var signingView: some View {
         VStack {
             Spacer()
@@ -222,6 +283,8 @@ extension ZcashTransactionView {
     final class ViewModel: ObservableObject {
         @Published var state: State = .review
         @Published var seedNames: [String] = []
+        @Published var verifiedBalance: UInt64?
+        @Published var syncedAt: UInt64 = 0
         var request: ZcashSignRequest?
         private let seedsMediator: SeedsMediating
         private let onCompletion: () -> Void
@@ -241,6 +304,8 @@ extension ZcashTransactionView {
                 self.state = .error(error.localizedDescription)
                 return
             }
+            // Load verified balance context
+            loadVerifiedBalance()
             if seedNames.count > 1 {
                 state = .seedSelection
             } else if let name = seedNames.first {
@@ -253,6 +318,17 @@ extension ZcashTransactionView {
                 }
             } else {
                 state = .error("No seed phrase available")
+            }
+        }
+
+        private func loadVerifiedBalance() {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let balance = try? getZcashVerifiedBalance()
+                let info = try? getZcashSyncInfo()
+                DispatchQueue.main.async {
+                    self?.verifiedBalance = balance
+                    self?.syncedAt = info?.syncedAt ?? 0
+                }
             }
         }
 

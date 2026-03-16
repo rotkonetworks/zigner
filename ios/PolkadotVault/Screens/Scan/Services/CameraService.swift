@@ -15,6 +15,7 @@ enum DecodedPayloadType: Equatable {
     case dynamicDerivationsTransaction
     case penumbraTransaction
     case zcashSignRequest
+    case zcashNotes
 }
 
 enum DecodedPayload: Equatable {
@@ -23,6 +24,7 @@ enum DecodedPayload: Equatable {
     case dynamicDerivationsTransaction([String])
     case penumbraTransaction(String)
     case zcashSignRequest(String)
+    case zcashNotes([String])
 
     var type: DecodedPayloadType {
         switch self {
@@ -36,6 +38,8 @@ enum DecodedPayload: Equatable {
             DecodedPayloadType.penumbraTransaction
         case .zcashSignRequest:
             DecodedPayloadType.zcashSignRequest
+        case .zcashNotes:
+            DecodedPayloadType.zcashNotes
         }
     }
 }
@@ -59,6 +63,9 @@ final class CameraService: ObservableObject {
 
     /// Partial payload to decode, collection of payloads from individual QR codes
     private(set) var bucket: [String] = []
+
+    /// Accumulated UR frames for zcash-notes animated QR
+    private var urZcashNotesFrames: [String] = []
 
     let session: AVCaptureSession
     private var isConfigured = false
@@ -122,10 +129,56 @@ extension CameraService: QRPayloadUpdateReceiving {
 
 private extension CameraService {
     func handleNew(qrCodePayload: String) {
+        // Handle UR-encoded animated QR codes (text starting with "ur:")
+        if qrCodePayload.lowercased().hasPrefix("ur:zcash-notes") {
+            handleUrZcashNotesFrame(qrCodePayload)
+            return
+        }
+
         if bucket.isEmpty {
             handleNewOperation(with: qrCodePayload)
         } else {
             appendToCurrentBucket(qrCodePayload: qrCodePayload)
+        }
+    }
+
+    func handleUrZcashNotesFrame(_ urString: String) {
+        let normalized = urString.lowercased()
+        guard !urZcashNotesFrames.contains(where: { $0.lowercased() == normalized }) else { return }
+
+        urZcashNotesFrames.append(urString)
+
+        // Parse sequence info from "ur:zcash-notes/N-M/..." format
+        let prefix = "ur:zcash-notes/"
+        if normalized.hasPrefix(prefix) {
+            let remainder = String(normalized.dropFirst(prefix.count))
+            let parts = remainder.split(separator: "/", maxSplits: 1)
+            if let sequencePart = parts.first {
+                let seqComponents = sequencePart.split(separator: "-")
+                if seqComponents.count == 2,
+                   let totalFrames = Int(seqComponents[1]) {
+                    let frameCount = urZcashNotesFrames.count
+                    callbackQueue.async {
+                        self.total = totalFrames
+                        self.captured = frameCount
+                    }
+                    if frameCount >= totalFrames {
+                        let frames = urZcashNotesFrames
+                        callbackQueue.async {
+                            self.payload = .zcashNotes(frames)
+                            self.shutdown()
+                        }
+                    }
+                    return
+                }
+            }
+        }
+
+        // Single-part UR (no sequence number)
+        let frames = urZcashNotesFrames
+        callbackQueue.async {
+            self.payload = .zcashNotes(frames)
+            self.shutdown()
         }
     }
 
@@ -239,6 +292,7 @@ private extension CameraService {
             self.total = 0
             self.captured = 0
             self.bucket = []
+            self.urZcashNotesFrames = []
         }
     }
 }
