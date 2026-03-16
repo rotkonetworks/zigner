@@ -2374,25 +2374,37 @@ fn init_logging(_tag: String) {
     env_logger::init();
 }
 
-// ── QR-based ed25519 authentication ──
+// ── ed25519 identity (zafu-compatible) ──
 
+/// Derive base identity pubkey (compatible with zafu identity.ts)
 fn auth_derive_identity(
+    seed_phrase: &str,
+    index: u32,
+) -> Result<String, ErrorDisplayed> {
+    auth::derive_identity(seed_phrase, index)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Derive domain-scoped identity pubkey (per-service, no cross-site correlation)
+fn auth_derive_domain_identity(
     seed_phrase: &str,
     domain: &str,
     index: u32,
 ) -> Result<String, ErrorDisplayed> {
-    auth::derive_auth_identity(seed_phrase, domain, index)
+    auth::derive_domain_identity(seed_phrase, domain, index)
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+/// Sign auth challenge with base identity
 fn auth_sign_challenge(
     seed_phrase: &str,
-    domain: &str,
     index: u32,
+    domain: &str,
     nonce: &str,
     timestamp: u64,
 ) -> Result<AuthSignResult, ErrorDisplayed> {
-    let (pubkey, sig) = auth::sign_auth_challenge(seed_phrase, domain, index, nonce, timestamp)
+    let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
+    let (pubkey, sig) = auth::sign_challenge(seed_phrase, index, &challenge)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
     Ok(AuthSignResult {
         pubkey_hex: pubkey,
@@ -2401,6 +2413,25 @@ fn auth_sign_challenge(
     })
 }
 
+/// Sign auth challenge with domain-scoped identity
+fn auth_sign_domain_challenge(
+    seed_phrase: &str,
+    domain: &str,
+    index: u32,
+    nonce: &str,
+    timestamp: u64,
+) -> Result<AuthSignResult, ErrorDisplayed> {
+    let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
+    let (pubkey, sig) = auth::sign_domain_challenge(seed_phrase, domain, index, &challenge)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    Ok(AuthSignResult {
+        pubkey_hex: pubkey,
+        signature_hex: sig,
+        domain: domain.to_string(),
+    })
+}
+
+/// Verify an auth signature
 fn auth_verify(
     pubkey_hex: &str,
     signature_hex: &str,
@@ -2408,7 +2439,8 @@ fn auth_verify(
     nonce: &str,
     timestamp: u64,
 ) -> Result<bool, ErrorDisplayed> {
-    auth::verify_auth_signature(pubkey_hex, signature_hex, domain, nonce, timestamp)
+    let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
+    auth::verify_signature(pubkey_hex, signature_hex, &challenge)
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 

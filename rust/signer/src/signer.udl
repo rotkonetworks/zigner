@@ -857,18 +857,26 @@ namespace signer {
     sequence<string> sign_zcash_pczt_ur([ByRef] string seed_phrase, u32 account_index, sequence<string> ur_parts, u32 max_fragment_len);
 
     // ========================================================================
-    // QR-based ed25519 authentication (rotatable identities)
+    // Ed25519 identity (zafu-compatible, rotatable)
     // ========================================================================
 
-    // Derive auth identity (ed25519 pubkey) for a domain + rotation index
+    // Derive base identity pubkey (zafu-compatible: HMAC-SHA512("zafu-identity", mnemonic + '\0' + index))
     [Throws=ErrorDisplayed]
-    string auth_derive_identity([ByRef] string seed_phrase, [ByRef] string domain, u32 index);
+    string auth_derive_identity([ByRef] string seed_phrase, u32 index);
 
-    // Sign an auth challenge — returns pubkey + signature
+    // Derive domain-scoped identity (per-service, no cross-site correlation)
     [Throws=ErrorDisplayed]
-    AuthSignResult auth_sign_challenge([ByRef] string seed_phrase, [ByRef] string domain, u32 index, [ByRef] string nonce, u64 timestamp);
+    string auth_derive_domain_identity([ByRef] string seed_phrase, [ByRef] string domain, u32 index);
 
-    // Verify an auth signature (for self-verification)
+    // Sign auth challenge with base identity
+    [Throws=ErrorDisplayed]
+    AuthSignResult auth_sign_challenge([ByRef] string seed_phrase, u32 index, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
+
+    // Sign auth challenge with domain-scoped identity
+    [Throws=ErrorDisplayed]
+    AuthSignResult auth_sign_domain_challenge([ByRef] string seed_phrase, [ByRef] string domain, u32 index, [ByRef] string nonce, u64 timestamp);
+
+    // Verify an auth signature
     [Throws=ErrorDisplayed]
     boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
 
