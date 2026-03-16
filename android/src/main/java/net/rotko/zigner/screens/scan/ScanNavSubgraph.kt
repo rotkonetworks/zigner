@@ -25,6 +25,7 @@ import net.rotko.zigner.screens.scan.errors.LocalErrorBottomSheet
 import net.rotko.zigner.screens.scan.errors.LocalErrorSheetModel
 import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
 import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
+import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraSignatureQrScreen
@@ -77,6 +78,9 @@ fun ScanNavSubgraph(
 	// UR backup restore state
 	val urBackupFrames = scanViewModel.urBackupFrames.collectAsStateWithLifecycle()
 
+	// Zcash note sync state
+	val zcashNoteSyncResult = scanViewModel.zcashNoteSyncResult.collectAsStateWithLifecycle()
+
 	val addedNetworkName: MutableState<String?> =
 		remember { mutableStateOf(null) }
 
@@ -97,7 +101,15 @@ fun ScanNavSubgraph(
 	val dynamicDerivationsData = dynamicDerivations.value
 	val urBackupData = urBackupFrames.value
 
-	if (urBackupData != null) {
+	if (zcashNoteSyncResult.value != null) {
+		ZcashNoteSyncScreen(
+			result = zcashNoteSyncResult.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onDone = {
+				scanViewModel.clearZcashNoteSyncState()
+			}
+		)
+	} else if (urBackupData != null) {
 		BackupRestoreSubgraph(
 			urFrames = urBackupData,
 			onClose = {
@@ -249,6 +261,9 @@ fun ScanNavSubgraph(
 			},
 			onUrBackupRestore = { urFrames ->
 				scanViewModel.urBackupFrames.value = urFrames
+			},
+			onZcashNotes = { urFrames ->
+				scanViewModel.performZcashNoteSync(urFrames, context)
 			},
 		)
 	} else {

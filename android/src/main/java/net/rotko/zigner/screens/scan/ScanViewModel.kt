@@ -49,6 +49,8 @@ import io.parity.signer.uniffi.signPenumbraTransaction as uniffiSignPenumbraTran
 import io.parity.signer.uniffi.CosmosSignRequest
 import io.parity.signer.uniffi.parseCosmosSignRequest
 import io.parity.signer.uniffi.signCosmosTransaction as uniffiSignCosmosTransaction
+import io.parity.signer.uniffi.ZcashNoteSyncResult
+import io.parity.signer.uniffi.decodeAndVerifyZcashNotes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -96,6 +98,10 @@ class ScanViewModel : ViewModel() {
 
 	// UR backup restore state
 	var urBackupFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
+
+	// Zcash note sync state
+	var zcashNoteSyncResult: MutableStateFlow<ZcashNoteSyncResult?> = MutableStateFlow(null)
+	var zcashNoteSyncFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
 
 	private val transactionIsInProgress = MutableStateFlow<Boolean>(false)
 
@@ -381,7 +387,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null) {
 			clearState()
 			true
 		} else {
@@ -405,6 +411,8 @@ class ScanViewModel : ViewModel() {
 		cosmosSignRequest.value = null
 		cosmosSignatureQr.value = null
 		urBackupFrames.value = null
+		zcashNoteSyncResult.value = null
+		zcashNoteSyncFrames.value = null
 	}
 
 	private suspend fun signTransaction(
@@ -556,6 +564,30 @@ class ScanViewModel : ViewModel() {
 	fun clearZcashState() {
 		zcashSignRequest.value = null
 		zcashSignatureQr.value = null
+	}
+
+	/**
+	 * Verify zcash notes from UR frames and store in sled
+	 */
+	fun performZcashNoteSync(urFrames: List<String>, context: Context) {
+		viewModelScope.launch {
+			try {
+				val result = decodeAndVerifyZcashNotes(urFrames)
+				zcashNoteSyncResult.value = result
+			} catch (e: Exception) {
+				Timber.e(e, "Failed to verify zcash notes")
+				transactionError.value = LocalErrorSheetModel(
+					title = "Note Sync Failed",
+					subtitle = e.message ?: "Failed to verify zcash notes"
+				)
+				zcashNoteSyncFrames.value = null
+			}
+		}
+	}
+
+	fun clearZcashNoteSyncState() {
+		zcashNoteSyncResult.value = null
+		zcashNoteSyncFrames.value = null
 	}
 
 	/**

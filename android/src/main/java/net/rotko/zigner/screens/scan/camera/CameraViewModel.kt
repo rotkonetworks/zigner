@@ -52,6 +52,11 @@ class CameraViewModel() : ViewModel() {
 	private val _urBackupComplete = MutableStateFlow<List<String>?>(null)
 	val urBackupComplete: StateFlow<List<String>?> = _urBackupComplete.asStateFlow()
 
+	// UR zcash-notes frames (note sync via animated QR)
+	private val _zcashNotesFrames = MutableStateFlow<List<String>>(emptyList())
+	private val _zcashNotesComplete = MutableStateFlow<List<String>?>(null)
+	val zcashNotesComplete: StateFlow<List<String>?> = _zcashNotesComplete.asStateFlow()
+
 	private val _dynamicDerivationPayload =
 		MutableStateFlow<String?>(null)
 	val dynamicDerivationPayload: StateFlow<String?> =
@@ -238,40 +243,52 @@ class CameraViewModel() : ViewModel() {
 	private fun processUrFrame(urString: String) {
 		val normalizedUr = urString.lowercase()
 
-		// Check if this is a zigner backup UR (ur:zigner-backup type)
-		if (!normalizedUr.startsWith("ur:zigner-backup")) {
-			Timber.d("Ignoring non-backup UR: $normalizedUr")
-			return
+		when {
+			normalizedUr.startsWith("ur:zigner-backup") -> {
+				processUrFrameForType(urString, normalizedUr, "ur:zigner-backup", _urBackupFrames) { frames ->
+					_urBackupComplete.value = frames
+				}
+			}
+			normalizedUr.startsWith("ur:zcash-notes") -> {
+				processUrFrameForType(urString, normalizedUr, "ur:zcash-notes", _zcashNotesFrames) { frames ->
+					_zcashNotesComplete.value = frames
+				}
+			}
+			else -> {
+				Timber.d("Ignoring unknown UR type: $normalizedUr")
+			}
 		}
+	}
 
-		// Check if this frame is already collected
-		val currentFrames = _urBackupFrames.value
+	private fun processUrFrameForType(
+		urString: String,
+		normalizedUr: String,
+		urPrefix: String,
+		framesFlow: MutableStateFlow<List<String>>,
+		onComplete: (List<String>) -> Unit,
+	) {
+		val currentFrames = framesFlow.value
 		if (currentFrames.any { it.lowercase() == normalizedUr }) {
 			return
 		}
 
-		// Add frame to collection
 		val updatedFrames = currentFrames + urString
-		_urBackupFrames.value = updatedFrames
+		framesFlow.value = updatedFrames
 
-		// Parse sequence info from UR (format: ur:zigner-backup/1-3/... for multipart)
-		val sequenceMatch = Regex("ur:zigner-backup/(\\d+)-(\\d+)/").find(normalizedUr)
+		val sequenceMatch = Regex("$urPrefix/(\\d+)-(\\d+)/").find(normalizedUr)
 		if (sequenceMatch != null) {
 			val (_, totalStr) = sequenceMatch.destructured
 			val totalFrames = totalStr.toIntOrNull() ?: 1
 			_total.value = totalFrames
 			_captured.value = updatedFrames.size
 
-			// Check if we have all frames (fountain codes may need extra frames)
 			if (updatedFrames.size >= totalFrames) {
-				// Complete - signal backup restore ready
 				resetScanValues()
-				_urBackupComplete.value = updatedFrames
+				onComplete(updatedFrames)
 			}
 		} else {
-			// Single-part UR, complete immediately
 			resetScanValues()
-			_urBackupComplete.value = listOf(urString)
+			onComplete(listOf(urString))
 		}
 	}
 
@@ -298,12 +315,19 @@ class CameraViewModel() : ViewModel() {
 		_cosmosSignRequestPayload.value = null
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
+		_zcashNotesFrames.value = emptyList()
+		_zcashNotesComplete.value = null
 		resetScanValues()
 	}
 
 	fun resetUrBackup() {
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
+	}
+
+	fun resetZcashNotes() {
+		_zcashNotesFrames.value = emptyList()
+		_zcashNotesComplete.value = null
 	}
 
 	fun resetZcashSignRequest() {

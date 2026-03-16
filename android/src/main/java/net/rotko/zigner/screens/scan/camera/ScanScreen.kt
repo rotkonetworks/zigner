@@ -42,6 +42,7 @@ fun ScanScreen(
 	onPenumbraSignRequest: (String) -> Unit = {},
 	onCosmosSignRequest: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
+	onZcashNotes: (List<String>) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
 
@@ -58,6 +59,7 @@ fun ScanScreen(
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
+	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
 
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
@@ -141,6 +143,17 @@ fun ScanScreen(
 				.collect { urFrames ->
 					currentOnUrBackupRestore(urFrames)
 					viewModel.resetUrBackup()
+				}
+		}
+
+		// Zcash notes sync handler
+		launch {
+			viewModel.zcashNotesComplete
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { urFrames ->
+					currentOnZcashNotes(urFrames)
+					viewModel.resetZcashNotes()
 				}
 		}
 	}

@@ -25,6 +25,8 @@ import net.rotko.zigner.ui.theme.*
 import io.parity.signer.uniffi.ZcashOrchardSpend
 import io.parity.signer.uniffi.ZcashSignRequest
 import io.parity.signer.uniffi.ZcashTransactionSummary
+import io.parity.signer.uniffi.getZcashVerifiedBalance
+import io.parity.signer.uniffi.getZcashSyncInfo
 
 /**
  * Zcash transaction signing screen
@@ -37,6 +39,14 @@ fun ZcashTransactionScreen(
     onDecline: Callback,
     modifier: Modifier = Modifier,
 ) {
+    // Load verified balance for context
+    val verifiedBalance = remember {
+        try { getZcashVerifiedBalance() } catch (_: Exception) { null }
+    }
+    val syncInfo = remember {
+        try { getZcashSyncInfo() } catch (_: Exception) { null }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -58,6 +68,79 @@ fun ZcashTransactionScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Verified balance context
+            if (verifiedBalance != null) {
+                val zec = verifiedBalance.toLong() / 100_000_000.0
+                val syncedAt = syncInfo?.syncedAt?.toLong() ?: 0L
+                val now = System.currentTimeMillis() / 1000
+                val diff = now - syncedAt
+                val timeAgo = when {
+                    syncedAt == 0L -> ""
+                    diff < 60 -> "just now"
+                    diff < 3600 -> "${diff / 60}m ago"
+                    diff < 86400 -> "${diff / 3600}h ago"
+                    diff < 604800 -> "${diff / 86400}d ago"
+                    else -> "${diff / 604800}w ago"
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colors.fill6)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Verified Balance",
+                            style = SignerTypeface.LabelM,
+                            color = MaterialTheme.colors.textTertiary
+                        )
+                        if (timeAgo.isNotEmpty()) {
+                            Text(
+                                text = timeAgo,
+                                style = SignerTypeface.CaptionM,
+                                color = if (diff > 86400) MaterialTheme.colors.red500 else MaterialTheme.colors.textTertiary
+                            )
+                        }
+                    }
+                    Text(
+                        text = "%.8f ZEC".format(zec),
+                        style = SignerTypeface.TitleS,
+                        color = MaterialTheme.colors.primary
+                    )
+                }
+            } else {
+                // Warning: no verified balance
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colors.red500fill12)
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(text = "\u26A0", style = SignerTypeface.TitleS)
+                    Column {
+                        Text(
+                            text = "No verified balance",
+                            style = SignerTypeface.LabelM,
+                            color = MaterialTheme.colors.red500
+                        )
+                        Text(
+                            text = "Sync notes first: zcli export-notes \u2192 scan QR",
+                            style = SignerTypeface.CaptionM,
+                            color = MaterialTheme.colors.textSecondary
+                        )
+                    }
+                }
+            }
+
             // Transaction summary card
             TCZcashSummary(
                 summary = ZcashTransactionSummary(
