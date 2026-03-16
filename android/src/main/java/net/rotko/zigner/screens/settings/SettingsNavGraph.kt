@@ -21,7 +21,6 @@ import net.rotko.zigner.screens.settings.networks.details.NetworkDetailsSubgraph
 import net.rotko.zigner.screens.settings.networks.list.networkListDestination
 import net.rotko.zigner.screens.settings.networks.signspecs.signSpecsDestination
 import net.rotko.zigner.screens.settings.verifiercert.verifierSettingsDestination
-import net.rotko.zigner.screens.settings.zcashfvk.ZcashTestQrScreen
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
 
 /**
@@ -83,11 +82,6 @@ fun NavGraphBuilder.settingsFullSubgraph(
 			)
 		}
 		signSpecsDestination(coreNavController)
-		composable(SettingsNavSubgraph.zcashTestQr) {
-			ZcashTestQrScreen(onBack = {
-				coreNavController.popBackStack(SettingsNavSubgraph.home, false)
-			})
-		}
 	}
 }
 

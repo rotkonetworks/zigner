@@ -57,7 +57,7 @@ internal fun SettingsGeneralNavSubgraph(
 				coreNavController.navigate(SettingsNavSubgraph.generalVerifier)
 			},
 			onExposedClicked = { menuNavController.navigate(SettingsGeneralMenu.exposed_shield_alert) },
-			onZcashTestQr = { coreNavController.navigate(SettingsNavSubgraph.zcashTestQr) },
+			onZcashTestQr = { },
 			onOnlineModeToggle = {
 				if (onlineModeEnabled.value) {
 					// Switching back to offline - still requires confirmation
