@@ -2134,18 +2134,28 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
-    // Require verified notes before signing (no blind signing)
-    {
-        let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
-        if let Some(database) = db_guard.as_ref() {
-            let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
-            let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
-            if anchor.is_none() || balance == 0 {
-                return Err(ErrorDisplayed::Str {
-                    s: "No verified notes. Sync notes from zcli before signing (zcli export-notes → scan QR).".to_string(),
-                });
-            }
-        }
+    // Run inspection and enforce verification gates before signing
+    let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
+
+    if inspection.verified_balance == 0 && !inspection.anchor_matches {
+        return Err(ErrorDisplayed::Str {
+            s: "No verified notes. Sync notes from zcli before signing (zcli export-notes → scan QR).".to_string(),
+        });
+    }
+
+    if !inspection.anchor_matches {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "PCZT anchor does not match verified anchor. Sync notes to current state first. PCZT anchor: {}",
+                inspection.anchor_hex
+            ),
+        });
+    }
+
+    if inspection.known_spends == 0 && inspection.action_count > 0 {
+        return Err(ErrorDisplayed::Str {
+            s: "No PCZT spend nullifiers match verified notes. This transaction may spend notes you don't recognize.".to_string(),
+        });
     }
 
     // Parse the PCZT to get action count first
