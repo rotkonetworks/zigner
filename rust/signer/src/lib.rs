@@ -2158,6 +2158,23 @@ fn sign_zcash_pczt(
         });
     }
 
+    // Value consistency: implied total spend (net_value + output_total) must not exceed verified balance.
+    // net_value = total_spend - total_output (from value_sum), so total_spend = net_value + total_output.
+    // If net_value is negative, the orchard bundle is receiving value (from transparent), skip this check.
+    if inspection.net_value > 0 {
+        let output_total: i64 = inspection.outputs.iter().map(|o| o.value as i64).sum();
+        let implied_spend = inspection.net_value + output_total;
+        if implied_spend > inspection.verified_balance as i64 {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Transaction implies spending {} zatoshis but verified balance is only {} zatoshis. \
+                     Re-sync notes or verify the transaction.",
+                    implied_spend, inspection.verified_balance
+                ),
+            });
+        }
+    }
+
     // Parse the PCZT to get action count first
     let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to parse PCZT: {:?}", e),

@@ -8,8 +8,53 @@
 // This module wraps it for uniffi FFI.
 
 use std::convert::TryInto;
+use std::collections::HashSet;
+use std::sync::Mutex;
 
 use frost_spend::orchestrate;
+
+lazy_static::lazy_static! {
+    /// Track nonce hashes that have been consumed by signing.
+    /// A nonce that appears here has been used and MUST NOT be reused.
+    /// This prevents catastrophic key recovery from nonce reuse.
+    static ref USED_NONCES: Mutex<HashSet<[u8; 16]>> = Mutex::new(HashSet::new());
+}
+
+/// Compute a short fingerprint of a nonce for tracking.
+/// We don't store the full nonce — just enough to detect reuse.
+fn nonce_fingerprint(nonces_hex: &str) -> [u8; 16] {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    nonces_hex.hash(&mut h);
+    let hash1 = h.finish();
+    // second round for 128 bits
+    h.write_u8(0xff);
+    let hash2 = h.finish();
+    let mut fp = [0u8; 16];
+    fp[..8].copy_from_slice(&hash1.to_le_bytes());
+    fp[8..].copy_from_slice(&hash2.to_le_bytes());
+    fp
+}
+
+/// Mark a nonce as consumed. Returns Err if already used.
+fn consume_nonce(nonces_hex: &str) -> Result<(), String> {
+    let fp = nonce_fingerprint(nonces_hex);
+    let mut used = USED_NONCES.lock().map_err(|_| "nonce tracker poisoned".to_string())?;
+    if !used.insert(fp) {
+        return Err(
+            "CRITICAL: Nonce reuse detected. This nonce was already used for signing. \
+             Reusing a FROST nonce with a different message would leak the private key. \
+             Generate fresh nonces with sign_round1.".to_string()
+        );
+    }
+    // Limit size to prevent unbounded growth (old entries are stale anyway)
+    if used.len() > 1000 {
+        used.clear();
+        used.insert(fp);
+    }
+    Ok(())
+}
 
 /// DKG round 1: generate ephemeral identity + signed commitment.
 /// Returns JSON: { "secret": hex, "broadcast": hex }
@@ -82,6 +127,9 @@ pub fn frost_spend_sign_round2(
     alpha_hex: &str,
     commitments_json: &str,
 ) -> Result<String, String> {
+    // Consume nonce BEFORE signing — prevents reuse even if signing fails
+    consume_nonce(nonces_hex)?;
+
     let sighash = parse_32(sighash_hex, "sighash")?;
     let alpha = parse_32(alpha_hex, "alpha")?;
     let commitments: Vec<String> = serde_json::from_str(commitments_json)
@@ -102,6 +150,9 @@ pub fn frost_spend_sign_actions(
     alphas_json: &str,
     commitments_json: &str,
 ) -> Result<String, String> {
+    // Consume nonce BEFORE any signing — prevents reuse even if one action fails
+    consume_nonce(nonces_hex)?;
+
     let sighash = parse_32(sighash_hex, "sighash")?;
     let alphas: Vec<String> = serde_json::from_str(alphas_json)
         .map_err(|e| format!("bad alphas JSON: {}", e))?;
