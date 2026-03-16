@@ -57,6 +57,9 @@ pub mod cosmos;
 #[cfg(feature = "zcash")]
 pub mod zcash;
 
+#[cfg(feature = "zcash")]
+pub mod frost;
+
 #[cfg(feature = "bitcoin_keys")]
 pub mod bitcoin;
 

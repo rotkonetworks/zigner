@@ -2442,6 +2442,94 @@ fn frost_derive_address_raw(
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+// ── FROST wallet storage ──
+
+fn frost_store_wallet(
+    key_package_hex: &str,
+    public_key_package_hex: &str,
+    ephemeral_seed_hex: &str,
+    label: &str,
+    min_signers: u16,
+    max_signers: u16,
+    mainnet: bool,
+) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let data = db_handling::frost::FrostWalletData {
+        key_package_hex: key_package_hex.to_string(),
+        public_key_package_hex: public_key_package_hex.to_string(),
+        ephemeral_seed_hex: ephemeral_seed_hex.to_string(),
+        label: label.to_string(),
+        min_signers,
+        max_signers,
+        mainnet,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    };
+
+    db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to store FROST wallet: {e}"),
+    })
+}
+
+fn frost_list_wallets() -> Result<Vec<FrostWalletSummaryFFI>, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let wallets =
+        db_handling::frost::list_frost_wallets(database).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to list FROST wallets: {e}"),
+        })?;
+
+    Ok(wallets
+        .into_iter()
+        .map(|w| FrostWalletSummaryFFI {
+            wallet_id: w.wallet_id,
+            label: w.label,
+            min_signers: w.min_signers,
+            max_signers: w.max_signers,
+            mainnet: w.mainnet,
+            created_at: w.created_at,
+        })
+        .collect())
+}
+
+fn frost_load_wallet(wallet_id: &str) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let data = db_handling::frost::get_frost_wallet(database, wallet_id)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to load FROST wallet: {e}"),
+        })?
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: format!("FROST wallet not found: {wallet_id}"),
+        })?;
+
+    serde_json::to_string(&serde_json::json!({
+        "key_package": data.key_package_hex,
+        "ephemeral_seed": data.ephemeral_seed_hex,
+        "public_key_package": data.public_key_package_hex,
+    }))
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("Serialize: {e}"),
+    })
+}
+
+fn frost_delete_wallet(wallet_id: &str) -> Result<(), ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    db_handling::frost::delete_frost_wallet(database, wallet_id).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Failed to delete FROST wallet: {e}"),
+        }
+    })
+}
+
 ffi_support::define_string_destructor!(signer_destroy_string);
 
 #[cfg(test)]

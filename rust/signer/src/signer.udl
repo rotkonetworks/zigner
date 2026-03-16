@@ -900,6 +900,35 @@ namespace signer {
     // Derive raw Orchard address from FROST group key (hex-encoded 43 bytes)
     [Throws=ErrorDisplayed]
     string frost_derive_address_raw([ByRef] string public_key_package_hex, u32 diversifier_index);
+
+    // ========================================================================
+    // FROST wallet storage (key packages from DKG)
+    // ========================================================================
+
+    // Store FROST wallet after DKG completion, returns wallet_id hex
+    [Throws=ErrorDisplayed]
+    string frost_store_wallet(
+        [ByRef] string key_package_hex,
+        [ByRef] string public_key_package_hex,
+        [ByRef] string ephemeral_seed_hex,
+        [ByRef] string label,
+        u16 min_signers,
+        u16 max_signers,
+        boolean mainnet
+    );
+
+    // List all stored FROST wallets (summaries, no secrets)
+    [Throws=ErrorDisplayed]
+    sequence<FrostWalletSummaryFFI> frost_list_wallets();
+
+    // Load FROST wallet secrets for signing (key_package + ephemeral_seed)
+    // Returns JSON: { "key_package": hex, "ephemeral_seed": hex, "public_key_package": hex }
+    [Throws=ErrorDisplayed]
+    string frost_load_wallet([ByRef] string wallet_id);
+
+    // Delete a FROST wallet
+    [Throws=ErrorDisplayed]
+    void frost_delete_wallet([ByRef] string wallet_id);
 };
 
 dictionary MKeysNew {
@@ -1238,6 +1267,16 @@ dictionary ZcashTransactionSummary {
     u64 output_count;
     string sighash;
     string anchor;
+};
+
+// FROST multisig wallet summary (no secrets)
+dictionary FrostWalletSummaryFFI {
+    string wallet_id;
+    string label;
+    u16 min_signers;
+    u16 max_signers;
+    boolean mainnet;
+    u64 created_at;
 };
 
 // Zcash Orchard spend action

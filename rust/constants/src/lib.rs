@@ -94,6 +94,11 @@ pub const ZCASH_ADDRESS_TREE: &[u8] = b"zcash_addresses";
 /// Key: nullifier (32 bytes), Value: CBOR-encoded note data
 pub const ZCASH_NOTES_TREE: &[u8] = b"zcash_notes";
 
+/// Tree name for the tree storing FROST multisig key packages
+/// Key: wallet_id (8 bytes, truncated blake3 of public_key_package)
+/// Value: JSON-encoded FrostWalletData
+pub const FROST_KEYS_TREE: &[u8] = b"frost_keys";
+
 /// Tree name for the tree storing database settings
 ///
 /// In cold database, the settings tree contains general verifier, types

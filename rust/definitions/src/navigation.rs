@@ -1069,6 +1069,16 @@ pub struct ZcashNoteSyncResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FrostWalletSummaryFFI {
+    pub wallet_id: String,
+    pub label: String,
+    pub min_signers: u16,
+    pub max_signers: u16,
+    pub mainnet: bool,
+    pub created_at: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashSyncInfo {
     pub anchor_hex: String,
     pub anchor_height: u32,
