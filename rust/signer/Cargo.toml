@@ -23,6 +23,8 @@ pczt = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", packag
 zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "zcash_transparent", features = ["transparent-inputs"] }
 # Orchard crate for SpendAuthorizingKey type - use same version as pczt
 orchard = "0.12"
+# Address encoding for PCZT recipient display
+zcash_address = "0.4"
 
 sp-runtime = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false }
 sp-core = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, features = ["full_crypto"] }

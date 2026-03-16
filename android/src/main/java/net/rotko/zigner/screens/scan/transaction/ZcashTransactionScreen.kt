@@ -69,6 +69,31 @@ fun ZcashTransactionScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Verified balance context
+            // Blind signing warning
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colors.red500fill12)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(text = "\u26A0", style = SignerTypeface.TitleS)
+                Column {
+                    Text(
+                        text = "Blind signing mode",
+                        style = SignerTypeface.LabelM,
+                        color = MaterialTheme.colors.red500
+                    )
+                    Text(
+                        text = "Transaction details cannot be verified. Use PCZT (ur:zcash-pczt) for inspectable signing.",
+                        style = SignerTypeface.CaptionM,
+                        color = MaterialTheme.colors.textSecondary
+                    )
+                }
+            }
+
             if (verifiedBalance != null) {
                 val zec = verifiedBalance.toLong() / 100_000_000.0
                 val syncedAt = syncInfo?.syncedAt?.toLong() ?: 0L

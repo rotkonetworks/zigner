@@ -157,9 +157,9 @@ fun ZcashPcztScreen(
 										style = SignerTypeface.BodyL,
 										color = MaterialTheme.colors.primary
 									)
-									if (output.recipientHex.isNotEmpty()) {
+									if (output.recipient.isNotEmpty()) {
 										Text(
-											text = output.recipientHex.take(16) + "...",
+											text = output.recipient.take(20) + "..." + output.recipient.takeLast(8),
 											style = SignerTypeface.CaptionM,
 											color = MaterialTheme.colors.textTertiary
 										)

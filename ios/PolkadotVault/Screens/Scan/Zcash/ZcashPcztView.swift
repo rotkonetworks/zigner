@@ -89,8 +89,8 @@ struct ZcashPcztView: View {
                                     Text(String(format: "%.8f ZEC", zec))
                                         .font(PrimaryFont.bodyL.font)
                                         .foregroundColor(.textAndIconsPrimary)
-                                    if !output.recipientHex.isEmpty {
-                                        Text(String(output.recipientHex.prefix(16)) + "...")
+                                    if !output.recipient.isEmpty {
+                                        Text(String(output.recipient.prefix(20)) + "..." + String(output.recipient.suffix(8)))
                                             .font(PrimaryFont.captionM.font)
                                             .foregroundColor(.textAndIconsTertiary)
                                     }

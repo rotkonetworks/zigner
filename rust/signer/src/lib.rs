@@ -2007,6 +2007,18 @@ fn get_zcash_sign_context() -> Result<ZcashSignContext, ErrorDisplayed> {
     })
 }
 
+/// Encode a raw 43-byte Orchard address as a unified address string (u1...).
+fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
+    use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
+    use zcash_address::Network;
+
+    let receiver = Receiver::Orchard(*raw);
+    let network = if mainnet { Network::Main } else { Network::Test };
+    UnifiedAddress::try_from_items(vec![receiver])
+        .ok()
+        .map(|ua| ua.encode(&network))
+}
+
 /// Inspect a PCZT: extract spend/output details, cross-reference against verified notes.
 fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorDisplayed> {
     use pczt::Pczt;
@@ -2065,18 +2077,27 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         });
     }
 
-    // Extract output details
+    // Determine network for address encoding
+    let is_mainnet = verified_anchor
+        .as_ref()
+        .map(|(_, _, mainnet, _)| *mainnet)
+        .unwrap_or(true);
+
+    // Extract output details with human-readable addresses
     let mut outputs = Vec::new();
     for action in orchard.actions() {
         let value = action.output().value().unwrap_or(0);
-        let recipient_hex = action
-            .output()
-            .recipient()
-            .map(|r| hex::encode(r))
-            .unwrap_or_default();
+        let recipient_hex = match action.output().recipient() {
+            Some(raw_bytes) => {
+                // Decode raw 43-byte Orchard address to unified address string
+                encode_orchard_recipient(raw_bytes, is_mainnet)
+                    .unwrap_or_else(|| hex::encode(raw_bytes))
+            }
+            None => String::new(),
+        };
         outputs.push(ZcashPcztOutput {
             value,
-            recipient_hex,
+            recipient: recipient_hex,
         });
     }
 

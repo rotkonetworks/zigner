@@ -70,6 +70,25 @@ struct ZcashTransactionView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.small) {
+                    // Blind signing warning
+                    HStack(alignment: .top, spacing: Spacing.extraSmall) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.accentRed300)
+                            .font(.system(size: 14))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Blind signing mode")
+                                .font(PrimaryFont.labelM.font)
+                                .foregroundColor(.accentRed300)
+                            Text("Transaction details cannot be verified. Use PCZT (ur:zcash-pczt) for inspectable signing.")
+                                .font(PrimaryFont.captionM.font)
+                                .foregroundColor(.textAndIconsSecondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Spacing.small)
+                    .background(Color.accentRed300.opacity(0.12))
+                    .cornerRadius(CornerRadius.medium)
+
                     // Verified balance context
                     if let balance = viewModel.verifiedBalance {
                         verifiedBalanceBanner(balance: balance, syncedAt: viewModel.syncedAt)

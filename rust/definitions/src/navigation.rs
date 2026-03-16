@@ -1099,7 +1099,7 @@ pub struct ZcashPcztSpend {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashPcztOutput {
     pub value: u64,
-    pub recipient_hex: String,
+    pub recipient: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1314,7 +1314,7 @@ dictionary ZcashPcztSpend {
 
 dictionary ZcashPcztOutput {
     u64 value;
-    string recipient_hex;
+    string recipient;  // unified address (u1...) or raw hex fallback
 };
 
 // FROST multisig wallet summary (no secrets)
