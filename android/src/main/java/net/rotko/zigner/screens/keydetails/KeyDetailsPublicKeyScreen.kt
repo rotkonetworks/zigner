@@ -291,7 +291,7 @@ fun KeyDetailsPublicKeyScreen(
 							)
 						} else if (isZcash && !showFvk && zcashDiversifiedAddress != null) {
 							Text(
-								text = "Address #$diversifierIndex",
+								text = zcashDiversifiedAddress.take(12) + "..." + zcashDiversifiedAddress.takeLast(8),
 								style = SignerTypeface.CaptionM,
 								color = MaterialTheme.colors.textTertiary,
 								modifier = Modifier.weight(1f)
