@@ -58,6 +58,11 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashNotesComplete = MutableStateFlow<List<String>?>(null)
 	val zcashNotesComplete: StateFlow<List<String>?> = _zcashNotesComplete.asStateFlow()
 
+	// UR zcash-pczt frames (PCZT signing via animated QR)
+	private val _zcashPcztFrames = MutableStateFlow<List<String>>(emptyList())
+	private val _zcashPcztComplete = MutableStateFlow<List<String>?>(null)
+	val zcashPcztComplete: StateFlow<List<String>?> = _zcashPcztComplete.asStateFlow()
+
 	// FROST multisig JSON payload (detected by {"frost":...} prefix)
 	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
 	val frostPayload: StateFlow<JSONObject?> = _frostPayload.asStateFlow()
@@ -271,6 +276,11 @@ class CameraViewModel() : ViewModel() {
 					_zcashNotesComplete.value = frames
 				}
 			}
+			normalizedUr.startsWith("ur:zcash-pczt") -> {
+				processUrFrameForType(urString, normalizedUr, "ur:zcash-pczt", _zcashPcztFrames) { frames ->
+					_zcashPcztComplete.value = frames
+				}
+			}
 			else -> {
 				Timber.d("Ignoring unknown UR type: $normalizedUr")
 			}
@@ -334,6 +344,8 @@ class CameraViewModel() : ViewModel() {
 		_urBackupComplete.value = null
 		_zcashNotesFrames.value = emptyList()
 		_zcashNotesComplete.value = null
+		_zcashPcztFrames.value = emptyList()
+		_zcashPcztComplete.value = null
 		_frostPayload.value = null
 		resetScanValues()
 	}
@@ -346,6 +358,11 @@ class CameraViewModel() : ViewModel() {
 	fun resetZcashNotes() {
 		_zcashNotesFrames.value = emptyList()
 		_zcashNotesComplete.value = null
+	}
+
+	fun resetZcashPczt() {
+		_zcashPcztFrames.value = emptyList()
+		_zcashPcztComplete.value = null
 	}
 
 	fun resetFrostPayload() {

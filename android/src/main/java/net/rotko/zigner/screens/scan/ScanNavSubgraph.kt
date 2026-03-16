@@ -28,6 +28,7 @@ import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
 import net.rotko.zigner.screens.scan.transaction.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
+import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraSignatureQrScreen
@@ -103,9 +104,16 @@ fun ScanNavSubgraph(
 	val dynamicDerivationsData = dynamicDerivations.value
 	val urBackupData = urBackupFrames.value
 
+	val zcashPcztParts = scanViewModel.zcashPcztUrParts.collectAsStateWithLifecycle()
 	val frostData = scanViewModel.frostPayload.collectAsStateWithLifecycle()
 
-	if (frostData.value != null) {
+	if (zcashPcztParts.value != null) {
+		ZcashPcztScreen(
+			urParts = zcashPcztParts.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onDone = { scanViewModel.zcashPcztUrParts.value = null },
+		)
+	} else if (frostData.value != null) {
 		val json = frostData.value!!
 		val frostType = json.optString("frost", "")
 		when (frostType) {
@@ -294,6 +302,9 @@ fun ScanNavSubgraph(
 			},
 			onZcashNotes = { urFrames ->
 				scanViewModel.performZcashNoteSync(urFrames, context)
+			},
+			onZcashPczt = { urParts ->
+				scanViewModel.zcashPcztUrParts.value = urParts
 			},
 			onFrost = { json ->
 				scanViewModel.frostPayload.value = json

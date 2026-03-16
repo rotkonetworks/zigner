@@ -43,6 +43,7 @@ fun ScanScreen(
 	onCosmosSignRequest: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 	onZcashNotes: (List<String>) -> Unit = {},
+	onZcashPczt: (List<String>) -> Unit = {},
 	onFrost: (org.json.JSONObject) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
@@ -61,6 +62,7 @@ fun ScanScreen(
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
+	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
 	val currentOnFrost by rememberUpdatedState(onFrost)
 
 	LaunchedEffect(viewModel) {
@@ -156,6 +158,17 @@ fun ScanScreen(
 				.collect { urFrames ->
 					currentOnZcashNotes(urFrames)
 					viewModel.resetZcashNotes()
+				}
+		}
+
+		// PCZT handler
+		launch {
+			viewModel.zcashPcztComplete
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { urFrames ->
+					currentOnZcashPczt(urFrames)
+					viewModel.resetZcashPczt()
 				}
 		}
 

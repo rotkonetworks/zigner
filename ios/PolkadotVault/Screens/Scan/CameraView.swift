@@ -265,6 +265,29 @@ struct CameraView: View {
             }
         }
         .fullScreenModal(
+            isPresented: $viewModel.isPresentingZcashPczt,
+            onDismiss: {
+                model.payload = nil
+                model.start()
+                viewModel.clearTransactionState()
+            }
+        ) {
+            if let urFrames = viewModel.zcashPcztUrFrames {
+                ZcashPcztView(
+                    viewModel: .init(
+                        urParts: urFrames,
+                        onCompletion: {
+                            viewModel.isPresentingZcashPczt = false
+                            viewModel.zcashPcztUrFrames = nil
+                            model.payload = nil
+                            model.start()
+                            viewModel.clearTransactionState()
+                        }
+                    )
+                )
+            }
+        }
+        .fullScreenModal(
             isPresented: $viewModel.isPresentingFrost,
             onDismiss: {
                 model.payload = nil
@@ -354,9 +377,11 @@ extension CameraView {
         @Published var isPresentingZcashTransaction: Bool = false
         @Published var isPresentingZcashNoteSync: Bool = false
         @Published var isPresentingFrost: Bool = false
+        @Published var isPresentingZcashPczt: Bool = false
         var penumbraQrHex: String?
         var zcashQrHex: String?
         var zcashNotesUrFrames: [String]?
+        var zcashPcztUrFrames: [String]?
         var frostJsonPayload: String?
 
         // Banana split flow
@@ -424,6 +449,9 @@ extension CameraView {
             case let .frost(jsonString):
                 frostJsonPayload = jsonString
                 isPresentingFrost = true
+            case let .zcashPczt(urFrames):
+                zcashPcztUrFrames = urFrames
+                isPresentingZcashPczt = true
             case let .dynamicDerivations(data):
                 guard runtimePropertiesProvider.dynamicDerivationsEnabled else {
                     presentableError = .featureNotAvailable()

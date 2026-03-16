@@ -103,6 +103,9 @@ class ScanViewModel : ViewModel() {
 	var zcashNoteSyncResult: MutableStateFlow<ZcashNoteSyncResult?> = MutableStateFlow(null)
 	var zcashNoteSyncFrames: MutableStateFlow<List<String>?> = MutableStateFlow(null)
 
+	// PCZT signing state
+	var zcashPcztUrParts: MutableStateFlow<List<String>?> = MutableStateFlow(null)
+
 	// FROST multisig state
 	var frostPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
 
@@ -416,6 +419,7 @@ class ScanViewModel : ViewModel() {
 		urBackupFrames.value = null
 		zcashNoteSyncResult.value = null
 		zcashNoteSyncFrames.value = null
+		zcashPcztUrParts.value = null
 		frostPayload.value = null
 	}
 
