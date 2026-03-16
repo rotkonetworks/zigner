@@ -310,36 +310,73 @@ struct CameraView: View {
                let data = jsonString.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let frostType = json["frost"] as? String {
+                let dismissFrost = {
+                    viewModel.isPresentingFrost = false
+                    viewModel.frostJsonPayload = nil
+                    model.payload = nil
+                    model.start()
+                    viewModel.clearTransactionState()
+                }
+                let scanNext = {
+                    // Dismiss screen, back to camera for next round
+                    viewModel.isPresentingFrost = false
+                    viewModel.frostJsonPayload = nil
+                    model.payload = nil
+                    model.start()
+                }
                 switch frostType {
                 case "dkg1":
-                    FrostDkgView(
-                        viewModel: .init(
-                            maxSigners: UInt16(json["n"] as? Int ?? 3),
-                            minSigners: UInt16(json["t"] as? Int ?? 2),
-                            label: json["label"] as? String ?? "",
-                            mainnet: json["mainnet"] as? Bool ?? true,
-                            onCompletion: {
-                                viewModel.isPresentingFrost = false
-                                viewModel.frostJsonPayload = nil
-                                model.payload = nil
-                                model.start()
-                                viewModel.clearTransactionState()
-                            }
-                        )
-                    )
+                    let _ = {
+                        viewModel.frostDkgMaxSigners = UInt16(json["n"] as? Int ?? 3)
+                        viewModel.frostDkgMinSigners = UInt16(json["t"] as? Int ?? 2)
+                        viewModel.frostDkgLabel = json["label"] as? String ?? ""
+                        viewModel.frostDkgMainnet = json["mainnet"] as? Bool ?? true
+                    }()
+                    FrostDkgView(viewModel: .init(
+                        round: 1, maxSigners: viewModel.frostDkgMaxSigners,
+                        minSigners: viewModel.frostDkgMinSigners,
+                        label: viewModel.frostDkgLabel, mainnet: viewModel.frostDkgMainnet,
+                        onSecretUpdated: { viewModel.frostDkgSecret = $0 },
+                        onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostDkgSecret = "" }
+                    ))
+                case "dkg2":
+                    FrostDkgView(viewModel: .init(
+                        round: 2, maxSigners: viewModel.frostDkgMaxSigners,
+                        minSigners: viewModel.frostDkgMinSigners,
+                        label: viewModel.frostDkgLabel, mainnet: viewModel.frostDkgMainnet,
+                        previousSecret: viewModel.frostDkgSecret,
+                        broadcastsJson: (json["broadcasts"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        onSecretUpdated: { viewModel.frostDkgSecret = $0 },
+                        onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostDkgSecret = "" }
+                    ))
+                case "dkg3":
+                    FrostDkgView(viewModel: .init(
+                        round: 3, maxSigners: viewModel.frostDkgMaxSigners,
+                        minSigners: viewModel.frostDkgMinSigners,
+                        label: viewModel.frostDkgLabel, mainnet: viewModel.frostDkgMainnet,
+                        previousSecret: viewModel.frostDkgSecret,
+                        round1Json: (json["round1"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        round2Json: (json["round2"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        onSecretUpdated: { viewModel.frostDkgSecret = $0 },
+                        onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostDkgSecret = "" }
+                    ))
                 case "sign1":
-                    FrostSignView(
-                        viewModel: .init(
-                            walletId: json["wallet"] as? String ?? "",
-                            onCompletion: {
-                                viewModel.isPresentingFrost = false
-                                viewModel.frostJsonPayload = nil
-                                model.payload = nil
-                                model.start()
-                                viewModel.clearTransactionState()
-                            }
-                        )
-                    )
+                    FrostSignView(viewModel: .init(
+                        round: 1, walletId: json["wallet"] as? String ?? "",
+                        onStateUpdated: { n, k in viewModel.frostSignNonces = n; viewModel.frostSignKeyPackage = k },
+                        onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostSignNonces = ""; viewModel.frostSignKeyPackage = "" }
+                    ))
+                case "sign2":
+                    FrostSignView(viewModel: .init(
+                        round: 2,
+                        sighashHex: json["sighash"] as? String ?? "",
+                        alphasJson: (json["alphas"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        commitmentsJson: (json["commitments"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        previousNonces: viewModel.frostSignNonces,
+                        previousKeyPackage: viewModel.frostSignKeyPackage,
+                        onStateUpdated: { n, k in viewModel.frostSignNonces = n; viewModel.frostSignKeyPackage = k },
+                        onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostSignNonces = ""; viewModel.frostSignKeyPackage = "" }
+                    ))
                 default:
                     EmptyView()
                 }
@@ -393,6 +430,15 @@ extension CameraView {
         var zcashNotesUrFrames: [String]?
         var zcashPcztUrFrames: [String]?
         var frostJsonPayload: String?
+        // FROST DKG state persisted across rounds
+        var frostDkgSecret: String = ""
+        var frostDkgMaxSigners: UInt16 = 0
+        var frostDkgMinSigners: UInt16 = 0
+        var frostDkgLabel: String = ""
+        var frostDkgMainnet: Bool = true
+        // FROST sign state persisted across rounds
+        var frostSignNonces: String = ""
+        var frostSignKeyPackage: String = ""
         var authJsonPayload: String?
 
         // Banana split flow
