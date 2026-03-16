@@ -177,25 +177,25 @@ class KeyDetailsScreenViewModel : ViewModel() {
 		}
 	}
 
-	fun getZcashVerifiedBalance(): ULong? {
+	fun fetchZcashVerifiedBalance(): ULong? {
 		return try {
-			getZcashVerifiedBalance()
+			io.parity.signer.uniffi.getZcashVerifiedBalance()
 		} catch (e: Exception) {
 			null
 		}
 	}
 
-	fun getZcashVerifiedNotesList(): List<ZcashVerifiedNoteDisplay> {
+	fun fetchZcashVerifiedNotes(): List<ZcashVerifiedNoteDisplay> {
 		return try {
-			getZcashVerifiedNotes()
+			io.parity.signer.uniffi.getZcashVerifiedNotes()
 		} catch (e: Exception) {
 			emptyList()
 		}
 	}
 
-	fun getZcashSyncMetadata(): ZcashSyncInfo? {
+	fun fetchZcashSyncInfo(): ZcashSyncInfo? {
 		return try {
-			getZcashSyncInfo()
+			io.parity.signer.uniffi.getZcashSyncInfo()
 		} catch (e: Exception) {
 			null
 		}

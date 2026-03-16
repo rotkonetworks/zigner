@@ -74,9 +74,9 @@ fun KeyDetailsScreenSubgraph(
 
 	LaunchedEffect(isZcash) {
 		if (isZcash) {
-			zcashVerifiedBalance = vm.getZcashVerifiedBalance()
-			zcashVerifiedNotes = vm.getZcashVerifiedNotesList()
-			zcashSyncInfo = vm.getZcashSyncMetadata()
+			zcashVerifiedBalance = vm.fetchZcashVerifiedBalance()
+			zcashVerifiedNotes = vm.fetchZcashVerifiedNotes()
+			zcashSyncInfo = vm.fetchZcashSyncInfo()
 		}
 	}
 
