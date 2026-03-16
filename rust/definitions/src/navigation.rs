@@ -1034,24 +1034,6 @@ pub struct PenumbraSignRequest {
     pub raw_qr_hex: String,
 }
 
-/// Zcash sign request parsed from QR
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZcashSignRequest {
-    pub account_index: u32,
-    pub sighash: String,
-    pub alphas: Vec<String>,
-    pub summary: String,
-    /// Network: true = mainnet, false = testnet
-    pub mainnet: bool,
-}
-
-/// Zcash signature response to encode as QR
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZcashSignatureResponse {
-    pub sighash: String,
-    pub orchard_sigs: Vec<String>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashVerifiedNoteDisplay {
     pub value: u64,

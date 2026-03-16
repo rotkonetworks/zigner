@@ -219,29 +219,6 @@ struct CameraView: View {
             }
         }
         .fullScreenModal(
-            isPresented: $viewModel.isPresentingZcashTransaction,
-            onDismiss: {
-                model.payload = nil
-                model.start()
-                viewModel.clearTransactionState()
-            }
-        ) {
-            if let hex = viewModel.zcashQrHex {
-                ZcashTransactionView(
-                    viewModel: .init(
-                        qrHex: hex,
-                        onCompletion: {
-                            viewModel.isPresentingZcashTransaction = false
-                            viewModel.zcashQrHex = nil
-                            model.payload = nil
-                            model.start()
-                            viewModel.clearTransactionState()
-                        }
-                    )
-                )
-            }
-        }
-        .fullScreenModal(
             isPresented: $viewModel.isPresentingZcashNoteSync,
             onDismiss: {
                 model.payload = nil
@@ -374,12 +351,10 @@ extension CameraView {
 
         // Penumbra / Zcash transaction modals
         @Published var isPresentingPenumbraTransaction: Bool = false
-        @Published var isPresentingZcashTransaction: Bool = false
         @Published var isPresentingZcashNoteSync: Bool = false
         @Published var isPresentingFrost: Bool = false
         @Published var isPresentingZcashPczt: Bool = false
         var penumbraQrHex: String?
-        var zcashQrHex: String?
         var zcashNotesUrFrames: [String]?
         var zcashPcztUrFrames: [String]?
         var frostJsonPayload: String?
@@ -440,9 +415,6 @@ extension CameraView {
             case let .penumbraTransaction(hexData):
                 penumbraQrHex = hexData
                 isPresentingPenumbraTransaction = true
-            case let .zcashSignRequest(hexData):
-                zcashQrHex = hexData
-                isPresentingZcashTransaction = true
             case let .zcashNotes(urFrames):
                 zcashNotesUrFrames = urFrames
                 isPresentingZcashNoteSync = true

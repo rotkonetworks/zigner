@@ -797,21 +797,6 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string get_zcash_transparent_address([ByRef] string seed_phrase, u32 account, boolean mainnet);
 
-    // Parse Zcash sign request from QR hex data
-    [Throws=ErrorDisplayed]
-    ZcashSignRequest parse_zcash_sign_request([ByRef] string qr_hex);
-
-    // Sign Zcash transaction and return signature response
-    [Throws=ErrorDisplayed]
-    ZcashSignatureResponse sign_zcash_transaction([ByRef] string seed_phrase, ZcashSignRequest request);
-
-    // Encode Zcash signature response as QR hex
-    [Throws=ErrorDisplayed]
-    sequence<u8> encode_zcash_signature_qr(ZcashSignatureResponse response);
-
-    // Generate a test Zcash sign request QR (for development/testing only)
-    string generate_test_zcash_sign_request(u32 account_index, u32 action_count, boolean mainnet, [ByRef] string summary);
-
     // ========================================================================
     // Zcash note sync (verified balance via animated QR)
     // ========================================================================
@@ -1377,20 +1362,6 @@ dictionary ZcashNoteSyncResult {
     boolean mainnet;
 };
 
-// Zcash sign request parsed from QR
-dictionary ZcashSignRequest {
-    u32 account_index;
-    string sighash;
-    sequence<string> alphas;
-    string summary;
-    boolean mainnet;
-};
-
-// Zcash signature response to encode as QR
-dictionary ZcashSignatureResponse {
-    string sighash;
-    sequence<string> orchard_sigs;
-};
 
 [Enum]
 interface Card {

@@ -14,7 +14,6 @@ enum DecodedPayloadType: Equatable {
     case dynamicDerivations
     case dynamicDerivationsTransaction
     case penumbraTransaction
-    case zcashSignRequest
     case zcashNotes
     case frost
     case zcashPczt
@@ -25,7 +24,6 @@ enum DecodedPayload: Equatable {
     case dynamicDerivations(String)
     case dynamicDerivationsTransaction([String])
     case penumbraTransaction(String)
-    case zcashSignRequest(String)
     case zcashNotes([String])
     case frost(String) // raw JSON string with "frost" key
     case zcashPczt([String]) // UR frames for PCZT signing
@@ -40,8 +38,6 @@ enum DecodedPayload: Equatable {
             DecodedPayloadType.dynamicDerivationsTransaction
         case .penumbraTransaction:
             DecodedPayloadType.penumbraTransaction
-        case .zcashSignRequest:
-            DecodedPayloadType.zcashSignRequest
         case .frost:
             DecodedPayloadType.frost
         case .zcashPczt:
@@ -280,13 +276,6 @@ private extension CameraService {
             if hexPrefix == "530310" {
                 callbackQueue.async {
                     self.payload = .penumbraTransaction(first)
-                    self.shutdown()
-                }
-                return
-            }
-            if hexPrefix == "530402" {
-                callbackQueue.async {
-                    self.payload = .zcashSignRequest(first)
                     self.shutdown()
                 }
                 return

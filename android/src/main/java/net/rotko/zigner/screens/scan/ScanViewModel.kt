@@ -38,11 +38,6 @@ import io.parity.signer.uniffi.ModalData
 import io.parity.signer.uniffi.ScreenData
 import io.parity.signer.uniffi.SeedKeysPreview
 import io.parity.signer.uniffi.TransactionType
-import io.parity.signer.uniffi.ZcashSignRequest
-import io.parity.signer.uniffi.ZcashSignatureResponse
-import io.parity.signer.uniffi.parseZcashSignRequest
-import io.parity.signer.uniffi.signZcashTransaction as uniffiSignZcashTransaction
-import io.parity.signer.uniffi.encodeZcashSignatureQr
 import io.parity.signer.uniffi.PenumbraSignRequest
 import io.parity.signer.uniffi.parsePenumbraSignRequest
 import io.parity.signer.uniffi.signPenumbraTransaction as uniffiSignPenumbraTransaction
@@ -83,10 +78,6 @@ class ScanViewModel : ViewModel() {
 	val transactionError: MutableStateFlow<LocalErrorSheetModel?> =
 		MutableStateFlow(null)
 	val errorWrongPassword = MutableStateFlow<Boolean>(false)
-
-	// Zcash signing state
-	var zcashSignRequest: MutableStateFlow<ZcashSignRequest?> = MutableStateFlow(null)
-	var zcashSignatureQr: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
 
 	// Penumbra signing state
 	var penumbraSignRequest: MutableStateFlow<PenumbraSignRequest?> = MutableStateFlow(null)
@@ -393,7 +384,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || zcashSignRequest.value != null || zcashSignatureQr.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null) {
 			clearState()
 			true
 		} else {
@@ -410,8 +401,6 @@ class ScanViewModel : ViewModel() {
 		transactionError.value = null
 		transactionIsInProgress.value = false
 		errorWrongPassword.value = false
-		zcashSignRequest.value = null
-		zcashSignatureQr.value = null
 		penumbraSignRequest.value = null
 		penumbraSignatureQr.value = null
 		cosmosSignRequest.value = null
@@ -498,80 +487,6 @@ class ScanViewModel : ViewModel() {
 		fakeNavigator.backAction()
 		// Pretending to navigate back to `Scan` so navigation states for new QR code scan will work
 		fakeNavigator.navigate(Action.NAVBAR_SCAN, "", "")
-	}
-
-	/**
-	 * Parse Zcash sign request from QR hex and set it for display
-	 */
-	fun performZcashSignRequest(qrHex: String, context: Context) {
-		try {
-			val request = parseZcashSignRequest(qrHex)
-			zcashSignRequest.value = request
-		} catch (e: Exception) {
-			Timber.e(e, "Failed to parse Zcash sign request")
-			transactionError.value = LocalErrorSheetModel(
-				title = context.getString(R.string.scan_screen_error_bad_format_title),
-				subtitle = e.message ?: "Failed to parse Zcash transaction"
-			)
-		}
-	}
-
-	/**
-	 * Sign Zcash transaction and generate signature QR
-	 * Uses the first available Zcash seed phrase
-	 */
-	suspend fun signZcashTransaction(context: Context) {
-		val request = zcashSignRequest.value ?: return
-
-		viewModelScope.launch {
-			try {
-				// Get the seed phrase for signing
-				// For Zcash, we need to find the appropriate seed
-				when (val seeds = seedRepository.getAllSeeds()) {
-					is RepoResult.Failure -> {
-						Timber.e(TAG, "Failed to get seeds for Zcash signing: ${seeds.error}")
-						transactionError.value = LocalErrorSheetModel(
-							title = "Signing Error",
-							subtitle = "Could not access seed phrases"
-						)
-						return@launch
-					}
-					is RepoResult.Success -> {
-						// Use the first seed that has the required account
-						// TODO: add proper seed selection UI for Zcash
-						val seedPhrase = seeds.result.values.firstOrNull()
-						if (seedPhrase == null) {
-							transactionError.value = LocalErrorSheetModel(
-								title = "No Seed Found",
-								subtitle = "No seed phrase available for signing"
-							)
-							return@launch
-						}
-
-						// Sign the transaction via FFI
-						val response = uniffiSignZcashTransaction(seedPhrase, request)
-
-						// Encode as QR bytes
-						val qrBytes = encodeZcashSignatureQr(response)
-						zcashSignatureQr.value = qrBytes.map { it.toByte() }.toByteArray()
-					}
-				}
-			} catch (e: Exception) {
-				Timber.e(e, "Failed to sign Zcash transaction")
-				transactionError.value = LocalErrorSheetModel(
-					title = "Signing Failed",
-					subtitle = e.message ?: "Unknown error during signing"
-				)
-			}
-		}
-	}
-
-	/**
-	 * Clear Zcash signing state
-	 */
-	fun clearZcashState() {
-		zcashSignRequest.value = null
-		zcashSignatureQr.value = null
 	}
 
 	/**

@@ -32,11 +32,6 @@ class CameraViewModel() : ViewModel() {
 	val pendingTransactionPayloads: StateFlow<Set<String>> =
 		_pendingTransactionPayloads.asStateFlow()
 
-	// Zcash sign request payload (detected by 530402 prefix)
-	private val _zcashSignRequestPayload = MutableStateFlow<String?>(null)
-	val zcashSignRequestPayload: StateFlow<String?> =
-		_zcashSignRequestPayload.asStateFlow()
-
 	// Penumbra sign request payload (detected by 530310 prefix)
 	private val _penumbraSignRequestPayload = MutableStateFlow<String?>(null)
 	val penumbraSignRequestPayload: StateFlow<String?> =
@@ -177,13 +172,7 @@ class CameraViewModel() : ViewModel() {
 
 	private fun decode(completePayload: List<String>) {
 		try {
-			// Check for Zcash sign request first (prefix 530402)
 			val firstPayload = completePayload.firstOrNull() ?: return
-			if (isZcashSignRequest(firstPayload)) {
-				resetScanValues()
-				_zcashSignRequestPayload.value = firstPayload
-				return
-			}
 
 			if (isPenumbraTransaction(firstPayload)) {
 				resetScanValues()
@@ -235,13 +224,6 @@ class CameraViewModel() : ViewModel() {
 		} catch (e: Exception) {
 			Timber.e(e, "Single frame decode failed")
 		}
-	}
-
-	/**
-	 * Check if hex payload is a Zcash sign request (prefix 530402)
-	 */
-	private fun isZcashSignRequest(hexPayload: String): Boolean {
-		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
 	}
 
 	/**
@@ -337,7 +319,6 @@ class CameraViewModel() : ViewModel() {
 		_bananaSplitPayload.value = null
 		_dynamicDerivationPayload.value = null
 		_dynamicDerivationTransactionPayload.value = null
-		_zcashSignRequestPayload.value = null
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null
 		_urBackupFrames.value = emptyList()
@@ -367,10 +348,6 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetFrostPayload() {
 		_frostPayload.value = null
-	}
-
-	fun resetZcashSignRequest() {
-		_zcashSignRequestPayload.value = null
 	}
 
 	fun resetPenumbraSignRequest() {

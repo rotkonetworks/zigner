@@ -29,14 +29,12 @@ import net.rotko.zigner.screens.scan.transaction.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
-import net.rotko.zigner.screens.scan.transaction.ZcashTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraSignatureQrScreen
 import net.rotko.zigner.screens.scan.transaction.CosmosTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.CosmosSignatureQrScreen
 import net.rotko.zigner.screens.scan.transaction.dynamicderivations.AddDynamicDerivationScreenFull
 import net.rotko.zigner.screens.scan.transaction.previewType
-import net.rotko.zigner.screens.scan.transaction.ZcashSignatureQrScreen
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
 import io.parity.signer.uniffi.Action
 import kotlinx.coroutines.launch
@@ -65,10 +63,6 @@ fun ScanNavSubgraph(
 	val passwordModel = scanViewModel.passwordModel.collectAsStateWithLifecycle()
 	val errorWrongPassword =
 		scanViewModel.errorWrongPassword.collectAsStateWithLifecycle()
-
-	// Zcash signing state
-	val zcashSignRequest = scanViewModel.zcashSignRequest.collectAsStateWithLifecycle()
-	val zcashSignatureQr = scanViewModel.zcashSignatureQr.collectAsStateWithLifecycle()
 
 	// Penumbra signing state
 	val penumbraSignRequest = scanViewModel.penumbraSignRequest.collectAsStateWithLifecycle()
@@ -205,29 +199,6 @@ fun ScanNavSubgraph(
 			model = dynamicDerivationsData,
 			onClose = scanViewModel::clearState,
 		)
-	} else if (zcashSignatureQr.value != null) {
-		// Show Zcash signature QR after signing
-		ZcashSignatureQrScreen(
-			signatureBytes = zcashSignatureQr.value!!,
-			modifier = Modifier.statusBarsPadding(),
-			onDone = {
-				scanViewModel.clearZcashState()
-			}
-		)
-	} else if (zcashSignRequest.value != null) {
-		// Show Zcash transaction for approval
-		ZcashTransactionScreen(
-			request = zcashSignRequest.value!!,
-			modifier = Modifier.statusBarsPadding(),
-			onApprove = {
-				scanViewModel.viewModelScope.launch {
-					scanViewModel.signZcashTransaction(context)
-				}
-			},
-			onDecline = {
-				scanViewModel.clearZcashState()
-			}
-		)
 	} else if (cosmosSignatureQr.value != null) {
 		// Show Cosmos signature QR after signing
 		CosmosSignatureQrScreen(
@@ -287,9 +258,6 @@ fun ScanNavSubgraph(
 			},
 			onDynamicDerivationsTransactions = { payload ->
 				scanViewModel.performDynamicDerivationTransaction(payload, context)
-			},
-			onZcashSignRequest = { payload ->
-				scanViewModel.performZcashSignRequest(payload, context)
 			},
 			onPenumbraSignRequest = { payload ->
 				scanViewModel.performPenumbraSignRequest(payload, context)
