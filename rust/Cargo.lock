@@ -6980,6 +6980,7 @@ dependencies = [
  "frost-spend",
  "generate_message",
  "hex",
+ "hmac 0.12.1",
  "lazy_static",
  "log",
  "navigator",
@@ -6999,6 +7000,7 @@ dependencies = [
  "uniffi",
  "uniffi_build",
  "ur",
+ "zcash_address 0.4.0",
  "zcash_transparent",
 ]
 

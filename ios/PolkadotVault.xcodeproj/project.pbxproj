@@ -402,9 +402,11 @@
 		B0E304A8F49E156228013A5C /* ZcashFvkExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC076CB7CC9B540743E7F287 /* ZcashFvkExportView.swift */; };
 		705442E48846CCF6633734A7 /* PenumbraTransactionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5763CE57DFBB1912C4E338 /* PenumbraTransactionView.swift */; };
 		91B2202E46EA1883E52B9CEA /* PenumbraSignatureQrView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C9803E642691F8971689C3 /* PenumbraSignatureQrView.swift */; };
-		D1F352A640D57BB9548C5B5E /* ZcashTransactionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6170C00BAEB918C220842AD /* ZcashTransactionView.swift */; };
-		7120BE81916E0741E676C214 /* ZcashSignatureQrView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D37A676FD5EA8DC1874EC4 /* ZcashSignatureQrView.swift */; };
 		B3A1F90E2D8C4A1B00ZCNOTE /* ZcashNoteSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1F90F2D8C4A1B00ZCNOTE /* ZcashNoteSyncView.swift */; };
+		AA100001PCZTVIEW0000001 /* ZcashPcztView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002PCZTVIEW0000001 /* ZcashPcztView.swift */; };
+		AA200001FROSTDKG0000001 /* FrostDkgView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200002FROSTDKG0000001 /* FrostDkgView.swift */; };
+		AA200003FROSTSIGN000001 /* FrostSignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200004FROSTSIGN000001 /* FrostSignView.swift */; };
+		AA300001AUTHCHALL000001 /* AuthChallengeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA300002AUTHCHALL000001 /* AuthChallengeView.swift */; };
 		CC000001COSMOSACCT00001 /* CosmosAccountExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC000002COSMOSACCT00001 /* CosmosAccountExportView.swift */; };
 /* End PBXBuildFile section */
 
@@ -845,9 +847,11 @@
 		EC076CB7CC9B540743E7F287 /* ZcashFvkExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZcashFvkExportView.swift; sourceTree = "<group>"; };
 		6F5763CE57DFBB1912C4E338 /* PenumbraTransactionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenumbraTransactionView.swift; sourceTree = "<group>"; };
 		C9C9803E642691F8971689C3 /* PenumbraSignatureQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PenumbraSignatureQrView.swift; sourceTree = "<group>"; };
-		C6170C00BAEB918C220842AD /* ZcashTransactionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZcashTransactionView.swift; sourceTree = "<group>"; };
-		A9D37A676FD5EA8DC1874EC4 /* ZcashSignatureQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZcashSignatureQrView.swift; sourceTree = "<group>"; };
 		B3A1F90F2D8C4A1B00ZCNOTE /* ZcashNoteSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZcashNoteSyncView.swift; sourceTree = "<group>"; };
+		AA100002PCZTVIEW0000001 /* ZcashPcztView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZcashPcztView.swift; sourceTree = "<group>"; };
+		AA200002FROSTDKG0000001 /* FrostDkgView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrostDkgView.swift; sourceTree = "<group>"; };
+		AA200004FROSTSIGN000001 /* FrostSignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrostSignView.swift; sourceTree = "<group>"; };
+		AA300002AUTHCHALL000001 /* AuthChallengeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthChallengeView.swift; sourceTree = "<group>"; };
 		CC000002COSMOSACCT00001 /* CosmosAccountExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CosmosAccountExportView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -1163,6 +1167,8 @@
 			children = (
 				AA000001PENUMBRASCAN0001 /* Penumbra */,
 				AA000002ZCASHSCAN000001 /* Zcash */,
+				AA200000FROSTSCAN000001 /* Frost */,
+				AA300000AUTHSCAN0000001 /* Auth */,
 				6DED2AB32A405DB800EF1C49 /* AddKeysForNetwork */,
 				6DB39AA22A4579CF004B8FAA /* DynamicDerivations */,
 				6DF91F3C29C06B17000A6BB2 /* Services */,
@@ -2421,11 +2427,27 @@
 		AA000002ZCASHSCAN000001 /* Zcash */ = {
 			isa = PBXGroup;
 			children = (
-				C6170C00BAEB918C220842AD /* ZcashTransactionView.swift */,
-				A9D37A676FD5EA8DC1874EC4 /* ZcashSignatureQrView.swift */,
 				B3A1F90F2D8C4A1B00ZCNOTE /* ZcashNoteSyncView.swift */,
+				AA100002PCZTVIEW0000001 /* ZcashPcztView.swift */,
 			);
 			path = Zcash;
+			sourceTree = "<group>";
+		};
+		AA200000FROSTSCAN000001 /* Frost */ = {
+			isa = PBXGroup;
+			children = (
+				AA200002FROSTDKG0000001 /* FrostDkgView.swift */,
+				AA200004FROSTSIGN000001 /* FrostSignView.swift */,
+			);
+			path = Frost;
+			sourceTree = "<group>";
+		};
+		AA300000AUTHSCAN0000001 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				AA300002AUTHCHALL000001 /* AuthChallengeView.swift */,
+			);
+			path = Auth;
 			sourceTree = "<group>";
 		};
 		CC000003COSMOSACCT00001 /* CosmosAccounts */ = {
@@ -2723,9 +2745,11 @@
 				B0E304A8F49E156228013A5C /* ZcashFvkExportView.swift in Sources */,
 				705442E48846CCF6633734A7 /* PenumbraTransactionView.swift in Sources */,
 				91B2202E46EA1883E52B9CEA /* PenumbraSignatureQrView.swift in Sources */,
-				D1F352A640D57BB9548C5B5E /* ZcashTransactionView.swift in Sources */,
-				7120BE81916E0741E676C214 /* ZcashSignatureQrView.swift in Sources */,
 				B3A1F90E2D8C4A1B00ZCNOTE /* ZcashNoteSyncView.swift in Sources */,
+				AA100001PCZTVIEW0000001 /* ZcashPcztView.swift in Sources */,
+				AA200001FROSTDKG0000001 /* FrostDkgView.swift in Sources */,
+				AA200003FROSTSIGN000001 /* FrostSignView.swift in Sources */,
+				AA300001AUTHCHALL000001 /* AuthChallengeView.swift in Sources */,
 				CC000001COSMOSACCT00001 /* CosmosAccountExportView.swift in Sources */,
 				6DD860E8299CAD140000D81E /* OnboadingAirgapView+Components.swift in Sources */,
 				6D3423352994F0D200F3BA27 /* ErrorBottomModalViewModel+TransactionErrors.swift in Sources */,
