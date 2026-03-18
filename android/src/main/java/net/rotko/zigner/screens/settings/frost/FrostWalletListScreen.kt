@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import io.parity.signer.uniffi.FrostWalletSummaryFFI
+import io.parity.signer.uniffi.FrostWalletSummaryFfi
 import io.parity.signer.uniffi.frostDeleteWallet
 import io.parity.signer.uniffi.frostListWallets
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +30,7 @@ import net.rotko.zigner.ui.theme.*
 fun FrostWalletListScreen(
 	onBack: Callback,
 ) {
-	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFFI>>(emptyList()) }
+	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
 	var error by remember { mutableStateOf<String?>(null) }
 	var confirmDeleteId by remember { mutableStateOf<String?>(null) }
 	val scope = rememberCoroutineScope()
@@ -132,7 +132,7 @@ fun FrostWalletListScreen(
 
 @Composable
 private fun FrostWalletRow(
-	wallet: FrostWalletSummaryFFI,
+	wallet: FrostWalletSummaryFfi,
 	isConfirmingDelete: Boolean,
 	onDeleteTap: Callback,
 	onDeleteConfirm: Callback,
@@ -251,7 +251,7 @@ private fun PreviewFrostWalletListPopulated() {
 	SignerNewTheme {
 		FrostWalletListContent(
 			wallets = listOf(
-				FrostWalletSummaryFFI(
+				FrostWalletSummaryFfi(
 					walletId = "abcdef0123456789abcdef0123456789",
 					label = "Treasury",
 					minSigners = 2.toUShort(),
@@ -259,7 +259,7 @@ private fun PreviewFrostWalletListPopulated() {
 					mainnet = true,
 					createdAt = 1700000000uL,
 				),
-				FrostWalletSummaryFFI(
+				FrostWalletSummaryFfi(
 					walletId = "1234567890abcdef1234567890abcdef",
 					label = "Test Wallet",
 					minSigners = 3.toUShort(),
@@ -283,7 +283,7 @@ private fun PreviewFrostWalletListPopulated() {
  */
 @Composable
 private fun FrostWalletListContent(
-	wallets: List<FrostWalletSummaryFFI>,
+	wallets: List<FrostWalletSummaryFfi>,
 	error: String?,
 	confirmDeleteId: String?,
 	onDeleteTap: (String) -> Unit,
