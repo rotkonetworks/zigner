@@ -6,6 +6,10 @@ import net.rotko.zigner.domain.abbreviateString
 import net.rotko.zigner.ui.helpers.PreviewData
 import io.parity.signer.uniffi.Card
 import io.parity.signer.uniffi.MTransaction
+import io.parity.signer.uniffi.ZcashTransactionSummary
+import io.parity.signer.uniffi.ZcashOrchardSpend
+import io.parity.signer.uniffi.ZcashOrchardOutput
+import io.parity.signer.uniffi.PenumbraTransactionSummary
 
 /**
  * Local version of [Mtransaction] for the case of signing elements
@@ -19,20 +23,13 @@ data class SigningTransactionModel(
 		fun createStub(): SigningTransactionModel =
 			SigningTransactionModel(
 				summaryModels = listOf(
-					TransactionSummaryModel(
+					TransactionSummaryModel.Substrate(
 						pallet = "Balances",
 						method = "transfer_keep_alive",
 						destination = "1219xC79CXV31543DDXoQMjuA",
 						value = "0.2 WND",
 						mTransactionIndex = 0,
 					),
-					TransactionSummaryModel(
-						pallet = "Balances2",
-						method = "transfer_keep_alive2",
-						destination = "1219xC79CXV31543DDXoQMjuA2",
-						value = "0.3 WND",
-						mTransactionIndex = 1,
-					)
 				),
 				keyModel = KeyCardModelBase(
 					path = "//polkadot//1",
@@ -60,64 +57,102 @@ fun List<IndexedValue<MTransaction>>.toSigningTransactionModels(): List<SigningT
 }
 
 private fun IndexedValue<MTransaction>.toSigningTransactionModel(): SigningTransactionModel {
-	var pallet: String = ""
-	var method: String = ""
-	var destination: String = ""
-	var parameter: String = ""
-
 	val methodCards = value.content.method?.map { it.card } ?: emptyList()
+
+	// detect zcash transaction
+	val zcashSummary = methodCards.filterIsInstance<Card.ZcashSummaryCard>().firstOrNull()
+	if (zcashSummary != null) {
+		val spends = methodCards.filterIsInstance<Card.ZcashOrchardSpendCard>().map { it.f }
+		val outputs = methodCards.filterIsInstance<Card.ZcashOrchardOutputCard>().map { it.f }
+		return SigningTransactionModel(
+			summaryModels = listOf(
+				TransactionSummaryModel.Zcash(
+					summary = zcashSummary.f,
+					spends = spends,
+					outputs = outputs,
+					mTransactionIndex = index,
+				)
+			),
+			keyModel = extractKeyModel(),
+		)
+	}
+
+	// detect penumbra transaction
+	val penumbraSummary = methodCards.filterIsInstance<Card.PenumbraSummaryCard>().firstOrNull()
+	if (penumbraSummary != null) {
+		return SigningTransactionModel(
+			summaryModels = listOf(
+				TransactionSummaryModel.Penumbra(
+					summary = penumbraSummary.f,
+					mTransactionIndex = index,
+				)
+			),
+			keyModel = extractKeyModel(),
+		)
+	}
+
+	// substrate (default)
+	var pallet = ""
+	var method = ""
+	var destination = ""
+	var parameter = ""
+
 	for (methodCard in methodCards) {
 		when (methodCard) {
-			is Card.PalletCard -> {
-				pallet = methodCard.f
-			}
-			is Card.CallCard -> {
-				method = methodCard.f.methodName
-			}
-			is Card.IdCard -> {
-				destination = methodCard.f.base58.abbreviateString(
-					BASE58_STYLE_ABBREVIATE
-				)
-			}
-			is Card.BalanceCard -> {
-				parameter = "${methodCard.f.amount} ${methodCard.f.units}"
-			}
-			else -> {
-				//ignore the rest of the cards
-			}
+			is Card.PalletCard -> pallet = methodCard.f
+			is Card.CallCard -> method = methodCard.f.methodName
+			is Card.IdCard -> destination = methodCard.f.base58.abbreviateString(BASE58_STYLE_ABBREVIATE)
+			is Card.BalanceCard -> parameter = "${methodCard.f.amount} ${methodCard.f.units}"
+			else -> {}
 		}
 	}
 	return SigningTransactionModel(
 		summaryModels = listOf(
-			TransactionSummaryModel(
+			TransactionSummaryModel.Substrate(
 				pallet = pallet,
 				method = method,
 				destination = destination,
 				value = parameter,
-				mTransactionIndex = index
+				mTransactionIndex = index,
 			)
 		),
-		keyModel = value.authorInfo?.let { author ->
-			KeyCardModelBase(
-				path = author.address.path,
-				seedName = author.address.seedName,
-				base58 = author.base58,
-				networkLogo = value.networkInfo?.networkLogo,
-				identIcon = author.address.identicon,
-				hasPassword = author.address.hasPwd,
-			)
-		}
+		keyModel = extractKeyModel(),
 	)
 }
 
+private fun IndexedValue<MTransaction>.extractKeyModel(): KeyCardModelBase? {
+	return value.authorInfo?.let { author ->
+		KeyCardModelBase(
+			path = author.address.path,
+			seedName = author.address.seedName,
+			base58 = author.base58,
+			networkLogo = value.networkInfo?.networkLogo,
+			identIcon = author.address.identicon,
+			hasPassword = author.address.hasPwd,
+		)
+	}
+}
 
-data class TransactionSummaryModel(
-	val pallet: String,
-	val method: String,
-	val destination: String,
-	val value: String,
-	val mTransactionIndex: Int
-)
+sealed class TransactionSummaryModel {
+	abstract val mTransactionIndex: Int
 
+	data class Substrate(
+		val pallet: String,
+		val method: String,
+		val destination: String,
+		val value: String,
+		override val mTransactionIndex: Int,
+	) : TransactionSummaryModel()
 
+	data class Zcash(
+		val summary: ZcashTransactionSummary,
+		val spends: List<ZcashOrchardSpend>,
+		val outputs: List<ZcashOrchardOutput>,
+		override val mTransactionIndex: Int,
+	) : TransactionSummaryModel()
 
+	data class Penumbra(
+		val summary: PenumbraTransactionSummary,
+		override val mTransactionIndex: Int,
+	) : TransactionSummaryModel()
+}
