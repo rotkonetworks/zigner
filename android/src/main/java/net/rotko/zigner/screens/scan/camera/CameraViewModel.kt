@@ -42,6 +42,11 @@ class CameraViewModel() : ViewModel() {
 	val cosmosSignRequestPayload: StateFlow<String?> =
 		_cosmosSignRequestPayload.asStateFlow()
 
+	// Zcash simple sign request payload (detected by 530402 prefix)
+	private val _zcashSimpleSignPayload = MutableStateFlow<String?>(null)
+	val zcashSimpleSignPayload: StateFlow<String?> =
+		_zcashSimpleSignPayload.asStateFlow()
+
 	// UR backup frames (multipart UR QR codes starting with "ur:")
 	private val _urBackupFrames = MutableStateFlow<List<String>>(emptyList())
 	val urBackupFrames: StateFlow<List<String>> = _urBackupFrames.asStateFlow()
@@ -193,6 +198,12 @@ class CameraViewModel() : ViewModel() {
 				return
 			}
 
+			if (isZcashSimpleSignRequest(firstPayload)) {
+				resetScanValues()
+				_zcashSimpleSignPayload.value = firstPayload
+				return
+			}
+
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
@@ -245,6 +256,17 @@ class CameraViewModel() : ViewModel() {
 	 */
 	private fun isCosmosSignRequest(hexPayload: String): Boolean {
 		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530510", ignoreCase = true)
+	}
+
+	/**
+	 * Check if hex payload is a Zcash simple sign request (prefix 530402)
+	 */
+	private fun isZcashSimpleSignRequest(hexPayload: String): Boolean {
+		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
+	}
+
+	fun resetZcashSimpleSign() {
+		_zcashSimpleSignPayload.value = null
 	}
 
 	/**
@@ -328,6 +350,7 @@ class CameraViewModel() : ViewModel() {
 		_dynamicDerivationTransactionPayload.value = null
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null
+		_zcashSimpleSignPayload.value = null
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
 		_zcashNotesFrames.value = emptyList()

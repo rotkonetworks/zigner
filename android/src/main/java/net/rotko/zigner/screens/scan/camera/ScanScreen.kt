@@ -40,6 +40,7 @@ fun ScanScreen(
 	onDynamicDerivationsTransactions: suspend (List<String>) -> Unit,
 	onPenumbraSignRequest: (String) -> Unit = {},
 	onCosmosSignRequest: (String) -> Unit = {},
+	onZcashSimpleSign: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 	onZcashNotes: (List<String>) -> Unit = {},
 	onZcashPczt: (List<String>) -> Unit = {},
@@ -59,6 +60,7 @@ fun ScanScreen(
 	)
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
+	val currentOnZcashSimpleSign by rememberUpdatedState(onZcashSimpleSign)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
 	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
@@ -125,6 +127,17 @@ fun ScanScreen(
 				.collect { qrData ->
 					currentOnCosmosSignRequest(qrData)
 					viewModel.resetCosmosSignRequest()
+				}
+		}
+
+		// Zcash simple sign request handler
+		launch {
+			viewModel.zcashSimpleSignPayload
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { qrData ->
+					currentOnZcashSimpleSign(qrData)
+					viewModel.resetZcashSimpleSign()
 				}
 		}
 

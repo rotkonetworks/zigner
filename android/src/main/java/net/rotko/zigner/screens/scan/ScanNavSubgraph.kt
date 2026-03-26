@@ -37,6 +37,8 @@ import net.rotko.zigner.screens.scan.transaction.PenumbraTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.PenumbraSignatureQrScreen
 import net.rotko.zigner.screens.scan.transaction.CosmosTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.CosmosSignatureQrScreen
+import net.rotko.zigner.screens.scan.transaction.UnifiedTransactionScreen
+import net.rotko.zigner.screens.scan.transaction.UnifiedSignatureQrScreen
 import net.rotko.zigner.screens.scan.transaction.dynamicderivations.AddDynamicDerivationScreenFull
 import net.rotko.zigner.screens.scan.transaction.previewType
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
@@ -75,6 +77,10 @@ fun ScanNavSubgraph(
 	// Cosmos signing state
 	val cosmosSignRequest = scanViewModel.cosmosSignRequest.collectAsStateWithLifecycle()
 	val cosmosSignatureQr = scanViewModel.cosmosSignatureQr.collectAsStateWithLifecycle()
+
+	// Unified signing state
+	val unifiedSignRequest = scanViewModel.signRequest.collectAsStateWithLifecycle()
+	val unifiedSignatureResult = scanViewModel.signatureResult.collectAsStateWithLifecycle()
 
 	// UR backup restore state
 	val urBackupFrames = scanViewModel.urBackupFrames.collectAsStateWithLifecycle()
@@ -329,6 +335,27 @@ fun ScanNavSubgraph(
 				scanViewModel.clearPenumbraState()
 			}
 		)
+	} else if (unifiedSignatureResult.value != null) {
+		// Unified signature QR display (currently for zcash simple sign)
+		UnifiedSignatureQrScreen(
+			result = unifiedSignatureResult.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onDone = {
+				scanViewModel.clearSignState()
+			}
+		)
+	} else if (unifiedSignRequest.value != null) {
+		// Unified transaction screen (currently for zcash simple sign)
+		UnifiedTransactionScreen(
+			signRequest = unifiedSignRequest.value!!,
+			modifier = Modifier.statusBarsPadding(),
+			onApprove = {
+				scanViewModel.signUnifiedTransaction(context)
+			},
+			onDecline = {
+				scanViewModel.clearSignState()
+			}
+		)
 	} else if (transactionsValue == null || showingModals) {
 
 		ScanScreen(
@@ -350,6 +377,9 @@ fun ScanNavSubgraph(
 			},
 			onCosmosSignRequest = { payload ->
 				scanViewModel.performCosmosSignRequest(payload, context)
+			},
+			onZcashSimpleSign = { payload ->
+				scanViewModel.performUnifiedSignRequest(payload, context)
 			},
 			onUrBackupRestore = { urFrames ->
 				scanViewModel.urBackupFrames.value = urFrames
