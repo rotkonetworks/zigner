@@ -45,9 +45,19 @@ import io.parity.signer.uniffi.CosmosSignRequest
 import io.parity.signer.uniffi.parseCosmosSignRequest
 import io.parity.signer.uniffi.signCosmosTransaction as uniffiSignCosmosTransaction
 import io.parity.signer.uniffi.ZcashNoteSyncResult
+import io.parity.signer.uniffi.ZcashSimpleSignRequest
 import io.parity.signer.uniffi.decodeAndVerifyZcashNotes
+import io.parity.signer.uniffi.parseZcashSignRequest
+import io.parity.signer.uniffi.signZcashSimple
+import io.parity.signer.uniffi.decodeUrZcashPczt
+import io.parity.signer.uniffi.inspectZcashPczt
+import io.parity.signer.uniffi.signZcashPcztUr
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import net.rotko.zigner.screens.scan.transaction.SignRequest
+import net.rotko.zigner.screens.scan.transaction.SignatureResult
 
 
 private const val TAG = "ScanViewModelTag"
@@ -104,6 +114,10 @@ class ScanViewModel : ViewModel() {
 
 	// PCZT signing state
 	var zcashPcztUrParts: MutableStateFlow<List<String>?> = MutableStateFlow(null)
+
+	// Unified signing state (replaces per-network state above)
+	var signRequest: MutableStateFlow<SignRequest?> = MutableStateFlow(null)
+	var signatureResult: MutableStateFlow<SignatureResult?> = MutableStateFlow(null)
 
 	// FROST multisig state
 	var frostPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
@@ -672,5 +686,143 @@ class ScanViewModel : ViewModel() {
 	fun clearCosmosState() {
 		cosmosSignRequest.value = null
 		cosmosSignatureQr.value = null
+	}
+
+	// ========================================================================
+	// Unified signing methods
+	// ========================================================================
+
+	/**
+	 * Parse any hex-based sign request (Penumbra, Cosmos, or Zcash simple)
+	 * and set the unified signRequest state.
+	 */
+	fun performUnifiedSignRequest(qrHex: String, context: Context) {
+		try {
+			val prefix = if (qrHex.length >= 6) qrHex.substring(0, 6).lowercase() else ""
+			val request: SignRequest = when {
+				prefix == "530310" -> {
+					SignRequest.Penumbra(parsePenumbraSignRequest(qrHex))
+				}
+				prefix == "530510" -> {
+					SignRequest.Cosmos(parseCosmosSignRequest(qrHex))
+				}
+				prefix == "530402" -> {
+					SignRequest.ZcashSimple(parseZcashSignRequest(qrHex))
+				}
+				else -> {
+					throw IllegalArgumentException("Unknown QR prefix: $prefix")
+				}
+			}
+			signRequest.value = request
+		} catch (e: Exception) {
+			Timber.e(e, "Failed to parse sign request")
+			transactionError.value = LocalErrorSheetModel(
+				title = context.getString(R.string.scan_screen_error_bad_format_title),
+				subtitle = e.message ?: "Failed to parse transaction"
+			)
+		}
+	}
+
+	/**
+	 * Parse Zcash PCZT from UR parts: decode → inspect → set signRequest.
+	 */
+	fun performZcashPcztRequest(urParts: List<String>, context: Context) {
+		viewModelScope.launch {
+			try {
+				val pcztBytes = withContext(Dispatchers.Default) {
+					decodeUrZcashPczt(urParts)
+				}
+				val inspection = withContext(Dispatchers.Default) {
+					inspectZcashPczt(pcztBytes)
+				}
+				signRequest.value = SignRequest.ZcashPczt(
+					urParts = urParts,
+					inspection = inspection,
+					pcztBytes = pcztBytes,
+				)
+			} catch (e: Exception) {
+				Timber.e(e, "Failed to inspect PCZT")
+				transactionError.value = LocalErrorSheetModel(
+					title = "PCZT Error",
+					subtitle = e.message ?: "Failed to decode or inspect PCZT"
+				)
+			}
+		}
+	}
+
+	/**
+	 * Sign the current signRequest using the appropriate FFI function.
+	 */
+	fun signUnifiedTransaction(context: Context) {
+		val req = signRequest.value ?: return
+
+		viewModelScope.launch {
+			try {
+				val seedPhrase = getSeedPhrase() ?: return@launch
+
+				when (req) {
+					is SignRequest.Penumbra -> {
+						val sigBytes = uniffiSignPenumbraTransaction(seedPhrase, req.request)
+						val hex = sigBytes.joinToString("") { "%02x".format(it.toByte()) }
+						signatureResult.value = SignatureResult.HexQr(hex, req.networkName)
+					}
+					is SignRequest.Cosmos -> {
+						val sigBytes = uniffiSignCosmosTransaction(seedPhrase, req.request)
+						val hex = sigBytes.joinToString("") { "%02x".format(it.toByte()) }
+						signatureResult.value = SignatureResult.HexQr(hex, req.networkName)
+					}
+					is SignRequest.ZcashSimple -> {
+						val hex = signZcashSimple(seedPhrase, req.request)
+						signatureResult.value = SignatureResult.HexQr(hex, req.networkName)
+					}
+					is SignRequest.ZcashPczt -> {
+						val signedUrParts = withContext(Dispatchers.Default) {
+							signZcashPcztUr(seedPhrase, 0u, req.urParts, 200u)
+						}
+						signatureResult.value = SignatureResult.UrParts(signedUrParts, req.networkName)
+					}
+				}
+			} catch (e: Exception) {
+				Timber.e(e, "Failed to sign transaction")
+				transactionError.value = LocalErrorSheetModel(
+					title = "Signing Failed",
+					subtitle = e.message ?: "Unknown error during signing"
+				)
+			}
+		}
+	}
+
+	/**
+	 * Clear unified signing state.
+	 */
+	fun clearSignState() {
+		signRequest.value = null
+		signatureResult.value = null
+	}
+
+	/**
+	 * Get the first available seed phrase, or show error and return null.
+	 */
+	private suspend fun getSeedPhrase(): String? {
+		return when (val seeds = seedRepository.getAllSeeds()) {
+			is RepoResult.Failure -> {
+				Timber.e(TAG, "Failed to get seeds: ${seeds.error}")
+				transactionError.value = LocalErrorSheetModel(
+					title = "Signing Error",
+					subtitle = "Could not access seed phrases"
+				)
+				null
+			}
+			is RepoResult.Success -> {
+				val phrase = seeds.result.values.firstOrNull()
+				if (phrase == null) {
+					transactionError.value = LocalErrorSheetModel(
+						title = "No Seed Found",
+						subtitle = "No seed phrase available for signing"
+					)
+				}
+				phrase
+			}
+		}
 	}
 }
