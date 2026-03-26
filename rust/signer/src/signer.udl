@@ -782,6 +782,18 @@ namespace signer {
     sequence<u8> sign_penumbra_transaction([ByRef] string seed_phrase, PenumbraSignRequest request);
 
     // ========================================================================
+    // Zcash simple sign request (from Zafu wallet)
+    // ========================================================================
+
+    // Parse Zcash simple sign request from QR hex data
+    [Throws=ErrorDisplayed]
+    ZcashSimpleSignRequest parse_zcash_sign_request([ByRef] string qr_hex);
+
+    // Sign Zcash simple sign request and return signature QR hex string
+    [Throws=ErrorDisplayed]
+    string sign_zcash_simple([ByRef] string seed_phrase, ZcashSimpleSignRequest request);
+
+    // ========================================================================
     // Zcash cold signing functions
     // ========================================================================
 
@@ -1293,6 +1305,16 @@ dictionary AuthSignResult {
     string pubkey_hex;
     string signature_hex;
     string domain;
+};
+
+// Zcash simple sign request (parsed from QR)
+dictionary ZcashSimpleSignRequest {
+    u32 account_index;
+    string sighash_hex;
+    u32 action_count;
+    string summary;
+    boolean mainnet;
+    string raw_qr_hex;
 };
 
 // Signing context: what the signer knows about its balance

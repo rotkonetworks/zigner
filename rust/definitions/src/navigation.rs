@@ -986,6 +986,17 @@ pub struct ZcashOrchardOutput {
     pub is_change: bool,
 }
 
+/// Zcash simple sign request (parsed from QR, exposed via uniffi)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashSimpleSignRequest {
+    pub account_index: u32,
+    pub sighash_hex: String,
+    pub action_count: u32,
+    pub summary: String,
+    pub mainnet: bool,
+    pub raw_qr_hex: String,
+}
+
 /// Zcash Full Viewing Key export data for watch-only wallet import
 ///
 /// Provides multiple formats for maximum compatibility:
