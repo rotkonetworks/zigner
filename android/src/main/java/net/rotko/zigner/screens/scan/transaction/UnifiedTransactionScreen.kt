@@ -8,13 +8,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRow
+import androidx.compose.material.TabRowDefaults
+import androidx.compose.material.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeader
 import net.rotko.zigner.components.base.SecondaryButtonWide
@@ -23,8 +28,9 @@ import net.rotko.zigner.ui.theme.*
 
 /**
  * Unified transaction signing screen.
- * Renders different content based on network type (Penumbra, Cosmos, Zcash).
- * Has Simple (human-readable) and Complex (raw payload) tabs.
+ * Renders different content based on network type.
+ * Simple tab: human-readable summary focused on what matters (recipient, amount, tx type).
+ * Advanced tab: raw QR hex payload for verification.
  */
 @Composable
 fun UnifiedTransactionScreen(
@@ -34,7 +40,7 @@ fun UnifiedTransactionScreen(
 	modifier: Modifier = Modifier,
 ) {
 	var selectedTab by remember { mutableStateOf(0) }
-	val tabs = listOf("Simple", "Complex")
+	val tabs = listOf("Simple", "Advanced")
 
 	Column(
 		modifier = modifier
@@ -42,15 +48,32 @@ fun UnifiedTransactionScreen(
 			.background(MaterialTheme.colors.backgroundPrimary)
 	) {
 		ScreenHeader(
-			title = "${signRequest.networkName} Transaction",
+			title = "Sign Transaction",
 			onBack = onDecline,
 		)
+
+		// Network badge
+		Row(
+			modifier = Modifier
+				.padding(horizontal = 16.dp)
+				.padding(bottom = 8.dp),
+			horizontalArrangement = Arrangement.spacedBy(8.dp),
+		) {
+			NetworkBadge(signRequest.networkName)
+			TxTypeBadge(signRequest)
+		}
 
 		// Tab row
 		TabRow(
 			selectedTabIndex = selectedTab,
 			backgroundColor = MaterialTheme.colors.backgroundPrimary,
 			contentColor = MaterialTheme.colors.primary,
+			indicator = { tabPositions ->
+				TabRowDefaults.Indicator(
+					modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+					color = MaterialTheme.colors.primary,
+				)
+			},
 			modifier = Modifier.padding(horizontal = 16.dp),
 		) {
 			tabs.forEachIndexed { index, title ->
@@ -81,7 +104,7 @@ fun UnifiedTransactionScreen(
 		) {
 			when (selectedTab) {
 				0 -> SimpleTabContent(signRequest)
-				1 -> ComplexTabContent(signRequest)
+				1 -> AdvancedTabContent(signRequest)
 			}
 		}
 
@@ -103,7 +126,65 @@ fun UnifiedTransactionScreen(
 }
 
 // =============================================================================
-// Simple tab — human-readable summary per network
+// Network + TX type badges
+// =============================================================================
+
+@Composable
+private fun NetworkBadge(name: String) {
+	val color = when {
+		name.contains("Penumbra") -> Color(0xFF8B5CF6)
+		name.contains("Cosmos") || name.contains("Noble") || name.contains("Osmosis") -> Color(0xFF6366F1)
+		name.contains("Zcash") -> Color(0xFFF5A623)
+		else -> MaterialTheme.colors.primary
+	}
+	Text(
+		text = name,
+		style = SignerTypeface.LabelM.copy(fontWeight = FontWeight.Bold),
+		color = color,
+		modifier = Modifier
+			.clip(RoundedCornerShape(6.dp))
+			.background(color.copy(alpha = 0.15f))
+			.padding(horizontal = 10.dp, vertical = 4.dp),
+	)
+}
+
+@Composable
+private fun TxTypeBadge(signRequest: SignRequest) {
+	val txType = when (signRequest) {
+		is SignRequest.Penumbra -> {
+			val r = signRequest.request
+			when {
+				r.spendCount > 0u && r.voteCount == 0u -> "Spend"
+				r.voteCount > 0u -> "Governance Vote"
+				r.lqtVoteCount > 0u -> "LQT Vote"
+				else -> "Transaction"
+			}
+		}
+		is SignRequest.Cosmos -> {
+			val msgs = signRequest.request.msgs
+			when {
+				msgs.size == 1 -> msgs.first().msgType
+				msgs.size > 1 -> "${msgs.size} Messages"
+				else -> "Transaction"
+			}
+		}
+		is SignRequest.ZcashSimple -> "Orchard Spend"
+		is SignRequest.ZcashPczt -> "PCZT"
+	}
+
+	Text(
+		text = txType,
+		style = SignerTypeface.LabelM,
+		color = MaterialTheme.colors.textSecondary,
+		modifier = Modifier
+			.clip(RoundedCornerShape(6.dp))
+			.background(MaterialTheme.colors.fill6)
+			.padding(horizontal = 10.dp, vertical = 4.dp),
+	)
+}
+
+// =============================================================================
+// Simple tab — focused on what matters: recipient, amount, tx type
 // =============================================================================
 
 @Composable
@@ -119,70 +200,123 @@ private fun SimpleTabContent(signRequest: SignRequest) {
 @Composable
 private fun PenumbraSimpleContent(req: SignRequest.Penumbra) {
 	val r = req.request
-	InfoCard(label = "Chain", value = r.chainId.ifEmpty { "Unknown" })
-	InfoCard(
-		label = "Effect Hash",
-		value = if (r.effectHashHex.length > 16)
-			r.effectHashHex.take(8) + "..." + r.effectHashHex.takeLast(8)
-		else r.effectHashHex.ifEmpty { "N/A" }
-	)
-	InfoCard(label = "Spends", value = "${r.spendCount}")
+
+	// Chain
+	DetailRow(label = "Chain", value = r.chainId.ifEmpty { "penumbra-1" })
+
+	// What this tx does
+	if (r.spendCount > 0u) {
+		HighlightCard(
+			title = "Sending funds",
+			subtitle = "${r.spendCount} spend action(s)",
+			color = Color(0xFF8B5CF6),
+		)
+	}
 	if (r.voteCount > 0u) {
-		InfoCard(label = "Delegator Votes", value = "${r.voteCount}")
+		HighlightCard(
+			title = "Governance Vote",
+			subtitle = "${r.voteCount} delegator vote(s)",
+			color = Color(0xFF3B82F6),
+		)
 	}
 	if (r.lqtVoteCount > 0u) {
-		InfoCard(label = "LQT Votes", value = "${r.lqtVoteCount}")
+		HighlightCard(
+			title = "Liquidity Tournament",
+			subtitle = "${r.lqtVoteCount} LQT vote(s)",
+			color = Color(0xFF10B981),
+		)
 	}
+
+	// Signatures required
 	val totalSigs = r.spendCount + r.voteCount + r.lqtVoteCount
-	InfoCard(label = "Total Signatures", value = "$totalSigs")
+	DetailRow(label = "Signatures required", value = "$totalSigs")
+
+	// Effect hash (abbreviated)
+	if (r.effectHashHex.isNotEmpty()) {
+		DetailRow(
+			label = "Effect hash",
+			value = r.effectHashHex.take(8) + "..." + r.effectHashHex.takeLast(8),
+		)
+	}
 }
 
 @Composable
 private fun CosmosSimpleContent(req: SignRequest.Cosmos) {
 	val r = req.request
-	InfoCard(label = "Chain", value = r.chainName.ifEmpty { r.chainId })
+
+	// Chain
+	DetailRow(label = "Chain", value = r.chainName.ifEmpty { r.chainId })
 
 	// Blind signing warning
 	if (r.msgs.any { it.blind }) {
-		WarningCard("This transaction contains unrecognized message types. Review carefully.")
+		WarningCard("Unrecognized message types. Review the Advanced tab before signing.")
 	}
 
-	// Messages
+	// Each message as a highlight card
 	r.msgs.forEachIndexed { i, msg ->
+		val prefix = if (r.msgs.size > 1) "${i + 1}/${r.msgs.size} " else ""
+
 		Column(
 			modifier = Modifier
 				.fillMaxWidth()
 				.clip(RoundedCornerShape(12.dp))
 				.background(MaterialTheme.colors.fill6)
-				.padding(12.dp),
-			verticalArrangement = Arrangement.spacedBy(4.dp),
+				.padding(16.dp),
+			verticalArrangement = Arrangement.spacedBy(8.dp),
 		) {
-			if (r.msgs.size > 1) {
+			// Message type
+			Text(
+				text = "$prefix${msg.msgType}",
+				style = SignerTypeface.LabelM.copy(fontWeight = FontWeight.Bold),
+				color = MaterialTheme.colors.primary,
+			)
+
+			// Amount (highlighted)
+			if (msg.amount.isNotEmpty()) {
 				Text(
-					text = "Message ${i + 1}/${r.msgs.size}",
-					style = SignerTypeface.CaptionM,
-					color = MaterialTheme.colors.textTertiary,
+					text = msg.amount,
+					style = SignerTypeface.TitleS,
+					color = MaterialTheme.colors.primary,
 				)
 			}
-			Text(text = msg.msgType, style = SignerTypeface.LabelM, color = MaterialTheme.colors.primary)
+
+			// Recipient (highlighted)
 			if (msg.recipient.isNotEmpty()) {
-				Text(text = "To: ${msg.recipient.take(20)}...", style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textSecondary)
+				Text(text = "To", style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textTertiary)
+				Text(
+					text = msg.recipient,
+					style = SignerTypeface.CaptionM.copy(fontFamily = FontFamily.Monospace),
+					color = MaterialTheme.colors.textSecondary,
+				)
 			}
-			if (msg.amount.isNotEmpty()) {
-				Text(text = msg.amount, style = SignerTypeface.BodyL, color = MaterialTheme.colors.primary)
-			}
+
+			// Extra detail
 			if (msg.detail.isNotEmpty()) {
-				Text(text = msg.detail, style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textSecondary)
+				Text(
+					text = msg.detail,
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textSecondary,
+				)
 			}
+
 			if (msg.blind) {
-				Text(text = "⚠ Blind signing required", style = SignerTypeface.CaptionM, color = Color(0xFFe74c3c))
+				Text(
+					text = "Blind signing — verify in Advanced tab",
+					style = SignerTypeface.CaptionM,
+					color = Color(0xFFE74C3C),
+				)
 			}
 		}
 	}
 
-	InfoCard(label = "Fee", value = r.fee)
+	// Fee
+	if (r.fee.isNotEmpty()) {
+		DetailRow(label = "Fee", value = r.fee)
+	}
+
+	// Memo
 	if (r.memo.isNotEmpty()) {
-		InfoCard(label = "Memo", value = r.memo)
+		DetailRow(label = "Memo", value = r.memo)
 	}
 }
 
@@ -190,81 +324,110 @@ private fun CosmosSimpleContent(req: SignRequest.Cosmos) {
 private fun ZcashSimpleContent(req: SignRequest.ZcashSimple) {
 	val r = req.request
 
-	// Network badge
-	Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-		Text(text = "Zcash", style = SignerTypeface.TitleS, color = MaterialTheme.colors.primary)
-		Text(
-			text = if (r.mainnet) "Mainnet" else "Testnet",
-			style = SignerTypeface.LabelM,
-			color = if (r.mainnet) Color(0xFF3498db) else Color(0xFFe74c3c),
-			modifier = Modifier
-				.clip(RoundedCornerShape(4.dp))
-				.background(MaterialTheme.colors.fill6)
-				.padding(horizontal = 6.dp, vertical = 2.dp),
-		)
-	}
-
-	// Summary from zafu
+	// Summary from zafu — this is the most important info
+	// Format: "Send X.XX ZEC to u1abc...\nFee: 0.0001 ZEC\nSpending 1 note(s)\nAccount #0: 1 signature required"
 	if (r.summary.isNotEmpty()) {
-		InfoCard(label = "Summary", value = r.summary)
-	}
+		// Parse summary lines for better display
+		val lines = r.summary.split("\n").filter { it.isNotBlank() }
+		val sendLine = lines.firstOrNull { it.startsWith("Send ") }
 
-	InfoCard(label = "Actions", value = "${r.actionCount} orchard action(s)")
-	InfoCard(label = "Account", value = "#${r.accountIndex}")
-	InfoCard(
-		label = "Sighash",
-		value = if (r.sighashHex.length > 16)
-			r.sighashHex.take(8) + "..." + r.sighashHex.takeLast(8)
-		else r.sighashHex
-	)
+		if (sendLine != null) {
+			// Extract amount and recipient from "Send X.XX ZEC to ADDRESS"
+			val parts = sendLine.removePrefix("Send ").split(" to ", limit = 2)
+			val amount = parts.getOrNull(0) ?: ""
+			val recipient = parts.getOrNull(1) ?: ""
+
+			HighlightCard(
+				title = amount,
+				subtitle = if (recipient.isNotEmpty()) "To: $recipient" else "",
+				color = Color(0xFFF5A623),
+			)
+		} else {
+			// Fallback: show full summary
+			HighlightCard(title = r.summary, subtitle = "", color = Color(0xFFF5A623))
+		}
+
+		// Show remaining lines as details
+		lines.filter { !it.startsWith("Send ") }.forEach { line ->
+			when {
+				line.startsWith("Fee:") -> DetailRow(label = "Fee", value = line.removePrefix("Fee: "))
+				line.startsWith("Spending") -> DetailRow(label = "Notes", value = line)
+				line.startsWith("Account") -> DetailRow(label = "Account", value = line)
+				else -> DetailRow(label = "", value = line)
+			}
+		}
+	} else {
+		// No summary — show raw fields
+		DetailRow(label = "Actions", value = "${r.actionCount} orchard action(s)")
+		DetailRow(label = "Account", value = "#${r.accountIndex}")
+	}
 }
 
 @Composable
 private fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 	val inspection = req.inspection
 	if (inspection == null) {
-		Text(text = "Inspecting PCZT...", style = SignerTypeface.BodyL, color = MaterialTheme.colors.textTertiary)
+		Text(
+			text = "Inspecting transaction...",
+			style = SignerTypeface.BodyL,
+			color = MaterialTheme.colors.textTertiary,
+		)
 		return
 	}
 
-	InfoCard(label = "Actions", value = "${inspection.actionCount}")
-	InfoCard(label = "Anchor", value = inspection.anchorHex.take(16) + "...")
-
+	// Spends
 	if (inspection.spends.isNotEmpty()) {
-		Text(text = "Spends", style = SignerTypeface.LabelM, color = MaterialTheme.colors.pink300)
 		inspection.spends.forEach { spend ->
-			val zatoshis = spend.value.toLong()
-			val zec = "%.8f".format(zatoshis / 100_000_000.0)
-			InfoCard(
-				label = if (spend.known) "Verified Spend" else "⚠ Unknown Spend",
-				value = "$zec ZEC"
+			val zec = "%.8f".format(spend.value.toLong() / 100_000_000.0)
+			HighlightCard(
+				title = "$zec ZEC",
+				subtitle = if (spend.known) "Verified spend" else "Unknown spend — verify carefully",
+				color = if (spend.known) Color(0xFFF5A623) else Color(0xFFE74C3C),
 			)
 		}
 	}
 
+	// Outputs
 	if (inspection.outputs.isNotEmpty()) {
-		Text(text = "Outputs", style = SignerTypeface.LabelM, color = MaterialTheme.colors.Crypto400)
 		inspection.outputs.forEach { output ->
-			val zatoshis = output.value.toLong()
-			val zec = "%.8f".format(zatoshis / 100_000_000.0)
-			InfoCard(label = output.recipient.take(20) + "...", value = "$zec ZEC")
+			val zec = "%.8f".format(output.value.toLong() / 100_000_000.0)
+			Column(
+				modifier = Modifier
+					.fillMaxWidth()
+					.clip(RoundedCornerShape(12.dp))
+					.background(MaterialTheme.colors.fill6)
+					.padding(16.dp),
+				verticalArrangement = Arrangement.spacedBy(4.dp),
+			) {
+				Text(text = "$zec ZEC", style = SignerTypeface.TitleS, color = MaterialTheme.colors.primary)
+				if (output.recipient.isNotEmpty()) {
+					Text(text = "To", style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textTertiary)
+					Text(
+						text = output.recipient,
+						style = SignerTypeface.CaptionM.copy(fontFamily = FontFamily.Monospace),
+						color = MaterialTheme.colors.textSecondary,
+					)
+				}
+			}
 		}
 	}
 
+	// Fee
 	val feeZec = "%.8f".format(inspection.netValue / 100_000_000.0)
-	InfoCard(label = "Fee", value = "$feeZec ZEC")
+	DetailRow(label = "Fee", value = "$feeZec ZEC")
 
+	// Warnings
 	if (!inspection.anchorMatches) {
-		WarningCard("Anchor does not match verified state. Proceed with caution.")
+		WarningCard("Anchor mismatch — the transaction may reference an outdated state.")
 	}
 }
 
 // =============================================================================
-// Complex tab — raw payload
+// Advanced tab — raw payload as JSON-like display
 // =============================================================================
 
 @Composable
-private fun ComplexTabContent(signRequest: SignRequest) {
+private fun AdvancedTabContent(signRequest: SignRequest) {
 	Text(
 		text = "Raw Payload",
 		style = SignerTypeface.LabelM,
@@ -280,9 +443,70 @@ private fun ComplexTabContent(signRequest: SignRequest) {
 			color = MaterialTheme.colors.textTertiary,
 		)
 	} else {
+		// For cosmos, try to show a more readable format
+		val displayText = when (signRequest) {
+			is SignRequest.Cosmos -> {
+				// Build a readable JSON-like summary
+				buildString {
+					appendLine("chain: ${signRequest.request.chainId}")
+					appendLine("fee: ${signRequest.request.fee}")
+					if (signRequest.request.memo.isNotEmpty()) {
+						appendLine("memo: ${signRequest.request.memo}")
+					}
+					appendLine("messages:")
+					signRequest.request.msgs.forEachIndexed { i, msg ->
+						appendLine("  [$i] type: ${msg.msgType}")
+						if (msg.recipient.isNotEmpty()) appendLine("      to: ${msg.recipient}")
+						if (msg.amount.isNotEmpty()) appendLine("      amount: ${msg.amount}")
+						if (msg.detail.isNotEmpty()) appendLine("      detail: ${msg.detail}")
+					}
+					appendLine()
+					appendLine("--- raw hex ---")
+					append(payload)
+				}
+			}
+			is SignRequest.Penumbra -> {
+				buildString {
+					appendLine("chain_id: ${signRequest.request.chainId}")
+					appendLine("effect_hash: ${signRequest.request.effectHashHex}")
+					appendLine("spend_count: ${signRequest.request.spendCount}")
+					appendLine("vote_count: ${signRequest.request.voteCount}")
+					appendLine("lqt_vote_count: ${signRequest.request.lqtVoteCount}")
+					appendLine()
+					appendLine("--- raw hex ---")
+					append(payload)
+				}
+			}
+			is SignRequest.ZcashSimple -> {
+				buildString {
+					appendLine("account: ${signRequest.request.accountIndex}")
+					appendLine("sighash: ${signRequest.request.sighashHex}")
+					appendLine("actions: ${signRequest.request.actionCount}")
+					appendLine("mainnet: ${signRequest.request.mainnet}")
+					if (signRequest.request.summary.isNotEmpty()) {
+						appendLine("summary: ${signRequest.request.summary}")
+					}
+					appendLine()
+					appendLine("--- raw hex ---")
+					append(payload)
+				}
+			}
+			is SignRequest.ZcashPczt -> {
+				buildString {
+					appendLine("UR parts: ${signRequest.urParts.size}")
+					appendLine()
+					append(payload)
+				}
+			}
+		}
+
 		Text(
-			text = payload,
-			style = SignerTypeface.CaptionM.copy(fontFamily = FontFamily.Monospace),
+			text = displayText,
+			style = SignerTypeface.CaptionM.copy(
+				fontFamily = FontFamily.Monospace,
+				fontSize = 11.sp,
+				lineHeight = 16.sp,
+			),
 			color = MaterialTheme.colors.textSecondary,
 			modifier = Modifier
 				.fillMaxWidth()
@@ -297,21 +521,60 @@ private fun ComplexTabContent(signRequest: SignRequest) {
 // Shared composables
 // =============================================================================
 
+/** Prominent card for the main action (amount + recipient) */
 @Composable
-private fun InfoCard(label: String, value: String) {
+private fun HighlightCard(title: String, subtitle: String, color: Color) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
-			.clip(RoundedCornerShape(8.dp))
-			.background(MaterialTheme.colors.fill6)
-			.padding(12.dp),
+			.clip(RoundedCornerShape(12.dp))
+			.background(color.copy(alpha = 0.1f))
+			.padding(16.dp),
 		verticalArrangement = Arrangement.spacedBy(4.dp),
 	) {
-		Text(text = label, style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textTertiary)
-		Text(text = value, style = SignerTypeface.BodyL, color = MaterialTheme.colors.primary)
+		Text(
+			text = title,
+			style = SignerTypeface.TitleS,
+			color = color,
+		)
+		if (subtitle.isNotEmpty()) {
+			Text(
+				text = subtitle,
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textSecondary,
+			)
+		}
 	}
 }
 
+/** Simple label: value row */
+@Composable
+private fun DetailRow(label: String, value: String) {
+	Row(
+		modifier = Modifier
+			.fillMaxWidth()
+			.padding(vertical = 4.dp),
+		horizontalArrangement = Arrangement.SpaceBetween,
+	) {
+		if (label.isNotEmpty()) {
+			Text(
+				text = label,
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textTertiary,
+				modifier = Modifier.weight(0.35f),
+			)
+		}
+		Text(
+			text = value,
+			style = SignerTypeface.CaptionM,
+			color = MaterialTheme.colors.primary,
+			textAlign = if (label.isNotEmpty()) TextAlign.End else TextAlign.Start,
+			modifier = Modifier.weight(0.65f),
+		)
+	}
+}
+
+/** Warning card with red background */
 @Composable
 private fun WarningCard(message: String) {
 	Column(
