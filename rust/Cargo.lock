@@ -2289,13 +2289,17 @@ dependencies = [
 name = "frost-spend"
 version = "0.1.0"
 dependencies = [
+ "blake2b_simd 1.0.3",
  "ed25519-consensus",
  "hex",
  "orchard 0.10.1",
+ "osst",
+ "pasta_curves",
  "rand_core 0.6.4",
  "reddsa 0.5.1 (git+https://github.com/ZcashFoundation/reddsa.git?rev=475a552)",
  "serde",
  "serde_json",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -4444,6 +4448,18 @@ dependencies = [
  "cc",
  "dashmap",
  "log",
+]
+
+[[package]]
+name = "osst"
+version = "0.1.1"
+source = "git+https://github.com/rotkonetworks/zeratul.git?rev=90add33#90add33172c189f6bc54dc5a16b4cb7049e89d5a"
+dependencies = [
+ "blake2b_simd 1.0.3",
+ "pasta_curves",
+ "rand_core 0.6.4",
+ "sha2 0.10.8",
+ "zeroize",
 ]
 
 [[package]]
