@@ -693,9 +693,9 @@ pub struct ZcashNotesBundle {
     pub mainnet: bool,
     /// Notes with merkle paths
     pub notes: Vec<ZcashNoteWithPath>,
-    /// Optional FROST group attestation: RedPallas signature over the anchor.
-    /// 64 bytes: [R:32][z:32]. Verifies against the FROST group verifying key.
-    pub anchor_attestation: Option<[u8; 64]>,
+    /// Optional FROST group attestation: signature(64) || randomizer(32) = 96 bytes.
+    /// Verifies against the FROST group's randomized verifying key.
+    pub anchor_attestation: Option<[u8; 96]>,
 }
 
 /// Result of note sync verification
@@ -759,30 +759,33 @@ pub fn verify_merkle_path(
 // FROST anchor attestation — verify anchor via threshold group signature
 // ============================================================================
 
-/// Re-export the attestation message builder from frost-spend.
+/// Re-export the attestation digest builder from frost-spend.
 #[cfg(feature = "zcash")]
-pub use frost_spend::attestation::attestation_message as anchor_attestation_message;
+pub use frost_spend::attestation::attestation_digest;
 
 /// Verify a FROST group attestation signature over an anchor.
 ///
-/// Delegates to frost_spend::attestation — single source of truth for the
-/// custom challenge hash ("ZignerAnchorAtH"), domain-separated from spend auth.
+/// Delegates to frost_spend::attestation using reddsa verification.
+/// attestation_data: 96 bytes (signature 64 + randomizer 32).
 ///
 /// Returns Ok(true) if valid, Ok(false) if invalid, Err on parse failure.
 #[cfg(feature = "zcash")]
 #[must_use]
 pub fn verify_anchor_attestation(
-    signature_bytes: &[u8; 64],
-    group_verifying_key: &[u8; 32],
+    attestation_data: &[u8; 96],
+    public_key_package_hex: &str,
     anchor: &[u8; 32],
     anchor_height: u32,
     mainnet: bool,
 ) -> Result<bool> {
-    use frost_spend::attestation;
-
-    let msg = attestation::attestation_message(group_verifying_key, anchor, anchor_height, mainnet);
-    attestation::verify_from_bytes(signature_bytes, group_verifying_key, &msg)
-        .ok_or_else(|| Error::ZcashParsing("invalid attestation signature or verifying key".into()))
+    frost_spend::attestation::verify_from_bytes(
+        attestation_data,
+        public_key_package_hex,
+        anchor,
+        anchor_height,
+        mainnet,
+    )
+    .map_err(|e| Error::ZcashParsing(format!("attestation verification: {e}")))
 }
 
 // ============================================================================
@@ -895,7 +898,7 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
     let mut anchor_height = 0u32;
     let mut mainnet = true;
     let mut notes = Vec::new();
-    let mut anchor_attestation: Option<[u8; 64]> = None;
+    let mut anchor_attestation: Option<[u8; 96]> = None;
 
     for _ in 0..map_len {
         let (key, consumed) = cbor_decode_uint(data, offset)?;
@@ -944,18 +947,18 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 }
             }
             5 => {
-                // anchor_attestation: bstr(64) — FROST group signature
+                // anchor_attestation: bstr(96) — signature(64) || randomizer(32)
                 let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
                 offset = consumed;
-                if bytes.len() != 64 {
+                if bytes.len() != 96 {
                     return Err(Error::ZcashParsing(format!(
-                        "attestation must be 64 bytes, got {}",
+                        "attestation must be 96 bytes (sig 64 + randomizer 32), got {}",
                         bytes.len()
                     )));
                 }
-                let mut sig = [0u8; 64];
-                sig.copy_from_slice(&bytes);
-                anchor_attestation = Some(sig);
+                let mut att = [0u8; 96];
+                att.copy_from_slice(&bytes);
+                anchor_attestation = Some(att);
             }
             _ => {
                 // skip unknown keys

@@ -41,7 +41,7 @@ pub use cosmos::{sign_cosmos_amino, CosmosSignDocDisplay, CosmosSignRequest};
 pub mod zcash;
 #[cfg(feature = "zcash")]
 pub use zcash::{
-    anchor_attestation_message, decode_notes_bundle_from_cbor,
+    attestation_digest, decode_notes_bundle_from_cbor,
     derive_orchard_fvk as zcash_derive_orchard_fvk,
     derive_transparent_address as zcash_derive_transparent_address, encode_notes_bundle_to_cbor,
     sign_orchard_action as zcash_sign_orchard, sign_pczt as zcash_sign_pczt,

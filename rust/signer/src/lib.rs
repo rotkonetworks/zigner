@@ -2274,20 +2274,9 @@ fn decode_and_verify_zcash_notes(
                     }
                 };
 
-            let vk_bytes = match extract_frost_verifying_key(&wallet_data.public_key_package_hex) {
-                Ok(vk) => vk,
-                Err(e) => {
-                    last_error = Some(format!(
-                        "extract vk from wallet {}: {e}",
-                        wallet_summary.wallet_id
-                    ));
-                    continue;
-                }
-            };
-
             match verify_anchor_attestation(
                 attestation,
-                &vk_bytes,
+                &wallet_data.public_key_package_hex,
                 &bundle.anchor,
                 bundle.anchor_height,
                 bundle.mainnet,
@@ -2370,23 +2359,6 @@ fn decode_and_verify_zcash_notes(
         mainnet: bundle.mainnet,
         anchor_verified,
     })
-}
-
-/// Extract the 32-byte group verifying key from a hex-encoded FROST PublicKeyPackage.
-fn extract_frost_verifying_key(public_key_package_hex: &str) -> Result<[u8; 32], String> {
-    use frost_spend::frost_keys;
-    use frost_spend::orchestrate::from_hex;
-
-    let pubkeys: frost_keys::PublicKeyPackage =
-        from_hex(public_key_package_hex).map_err(|e| format!("deserialize pubkey pkg: {e}"))?;
-    let vk_vec = pubkeys
-        .verifying_key()
-        .serialize()
-        .map_err(|_| "serialize verifying key".to_string())?;
-    let vk_bytes: [u8; 32] = vk_vec
-        .try_into()
-        .map_err(|_| "verifying key is not 32 bytes".to_string())?;
-    Ok(vk_bytes)
 }
 
 /// Get all verified zcash notes from sled
