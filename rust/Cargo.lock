@@ -2305,7 +2305,7 @@ dependencies = [
 [[package]]
 name = "frost-spend"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=e278b62#e278b6242c0c1797efb6e18154bf1e3d752cf5d3"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=93ca3ee#93ca3ee80fb5c28b7384bccc662563e7930b134c"
 dependencies = [
  "blake2b_simd 1.0.3",
  "ed25519-consensus",
@@ -8260,7 +8260,7 @@ dependencies = [
  "decaf377",
  "decaf377-rdsa",
  "definitions",
- "frost-spend 0.1.0 (git+https://github.com/rotkonetworks/zcli.git?rev=e278b62)",
+ "frost-spend 0.1.0 (git+https://github.com/rotkonetworks/zcli.git?rev=93ca3ee)",
  "hex",
  "hmac 0.12.1",
  "orchard 0.12.0",

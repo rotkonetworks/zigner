@@ -22,4 +22,4 @@ members = [
 
 # Shared crates — single source of truth across zcli/zafu/zigner
 [workspace.dependencies]
-frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "e278b62" }
+frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "93ca3ee" }
