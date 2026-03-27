@@ -38,6 +38,7 @@ sp-core = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a
 # FROST threshold multisig (shared crate from zcli)
 frost-spend = { workspace = true }
 
+constants = { path = "../constants" }
 db_handling = { path = "../db_handling", default-features = false, features = ["active"] }
 definitions = { path = "../definitions", default-features = false }
 navigator = { path = "../navigator", default-features = false }

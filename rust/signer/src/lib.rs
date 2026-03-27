@@ -2239,9 +2239,7 @@ fn decode_and_verify_zcash_notes(
             });
         }
         let signature = &attestation[..64];
-        // Rotko Networks verifier key for Zcash anchor attestation
-        // TODO: replace with production key before release
-        let verifier_key: [u8; 32] = [0u8; 32]; // placeholder
+        let verifier_key = constants::ROTKO_ZCASH_VERIFIER;
 
         // skip verification if verifier key is not set (all zeros = development mode)
         if verifier_key == [0u8; 32] {
