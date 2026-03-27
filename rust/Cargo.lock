@@ -2288,7 +2288,7 @@ dependencies = [
 [[package]]
 name = "frost-spend"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=91c442f#91c442f275bda46daffd7f7d686d58d681da6773"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=a0aaf1c#a0aaf1c290d9e0a42755d7c3bb60028b6142c99f"
 dependencies = [
  "blake2b_simd 1.0.3",
  "ed25519-consensus",
@@ -9593,7 +9593,7 @@ dependencies = [
 [[package]]
 name = "zoda-vss"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=91c442f#91c442f275bda46daffd7f7d686d58d681da6773"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=a0aaf1c#a0aaf1c290d9e0a42755d7c3bb60028b6142c99f"
 dependencies = [
  "rand_core 0.6.4",
  "sha2 0.10.8",
