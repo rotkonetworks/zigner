@@ -7,8 +7,8 @@
 // All orchestration logic lives in frost_spend::orchestrate.
 // This module wraps it for uniffi FFI.
 
-use std::convert::TryInto;
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::sync::Mutex;
 
 use frost_spend::orchestrate;
@@ -40,12 +40,15 @@ fn nonce_fingerprint(nonces_hex: &str) -> [u8; 16] {
 /// Mark a nonce as consumed. Returns Err if already used.
 fn consume_nonce(nonces_hex: &str) -> Result<(), String> {
     let fp = nonce_fingerprint(nonces_hex);
-    let mut used = USED_NONCES.lock().map_err(|_| "nonce tracker poisoned".to_string())?;
+    let mut used = USED_NONCES
+        .lock()
+        .map_err(|_| "nonce tracker poisoned".to_string())?;
     if !used.insert(fp) {
         return Err(
             "CRITICAL: Nonce reuse detected. This nonce was already used for signing. \
              Reusing a FROST nonce with a different message would leak the private key. \
-             Generate fresh nonces with sign_round1.".to_string()
+             Generate fresh nonces with sign_round1."
+                .to_string(),
         );
     }
     // Limit size to prevent unbounded growth (old entries are stale anyway)
@@ -59,12 +62,12 @@ fn consume_nonce(nonces_hex: &str) -> Result<(), String> {
 /// DKG round 1: generate ephemeral identity + signed commitment.
 /// Returns JSON: { "secret": hex, "broadcast": hex }
 pub fn frost_dkg_part1(max_signers: u16, min_signers: u16) -> Result<String, String> {
-    let result = orchestrate::dkg_part1(max_signers, min_signers)
-        .map_err(|e| e.to_string())?;
+    let result = orchestrate::dkg_part1(max_signers, min_signers).map_err(|e| e.to_string())?;
     serde_json::to_string(&serde_json::json!({
         "secret": result.secret_hex,
         "broadcast": result.broadcast_hex,
-    })).map_err(|e| e.to_string())
+    }))
+    .map_err(|e| e.to_string())
 }
 
 /// DKG round 2: process signed round1 broadcasts.
@@ -73,12 +76,12 @@ pub fn frost_dkg_part1(max_signers: u16, min_signers: u16) -> Result<String, Str
 pub fn frost_dkg_part2(secret_hex: &str, peer_broadcasts_json: &str) -> Result<String, String> {
     let broadcasts: Vec<String> = serde_json::from_str(peer_broadcasts_json)
         .map_err(|e| format!("bad broadcasts JSON: {}", e))?;
-    let result = orchestrate::dkg_part2(secret_hex, &broadcasts)
-        .map_err(|e| e.to_string())?;
+    let result = orchestrate::dkg_part2(secret_hex, &broadcasts).map_err(|e| e.to_string())?;
     serde_json::to_string(&serde_json::json!({
         "secret": result.secret_hex,
         "peer_packages": result.peer_packages,
-    })).map_err(|e| e.to_string())
+    }))
+    .map_err(|e| e.to_string())
 }
 
 /// DKG round 3: finalize — returns key package + public key package.
@@ -92,13 +95,13 @@ pub fn frost_dkg_part3(
         .map_err(|e| format!("bad round1 JSON: {}", e))?;
     let r2: Vec<String> = serde_json::from_str(round2_packages_json)
         .map_err(|e| format!("bad round2 JSON: {}", e))?;
-    let result = orchestrate::dkg_part3(secret_hex, &r1, &r2)
-        .map_err(|e| e.to_string())?;
+    let result = orchestrate::dkg_part3(secret_hex, &r1, &r2).map_err(|e| e.to_string())?;
     serde_json::to_string(&serde_json::json!({
         "key_package": result.key_package_hex,
         "public_key_package": result.public_key_package_hex,
         "ephemeral_seed": result.ephemeral_seed_hex,
-    })).map_err(|e| e.to_string())
+    }))
+    .map_err(|e| e.to_string())
 }
 
 /// signing round 1: generate nonces + signed commitments.
@@ -108,12 +111,13 @@ pub fn frost_sign_round1(
     key_package_hex: &str,
 ) -> Result<String, String> {
     let seed = parse_seed(ephemeral_seed_hex)?;
-    let (nonces, commitments) = orchestrate::sign_round1(&seed, key_package_hex)
-        .map_err(|e| e.to_string())?;
+    let (nonces, commitments) =
+        orchestrate::sign_round1(&seed, key_package_hex).map_err(|e| e.to_string())?;
     serde_json::to_string(&serde_json::json!({
         "nonces": nonces,
         "commitments": commitments,
-    })).map_err(|e| e.to_string())
+    }))
+    .map_err(|e| e.to_string())
 }
 
 /// spend-authorize round 2: produce FROST share bound to sighash + alpha.
@@ -134,9 +138,8 @@ pub fn frost_spend_sign_round2(
     let alpha = parse_32(alpha_hex, "alpha")?;
     let commitments: Vec<String> = serde_json::from_str(commitments_json)
         .map_err(|e| format!("bad commitments JSON: {}", e))?;
-    orchestrate::spend_sign_round2(
-        key_package_hex, nonces_hex, &sighash, &alpha, &commitments,
-    ).map_err(|e| e.to_string())
+    orchestrate::spend_sign_round2(key_package_hex, nonces_hex, &sighash, &alpha, &commitments)
+        .map_err(|e| e.to_string())
 }
 
 /// sign multiple actions at once (one share per alpha).
@@ -154,8 +157,8 @@ pub fn frost_spend_sign_actions(
     consume_nonce(nonces_hex)?;
 
     let sighash = parse_32(sighash_hex, "sighash")?;
-    let alphas: Vec<String> = serde_json::from_str(alphas_json)
-        .map_err(|e| format!("bad alphas JSON: {}", e))?;
+    let alphas: Vec<String> =
+        serde_json::from_str(alphas_json).map_err(|e| format!("bad alphas JSON: {}", e))?;
     let commitments: Vec<String> = serde_json::from_str(commitments_json)
         .map_err(|e| format!("bad commitments JSON: {}", e))?;
 
@@ -163,13 +166,17 @@ pub fn frost_spend_sign_actions(
     for alpha_hex in &alphas {
         let alpha = parse_32(alpha_hex, "alpha")?;
         let share = orchestrate::spend_sign_round2(
-            key_package_hex, nonces_hex, &sighash, &alpha, &commitments,
-        ).map_err(|e| e.to_string())?;
+            key_package_hex,
+            nonces_hex,
+            &sighash,
+            &alpha,
+            &commitments,
+        )
+        .map_err(|e| e.to_string())?;
         shares.push(share);
     }
 
-    serde_json::to_string(&serde_json::json!({ "shares": shares }))
-        .map_err(|e| e.to_string())
+    serde_json::to_string(&serde_json::json!({ "shares": shares })).map_err(|e| e.to_string())
 }
 
 /// derive raw Orchard address bytes (43 bytes, hex-encoded) from public key package.
@@ -187,10 +194,14 @@ pub fn frost_derive_address_raw(
 
 fn parse_seed(hex_str: &str) -> Result<[u8; 32], String> {
     let bytes = hex::decode(hex_str).map_err(|e| format!("bad seed hex: {}", e))?;
-    bytes.try_into().map_err(|_| "seed must be 32 bytes".to_string())
+    bytes
+        .try_into()
+        .map_err(|_| "seed must be 32 bytes".to_string())
 }
 
 fn parse_32(hex_str: &str, name: &str) -> Result<[u8; 32], String> {
     let bytes = hex::decode(hex_str).map_err(|e| format!("bad {} hex: {}", name, e))?;
-    bytes.try_into().map_err(|_| format!("{} must be 32 bytes", name))
+    bytes
+        .try_into()
+        .map_err(|_| format!("{} must be 32 bytes", name))
 }

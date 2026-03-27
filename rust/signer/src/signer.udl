@@ -1413,6 +1413,7 @@ dictionary ZcashNoteSyncResult {
     string anchor_hex;
     u32 anchor_height;
     boolean mainnet;
+    boolean anchor_verified;
 };
 
 

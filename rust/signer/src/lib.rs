@@ -29,8 +29,8 @@
 // to satisfy the unused_crate_dependencies lint
 use zcash_transparent as _;
 
-mod ffi_types;
 pub mod auth;
+mod ffi_types;
 pub mod frost_multisig;
 
 use crate::ffi_types::*;
@@ -1459,14 +1459,16 @@ fn sign_zcash_simple(
     request: ZcashSimpleSignRequest,
 ) -> Result<String, ErrorDisplayed> {
     // Re-parse the original QR to get the full data (including alphas)
-    let sign_data =
-        transaction_signing::ZcashSignRequest::from_qr_hex(&request.raw_qr_hex).map_err(|e| ErrorDisplayed::Str {
+    let sign_data = transaction_signing::ZcashSignRequest::from_qr_hex(&request.raw_qr_hex)
+        .map_err(|e| ErrorDisplayed::Str {
             s: format!("Failed to parse Zcash sign request for signing: {e}"),
         })?;
 
-    let response = sign_data.sign(seed_phrase).map_err(|e| ErrorDisplayed::Str {
-        s: format!("Zcash signing failed: {e}"),
-    })?;
+    let response = sign_data
+        .sign(seed_phrase)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Zcash signing failed: {e}"),
+        })?;
 
     Ok(response.to_qr_hex())
 }
@@ -1496,8 +1498,8 @@ fn export_zcash_fvk(
     // Format: "uview1..." for mainnet, "uviewtest1..." for testnet
     let ufvk = OrchardSpendingKey::get_ufvk_with_transparent(seed_phrase, account_index, mainnet)
         .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to derive UFVK: {e}"),
-        })?;
+        s: format!("Failed to derive UFVK: {e}"),
+    })?;
 
     // Generate seed fingerprint: first 16 bytes of SHA256(seed_phrase)
     // This allows Zashi to match accounts to the same seed without revealing the seed
@@ -1660,11 +1662,12 @@ fn get_zcash_transparent_address(
 ) -> Result<String, ErrorDisplayed> {
     use transaction_signing::zcash::{derive_transparent_address, TransparentSpendingKey};
 
-    let tsk = TransparentSpendingKey::from_seed_phrase(seed_phrase, account, 0, 0).map_err(|e| {
-        ErrorDisplayed::Str {
-            s: format!("Failed to derive transparent key: {e}"),
-        }
-    })?;
+    let tsk =
+        TransparentSpendingKey::from_seed_phrase(seed_phrase, account, 0, 0).map_err(|e| {
+            ErrorDisplayed::Str {
+                s: format!("Failed to derive transparent key: {e}"),
+            }
+        })?;
 
     derive_transparent_address(&tsk, mainnet).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to derive transparent address: {e}"),
@@ -1860,11 +1863,11 @@ fn get_zcash_sign_context() -> Result<ZcashSignContext, ErrorDisplayed> {
 
     let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
     let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
-    let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
+    let anchor = db_handling::zcash::get_verified_anchor(database)
+        .ok()
+        .flatten();
 
-    let (anchor_height, synced_at) = anchor
-        .map(|(_, h, _, ts)| (h, ts))
-        .unwrap_or((0, 0));
+    let (anchor_height, synced_at) = anchor.map(|(_, h, _, ts)| (h, ts)).unwrap_or((0, 0));
 
     Ok(ZcashSignContext {
         verified_balance: balance,
@@ -1881,7 +1884,11 @@ fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
     use zcash_address::Network;
 
     let receiver = Receiver::Orchard(*raw);
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
     UnifiedAddress::try_from_items(vec![receiver])
         .ok()
         .map(|ua| ua.encode(&network))
@@ -1905,16 +1912,27 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
         if let Some(database) = db_guard.as_ref() {
             let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
-            let anchor = db_handling::zcash::get_verified_anchor(database).ok().flatten();
+            let anchor = db_handling::zcash::get_verified_anchor(database)
+                .ok()
+                .flatten();
             let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
-            let nullifiers: std::collections::HashSet<String> =
-                notes.iter().map(|(_, nf_hex, _, _, _)| nf_hex.clone()).collect();
+            let nullifiers: std::collections::HashSet<String> = notes
+                .iter()
+                .map(|(_, nf_hex, _, _, _)| nf_hex.clone())
+                .collect();
             // Map nullifier_hex → value for spend amount lookup
-            let values: std::collections::HashMap<String, u64> =
-                notes.iter().map(|(val, nf_hex, _, _, _)| (nf_hex.clone(), *val)).collect();
+            let values: std::collections::HashMap<String, u64> = notes
+                .iter()
+                .map(|(val, nf_hex, _, _, _)| (nf_hex.clone(), *val))
+                .collect();
             (balance, anchor, nullifiers, values)
         } else {
-            (0, None, std::collections::HashSet::new(), std::collections::HashMap::new())
+            (
+                0,
+                None,
+                std::collections::HashSet::new(),
+                std::collections::HashMap::new(),
+            )
         }
     };
 
@@ -1934,7 +1952,10 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         let value = if known {
             known_spends += 1;
             // Find matching note value from our verified store
-            verified_notes_values.get(&nullifier_hex).copied().unwrap_or(0)
+            verified_notes_values
+                .get(&nullifier_hex)
+                .copied()
+                .unwrap_or(0)
         } else {
             0
         };
@@ -2163,12 +2184,19 @@ fn encode_pczt_to_cbor(pczt_bytes: &[u8]) -> Vec<u8> {
 // Zcash note sync (verified balance via animated QR)
 // ========================================================================
 
-/// Decode UR-encoded zcash-notes, verify merkle paths, store in sled
+/// Decode UR-encoded zcash-notes, verify merkle paths, store in sled.
+///
+/// Trust model:
+/// - If attestation-required flag is set (sticky, set on first FROST DKG):
+///   anchor attestation (CBOR key 5) is REQUIRED. Verified against stored
+///   FROST group keys. Hard reject if missing, invalid, or no key matches.
+/// - If flag is not set (never had a FROST wallet): accept without attestation.
+///   The user trusts zcli in this mode — that's the model they chose.
 fn decode_and_verify_zcash_notes(
     ur_parts: Vec<String>,
 ) -> Result<ZcashNoteSyncResult, ErrorDisplayed> {
     use transaction_signing::zcash::{
-        decode_notes_bundle_from_cbor, verify_merkle_path,
+        decode_notes_bundle_from_cbor, verify_anchor_attestation, verify_merkle_path,
     };
 
     if ur_parts.is_empty() {
@@ -2177,25 +2205,129 @@ fn decode_and_verify_zcash_notes(
         });
     }
 
-    // Decode UR (same fountain code pattern as decode_ur_zcash_pczt)
     let cbor_data = decode_ur_payload(&ur_parts, "zcash-notes")?;
 
-    // Parse CBOR to ZcashNotesBundle
     let bundle = decode_notes_bundle_from_cbor(&cbor_data).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to parse notes CBOR: {e}"),
     })?;
 
+    // Single DB lock for the entire operation
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    // Monotonic height check: reject anchors older than what we already have
+    if let Ok(Some((_, stored_height, _, _))) = db_handling::zcash::get_verified_anchor(database) {
+        if bundle.anchor_height < stored_height {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Anchor height {} is older than stored height {}. \
+                     Rejecting stale anchor (possible replay).",
+                    bundle.anchor_height, stored_height
+                ),
+            });
+        }
+    }
+
+    // Check attestation requirement: sticky flag (survives FROST wallet deletion)
+    let attestation_required =
+        db_handling::zcash::is_attestation_required(database).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to check attestation flag: {e}"),
+        })?;
+
+    let anchor_verified = if !attestation_required {
+        false
+    } else {
+        let attestation =
+            bundle
+                .anchor_attestation
+                .as_ref()
+                .ok_or_else(|| ErrorDisplayed::Str {
+                    s: "Anchor attestation required but not present in notes bundle. \
+                    A threshold group signature over the anchor is needed."
+                        .to_string(),
+                })?;
+
+        let frost_wallets =
+            db_handling::frost::list_frost_wallets(database).map_err(|e| ErrorDisplayed::Str {
+                s: format!("Failed to list FROST wallets: {e}"),
+            })?;
+
+        if frost_wallets.is_empty() {
+            return Err(ErrorDisplayed::Str {
+                s: "Attestation required (FROST was previously configured) but no \
+                    FROST wallets remain. Re-run DKG or restore wallet backup."
+                    .to_string(),
+            });
+        }
+
+        let mut verified = false;
+        let mut last_error: Option<String> = None;
+
+        for wallet_summary in &frost_wallets {
+            let wallet_data =
+                match db_handling::frost::get_frost_wallet(database, &wallet_summary.wallet_id) {
+                    Ok(Some(data)) => data,
+                    Ok(None) => continue,
+                    Err(e) => {
+                        last_error = Some(format!("load wallet {}: {e}", wallet_summary.wallet_id));
+                        continue;
+                    }
+                };
+
+            let vk_bytes = match extract_frost_verifying_key(&wallet_data.public_key_package_hex) {
+                Ok(vk) => vk,
+                Err(e) => {
+                    last_error = Some(format!(
+                        "extract vk from wallet {}: {e}",
+                        wallet_summary.wallet_id
+                    ));
+                    continue;
+                }
+            };
+
+            match verify_anchor_attestation(
+                attestation,
+                &vk_bytes,
+                &bundle.anchor,
+                bundle.anchor_height,
+                bundle.mainnet,
+            ) {
+                Ok(true) => {
+                    verified = true;
+                    break;
+                }
+                Ok(false) => continue,
+                Err(e) => {
+                    last_error = Some(format!(
+                        "verify attestation for wallet {}: {e}",
+                        wallet_summary.wallet_id
+                    ));
+                    continue;
+                }
+            }
+        }
+
+        if !verified {
+            let detail = last_error
+                .map(|e| format!(" Last error: {e}"))
+                .unwrap_or_default();
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Anchor attestation is invalid — no stored FROST group key \
+                     could verify it. The anchor may be fabricated.{detail}"
+                ),
+            });
+        }
+        true
+    };
+
     // Verify each note's merkle path against anchor
     let mut verified_notes = Vec::new();
     for (i, note) in bundle.notes.iter().enumerate() {
-        let valid = verify_merkle_path(
-            &note.cmx,
-            note.position,
-            &note.merkle_path,
-            &bundle.anchor,
-        ).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Merkle verification error for note {i}: {e}"),
-        })?;
+        let valid = verify_merkle_path(&note.cmx, note.position, &note.merkle_path, &bundle.anchor)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Merkle verification error for note {i}: {e}"),
+            })?;
 
         if !valid {
             return Err(ErrorDisplayed::Str {
@@ -2219,17 +2351,14 @@ fn decode_and_verify_zcash_notes(
     let total_balance: u64 = verified_notes.iter().map(|(v, _, _, _, _)| v).sum();
     let notes_verified = verified_notes.len() as u32;
 
-    // Store in sled (clear-and-replace)
-    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
-    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
-
     db_handling::zcash::store_verified_notes(
         database,
         &verified_notes,
         &bundle.anchor,
         bundle.anchor_height,
         bundle.mainnet,
-    ).map_err(|e| ErrorDisplayed::Str {
+    )
+    .map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to store notes: {e}"),
     })?;
 
@@ -2239,7 +2368,25 @@ fn decode_and_verify_zcash_notes(
         anchor_hex: hex::encode(bundle.anchor),
         anchor_height: bundle.anchor_height,
         mainnet: bundle.mainnet,
+        anchor_verified,
     })
+}
+
+/// Extract the 32-byte group verifying key from a hex-encoded FROST PublicKeyPackage.
+fn extract_frost_verifying_key(public_key_package_hex: &str) -> Result<[u8; 32], String> {
+    use frost_spend::frost_keys;
+    use frost_spend::orchestrate::from_hex;
+
+    let pubkeys: frost_keys::PublicKeyPackage =
+        from_hex(public_key_package_hex).map_err(|e| format!("deserialize pubkey pkg: {e}"))?;
+    let vk_vec = pubkeys
+        .verifying_key()
+        .serialize()
+        .map_err(|_| "serialize verifying key".to_string())?;
+    let vk_bytes: [u8; 32] = vk_vec
+        .try_into()
+        .map_err(|_| "verifying key is not 32 bytes".to_string())?;
+    Ok(vk_bytes)
 }
 
 /// Get all verified zcash notes from sled
@@ -2247,21 +2394,20 @@ fn get_zcash_verified_notes() -> Result<Vec<ZcashVerifiedNoteDisplay>, ErrorDisp
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
-    let notes = db_handling::zcash::get_verified_notes(database).map_err(|e| {
-        ErrorDisplayed::Str {
+    let notes =
+        db_handling::zcash::get_verified_notes(database).map_err(|e| ErrorDisplayed::Str {
             s: format!("Failed to get notes: {e}"),
-        }
-    })?;
+        })?;
 
     Ok(notes
         .into_iter()
-        .map(|(value, nullifier_hex, _cmx, _position, block_height)| {
-            ZcashVerifiedNoteDisplay {
+        .map(
+            |(value, nullifier_hex, _cmx, _position, block_height)| ZcashVerifiedNoteDisplay {
                 value,
                 nullifier_hex,
                 block_height,
-            }
-        })
+            },
+        )
         .collect())
 }
 
@@ -2415,12 +2561,8 @@ fn init_logging(_tag: String) {
 // ── ed25519 identity (zafu-compatible) ──
 
 /// Derive base identity pubkey (compatible with zafu identity.ts)
-fn auth_derive_identity(
-    seed_phrase: &str,
-    index: u32,
-) -> Result<String, ErrorDisplayed> {
-    auth::derive_identity(seed_phrase, index)
-        .map_err(|e| ErrorDisplayed::Str { s: e })
+fn auth_derive_identity(seed_phrase: &str, index: u32) -> Result<String, ErrorDisplayed> {
+    auth::derive_identity(seed_phrase, index).map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 /// Derive domain-scoped identity pubkey (per-service, no cross-site correlation)
@@ -2519,8 +2661,13 @@ fn frost_spend_sign_round2(
     commitments_json: &str,
 ) -> Result<String, ErrorDisplayed> {
     frost_multisig::frost_spend_sign_round2(
-        key_package_hex, nonces_hex, sighash_hex, alpha_hex, commitments_json,
-    ).map_err(|e| ErrorDisplayed::Str { s: e })
+        key_package_hex,
+        nonces_hex,
+        sighash_hex,
+        alpha_hex,
+        commitments_json,
+    )
+    .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 fn frost_spend_sign_actions(
@@ -2531,8 +2678,13 @@ fn frost_spend_sign_actions(
     commitments_json: &str,
 ) -> Result<String, ErrorDisplayed> {
     frost_multisig::frost_spend_sign_actions(
-        key_package_hex, nonces_hex, sighash_hex, alphas_json, commitments_json,
-    ).map_err(|e| ErrorDisplayed::Str { s: e })
+        key_package_hex,
+        nonces_hex,
+        sighash_hex,
+        alphas_json,
+        commitments_json,
+    )
+    .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 fn frost_derive_address_raw(
@@ -2624,10 +2776,8 @@ fn frost_delete_wallet(wallet_id: &str) -> Result<(), ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
-    db_handling::frost::delete_frost_wallet(database, wallet_id).map_err(|e| {
-        ErrorDisplayed::Str {
-            s: format!("Failed to delete FROST wallet: {e}"),
-        }
+    db_handling::frost::delete_frost_wallet(database, wallet_id).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to delete FROST wallet: {e}"),
     })
 }
 

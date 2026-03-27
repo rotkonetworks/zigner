@@ -157,7 +157,7 @@ pub fn store_verified_notes(
     for (value, nullifier, cmx, position, block_height) in notes {
         let mut note_data = Vec::with_capacity(72);
         note_data.extend_from_slice(&value.to_le_bytes()); // 8 bytes
-        note_data.extend_from_slice(cmx);                  // 32 bytes
+        note_data.extend_from_slice(cmx); // 32 bytes
         note_data.extend_from_slice(&position.to_le_bytes()); // 4 bytes
         note_data.extend_from_slice(&block_height.to_le_bytes()); // 4 bytes
         tree.insert(&nullifier[..], note_data.as_slice())?;
@@ -169,9 +169,7 @@ pub fn store_verified_notes(
 
 /// Retrieve all verified notes from the database
 /// Returns: Vec<(value, nullifier_hex, cmx, position, block_height)>
-pub fn get_verified_notes(
-    database: &sled::Db,
-) -> Result<Vec<(u64, String, [u8; 32], u32, u32)>> {
+pub fn get_verified_notes(database: &sled::Db) -> Result<Vec<(u64, String, [u8; 32], u32, u32)>> {
     let tree = database.open_tree(ZCASH_NOTES_TREE)?;
     let mut notes = Vec::new();
 
@@ -234,6 +232,23 @@ pub fn clear_zcash_notes(database: &sled::Db) -> Result<()> {
     tree.clear()?;
     tree.flush()?;
     Ok(())
+}
+
+/// Sticky flag: once set, attestation is required for all future note syncs.
+const ATTESTATION_REQUIRED_KEY: &[u8] = b"__attestation_required__";
+
+/// Mark that FROST attestation is permanently required for this device.
+pub fn set_attestation_required(database: &sled::Db) -> Result<()> {
+    let tree = database.open_tree(ZCASH_NOTES_TREE)?;
+    tree.insert(ATTESTATION_REQUIRED_KEY, &[1u8])?;
+    tree.flush()?;
+    Ok(())
+}
+
+/// Check if FROST attestation is required (sticky flag was set).
+pub fn is_attestation_required(database: &sled::Db) -> Result<bool> {
+    let tree = database.open_tree(ZCASH_NOTES_TREE)?;
+    Ok(tree.get(ATTESTATION_REQUIRED_KEY)?.is_some())
 }
 
 #[cfg(test)]

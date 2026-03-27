@@ -19,3 +19,7 @@ members = [
 	"transaction_signing",
 	"zcash-wasm"
 ]
+
+# Shared crates — single source of truth across zcli/zafu/zigner
+[workspace.dependencies]
+frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "e278b62" }

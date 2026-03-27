@@ -164,7 +164,11 @@ fn get_ufvk(sk: &SpendingKeyBytes, mainnet: bool) -> String {
 
 /// Build UFVK with both orchard and transparent components from mnemonic seed.
 /// The transparent component allows watch-only wallets to derive t-addresses.
-fn get_ufvk_with_transparent(mnemonic_str: &str, account: u32, mainnet: bool) -> Result<String, JsError> {
+fn get_ufvk_with_transparent(
+    mnemonic_str: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<String, JsError> {
     use orchard::keys::FullViewingKey;
     use zcash_address::unified::{Encoding, Fvk, Ufvk};
     use zcash_address::Network;
@@ -175,10 +179,11 @@ fn get_ufvk_with_transparent(mnemonic_str: &str, account: u32, mainnet: bool) ->
     let seed_bytes: &[u8] = seed.as_bytes();
 
     // orchard FVK
-    let account_id = zip32::AccountId::try_from(account)
-        .map_err(|_| JsError::new("invalid account index"))?;
-    let orchard_sk = orchard::keys::SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
-        .map_err(|e| JsError::new(&format!("orchard key derivation failed: {:?}", e)))?;
+    let account_id =
+        zip32::AccountId::try_from(account).map_err(|_| JsError::new("invalid account index"))?;
+    let orchard_sk =
+        orchard::keys::SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
+            .map_err(|e| JsError::new(&format!("orchard key derivation failed: {:?}", e)))?;
     let fvk = FullViewingKey::from(&orchard_sk);
     let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
 
@@ -209,7 +214,11 @@ fn get_ufvk_with_transparent(mnemonic_str: &str, account: u32, mainnet: bool) ->
 
     let transparent_fvk = Fvk::P2pkh(p2pkh_data);
 
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
 
     let ufvk = Ufvk::try_from_items(vec![orchard_fvk, transparent_fvk])
         .map_err(|e| JsError::new(&format!("failed to build UFVK: {}", e)))?;

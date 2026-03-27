@@ -2303,6 +2303,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "frost-spend"
+version = "0.1.0"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=e278b62#e278b6242c0c1797efb6e18154bf1e3d752cf5d3"
+dependencies = [
+ "blake2b_simd 1.0.3",
+ "ed25519-consensus",
+ "hex",
+ "orchard 0.10.1",
+ "osst",
+ "pasta_curves",
+ "rand_core 0.6.4",
+ "reddsa 0.5.1 (git+https://github.com/ZcashFoundation/reddsa.git?rev=475a552)",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+]
+
+[[package]]
 name = "fs-err"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6993,7 +7011,7 @@ dependencies = [
  "definitions",
  "env_logger",
  "ffi-support",
- "frost-spend",
+ "frost-spend 0.1.0",
  "generate_message",
  "hex",
  "hmac 0.12.1",
@@ -8242,6 +8260,7 @@ dependencies = [
  "decaf377",
  "decaf377-rdsa",
  "definitions",
+ "frost-spend 0.1.0 (git+https://github.com/rotkonetworks/zcli.git?rev=e278b62)",
  "hex",
  "hmac 0.12.1",
  "orchard 0.12.0",

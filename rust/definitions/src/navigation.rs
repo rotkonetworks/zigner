@@ -1059,6 +1059,7 @@ pub struct ZcashNoteSyncResult {
     pub anchor_hex: String,
     pub anchor_height: u32,
     pub mainnet: bool,
+    pub anchor_verified: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

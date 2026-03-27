@@ -11,8 +11,8 @@
 //   HMAC-SHA512("zafu-identity:" || domain, mnemonic || '\0' || index) → ed25519 seed
 // These are distinct from the base identity (different HMAC key).
 
-use std::convert::TryInto;
 use sp_core::{ed25519, Pair};
+use std::convert::TryInto;
 
 const IDENTITY_DOMAIN: &[u8] = b"zafu-identity";
 
@@ -65,11 +65,7 @@ pub fn sign_domain_challenge(
 }
 
 /// Verify an ed25519 signature.
-pub fn verify_signature(
-    pubkey_hex: &str,
-    sig_hex: &str,
-    challenge: &[u8],
-) -> Result<bool, String> {
+pub fn verify_signature(pubkey_hex: &str, sig_hex: &str, challenge: &[u8]) -> Result<bool, String> {
     let pubkey_bytes: [u8; 32] = hex::decode(pubkey_hex)
         .map_err(|e| format!("bad pubkey hex: {e}"))?
         .try_into()
@@ -102,8 +98,8 @@ fn derive_base_keypair(seed_phrase: &str, index: u32) -> Result<ed25519::Pair, S
     // Match zafu: TextEncoder.encode(mnemonic + '\0' + index)
     let data = format!("{seed_phrase}\0{index}");
 
-    let mut mac = HmacSha512::new_from_slice(IDENTITY_DOMAIN)
-        .map_err(|e| format!("hmac init: {e}"))?;
+    let mut mac =
+        HmacSha512::new_from_slice(IDENTITY_DOMAIN).map_err(|e| format!("hmac init: {e}"))?;
     mac.update(data.as_bytes());
     let result = mac.finalize().into_bytes();
 
@@ -133,8 +129,8 @@ fn derive_domain_keypair(
     let hmac_key = format!("zafu-identity:{domain}");
     let data = format!("{seed_phrase}\0{index}");
 
-    let mut mac = HmacSha512::new_from_slice(hmac_key.as_bytes())
-        .map_err(|e| format!("hmac init: {e}"))?;
+    let mut mac =
+        HmacSha512::new_from_slice(hmac_key.as_bytes()).map_err(|e| format!("hmac init: {e}"))?;
     mac.update(data.as_bytes());
     let result = mac.finalize().into_bytes();
 
@@ -190,9 +186,8 @@ mod tests {
     #[test]
     fn test_sign_and_verify_domain() {
         let challenge = build_auth_challenge("example.com", "nonce123", 1710000000);
-        let (pubkey, sig) = sign_domain_challenge(
-            TEST_PHRASE, "example.com", 0, &challenge,
-        ).unwrap();
+        let (pubkey, sig) =
+            sign_domain_challenge(TEST_PHRASE, "example.com", 0, &challenge).unwrap();
         let valid = verify_signature(&pubkey, &sig, &challenge).unwrap();
         assert!(valid);
     }

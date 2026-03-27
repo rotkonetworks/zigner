@@ -47,7 +47,10 @@ pub fn wallet_id_hex(public_key_package_hex: &str) -> String {
     hex::encode(wallet_id_bytes(public_key_package_hex))
 }
 
-/// Store a FROST wallet after DKG completion
+/// Store a FROST wallet after DKG completion.
+/// Also sets the sticky attestation-required flag — once a FROST wallet exists,
+/// anchor attestation is required for all future note syncs, even if the wallet
+/// is later deleted.
 pub fn store_frost_wallet(database: &sled::Db, data: &FrostWalletData) -> Result<String> {
     let tree = database.open_tree(FROST_KEYS_TREE)?;
     let id = wallet_id_bytes(&data.public_key_package_hex);
@@ -55,11 +58,18 @@ pub fn store_frost_wallet(database: &sled::Db, data: &FrostWalletData) -> Result
         .map_err(|e| Error::Other(anyhow::anyhow!("FROST serialize: {e}")))?;
     tree.insert(&id, json.as_slice())?;
     tree.flush()?;
+
+    // Set sticky flag: attestation now required permanently
+    crate::zcash::set_attestation_required(database)?;
+
     Ok(hex::encode(id))
 }
 
 /// Get a FROST wallet by id (hex string)
-pub fn get_frost_wallet(database: &sled::Db, wallet_id_hex: &str) -> Result<Option<FrostWalletData>> {
+pub fn get_frost_wallet(
+    database: &sled::Db,
+    wallet_id_hex: &str,
+) -> Result<Option<FrostWalletData>> {
     let tree = database.open_tree(FROST_KEYS_TREE)?;
     let id = hex::decode(wallet_id_hex)
         .map_err(|e| Error::Other(anyhow::anyhow!("bad wallet id hex: {e}")))?;

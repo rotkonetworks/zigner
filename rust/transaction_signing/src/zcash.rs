@@ -281,7 +281,11 @@ impl OrchardSpendingKey {
     /// the transparent component allows watch-only wallets to derive t-addresses
     #[cfg(feature = "zcash")]
     #[allow(deprecated)]
-    pub fn get_ufvk_with_transparent(seed_phrase: &str, account: u32, mainnet: bool) -> Result<String> {
+    pub fn get_ufvk_with_transparent(
+        seed_phrase: &str,
+        account: u32,
+        mainnet: bool,
+    ) -> Result<String> {
         use orchard::keys::FullViewingKey;
         use zcash_address::unified::{Encoding, Fvk, Ufvk};
         use zcash_address::Network;
@@ -294,8 +298,11 @@ impl OrchardSpendingKey {
         // orchard FVK
         let account_id = zip32::AccountId::try_from(account)
             .map_err(|_| Error::ZcashKeyDerivation("invalid account index".to_string()))?;
-        let orchard_sk = orchard::keys::SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
-            .map_err(|e| Error::ZcashKeyDerivation(format!("orchard key derivation failed: {e:?}")))?;
+        let orchard_sk =
+            orchard::keys::SpendingKey::from_zip32_seed(seed_bytes, ZCASH_COIN_TYPE, account_id)
+                .map_err(|e| {
+                    Error::ZcashKeyDerivation(format!("orchard key derivation failed: {e:?}"))
+                })?;
         let fvk = FullViewingKey::from(&orchard_sk);
         let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
 
@@ -325,7 +332,11 @@ impl OrchardSpendingKey {
         p2pkh_data[32..65].copy_from_slice(&pubkey_bytes);
         let transparent_fvk = Fvk::P2pkh(p2pkh_data);
 
-        let network = if mainnet { Network::Main } else { Network::Test };
+        let network = if mainnet {
+            Network::Main
+        } else {
+            Network::Test
+        };
 
         let ufvk = Ufvk::try_from_items(vec![orchard_fvk, transparent_fvk])
             .map_err(|e| Error::ZcashKeyDerivation(format!("failed to build UFVK: {e}")))?;
@@ -682,6 +693,9 @@ pub struct ZcashNotesBundle {
     pub mainnet: bool,
     /// Notes with merkle paths
     pub notes: Vec<ZcashNoteWithPath>,
+    /// Optional FROST group attestation: RedPallas signature over the anchor.
+    /// 64 bytes: [R:32][z:32]. Verifies against the FROST group verifying key.
+    pub anchor_attestation: Option<[u8; 64]>,
 }
 
 /// Result of note sync verification
@@ -697,6 +711,8 @@ pub struct ZcashNoteSyncResult {
     pub anchor_height: u32,
     /// Network
     pub mainnet: bool,
+    /// Whether the anchor was verified via FROST group attestation
+    pub anchor_verified: bool,
 }
 
 // ============================================================================
@@ -740,6 +756,36 @@ pub fn verify_merkle_path(
 }
 
 // ============================================================================
+// FROST anchor attestation — verify anchor via threshold group signature
+// ============================================================================
+
+/// Re-export the attestation message builder from frost-spend.
+#[cfg(feature = "zcash")]
+pub use frost_spend::attestation::attestation_message as anchor_attestation_message;
+
+/// Verify a FROST group attestation signature over an anchor.
+///
+/// Delegates to frost_spend::attestation — single source of truth for the
+/// custom challenge hash ("ZignerAnchorAtH"), domain-separated from spend auth.
+///
+/// Returns Ok(true) if valid, Ok(false) if invalid, Err on parse failure.
+#[cfg(feature = "zcash")]
+#[must_use]
+pub fn verify_anchor_attestation(
+    signature_bytes: &[u8; 64],
+    group_verifying_key: &[u8; 32],
+    anchor: &[u8; 32],
+    anchor_height: u32,
+    mainnet: bool,
+) -> Result<bool> {
+    use frost_spend::attestation;
+
+    let msg = attestation::attestation_message(group_verifying_key, anchor, anchor_height, mainnet);
+    attestation::verify_from_bytes(signature_bytes, group_verifying_key, &msg)
+        .ok_or_else(|| Error::ZcashParsing("invalid attestation signature or verifying key".into()))
+}
+
+// ============================================================================
 // CBOR codec for zcash-notes bundle
 // ============================================================================
 
@@ -771,7 +817,8 @@ pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
 
     // key 1: anchor (bstr 32)
     cbor.push(0x01);
-    cbor.push(0x58); cbor.push(0x20); // bytes(32)
+    cbor.push(0x58);
+    cbor.push(0x20); // bytes(32)
     cbor.extend_from_slice(&bundle.anchor);
 
     // key 2: anchor_height (uint)
@@ -796,12 +843,14 @@ pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
 
         // 2: nullifier
         cbor.push(0x02);
-        cbor.push(0x58); cbor.push(0x20);
+        cbor.push(0x58);
+        cbor.push(0x20);
         cbor.extend_from_slice(&note.nullifier);
 
         // 3: cmx
         cbor.push(0x03);
-        cbor.push(0x58); cbor.push(0x20);
+        cbor.push(0x58);
+        cbor.push(0x20);
         cbor.extend_from_slice(&note.cmx);
 
         // 4: position
@@ -814,9 +863,11 @@ pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
 
         // 6: merkle_path (array of 32 bstr(32))
         cbor.push(0x06);
-        cbor.push(0x98); cbor.push(0x20); // array(32)
+        cbor.push(0x98);
+        cbor.push(0x20); // array(32)
         for sibling in &note.merkle_path {
-            cbor.push(0x58); cbor.push(0x20);
+            cbor.push(0x58);
+            cbor.push(0x20);
             cbor.extend_from_slice(sibling);
         }
     }
@@ -835,13 +886,16 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
     let (map_len, consumed) = cbor_decode_map_len(data, offset)?;
     offset = consumed;
     if map_len < 4 {
-        return Err(Error::ZcashParsing(format!("expected map(4+), got map({map_len})")));
+        return Err(Error::ZcashParsing(format!(
+            "expected map(4+), got map({map_len})"
+        )));
     }
 
     let mut anchor = [0u8; 32];
     let mut anchor_height = 0u32;
     let mut mainnet = true;
     let mut notes = Vec::new();
+    let mut anchor_attestation: Option<[u8; 64]> = None;
 
     for _ in 0..map_len {
         let (key, consumed) = cbor_decode_uint(data, offset)?;
@@ -853,7 +907,10 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
                 offset = consumed;
                 if bytes.len() != 32 {
-                    return Err(Error::ZcashParsing(format!("anchor must be 32 bytes, got {}", bytes.len())));
+                    return Err(Error::ZcashParsing(format!(
+                        "anchor must be 32 bytes, got {}",
+                        bytes.len()
+                    )));
                 }
                 anchor.copy_from_slice(&bytes);
             }
@@ -886,6 +943,20 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                     notes.push(note);
                 }
             }
+            5 => {
+                // anchor_attestation: bstr(64) — FROST group signature
+                let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
+                offset = consumed;
+                if bytes.len() != 64 {
+                    return Err(Error::ZcashParsing(format!(
+                        "attestation must be 64 bytes, got {}",
+                        bytes.len()
+                    )));
+                }
+                let mut sig = [0u8; 64];
+                sig.copy_from_slice(&bytes);
+                anchor_attestation = Some(sig);
+            }
             _ => {
                 // skip unknown keys
                 let consumed = cbor_skip_value(data, offset)?;
@@ -899,6 +970,7 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
         anchor_height,
         mainnet,
         notes,
+        anchor_attestation,
     })
 }
 
@@ -948,28 +1020,63 @@ fn cbor_decode_uint(data: &[u8], offset: usize) -> Result<(u64, usize)> {
     let additional = first & 0x1f;
 
     if major != 0 {
-        return Err(Error::ZcashParsing(format!("expected uint (major 0), got major {major}")));
+        return Err(Error::ZcashParsing(format!(
+            "expected uint (major 0), got major {major}"
+        )));
     }
 
     match additional {
         0..=23 => Ok((additional as u64, offset + 1)),
         24 => {
-            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("truncated uint".to_string()));
+            }
             Ok((data[offset + 1] as u64, offset + 2))
         }
         25 => {
-            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
-            Ok((u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as u64, offset + 3))
+            if offset + 3 > data.len() {
+                return Err(Error::ZcashParsing("truncated uint".to_string()));
+            }
+            Ok((
+                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as u64,
+                offset + 3,
+            ))
         }
         26 => {
-            if offset + 5 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
-            Ok((u32::from_be_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4]]) as u64, offset + 5))
+            if offset + 5 > data.len() {
+                return Err(Error::ZcashParsing("truncated uint".to_string()));
+            }
+            Ok((
+                u32::from_be_bytes([
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                ]) as u64,
+                offset + 5,
+            ))
         }
         27 => {
-            if offset + 9 > data.len() { return Err(Error::ZcashParsing("truncated uint".to_string())); }
-            Ok((u64::from_be_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7], data[offset + 8]]), offset + 9))
+            if offset + 9 > data.len() {
+                return Err(Error::ZcashParsing("truncated uint".to_string()));
+            }
+            Ok((
+                u64::from_be_bytes([
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
+                    data[offset + 8],
+                ]),
+                offset + 9,
+            ))
         }
-        _ => Err(Error::ZcashParsing(format!("unsupported uint additional {additional}"))),
+        _ => Err(Error::ZcashParsing(format!(
+            "unsupported uint additional {additional}"
+        ))),
     }
 }
 
@@ -982,26 +1089,42 @@ fn cbor_decode_bstr(data: &[u8], offset: usize) -> Result<(Vec<u8>, usize)> {
     let additional = first & 0x1f;
 
     if major != 2 {
-        return Err(Error::ZcashParsing(format!("expected bstr (major 2), got major {major}")));
+        return Err(Error::ZcashParsing(format!(
+            "expected bstr (major 2), got major {major}"
+        )));
     }
 
     let (len, header_end) = match additional {
         0..=23 => (additional as usize, offset + 1),
         24 => {
-            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated bstr len".to_string())); }
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("truncated bstr len".to_string()));
+            }
             (data[offset + 1] as usize, offset + 2)
         }
         25 => {
-            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated bstr len".to_string())); }
-            (u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize, offset + 3)
+            if offset + 3 > data.len() {
+                return Err(Error::ZcashParsing("truncated bstr len".to_string()));
+            }
+            (
+                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize,
+                offset + 3,
+            )
         }
-        _ => return Err(Error::ZcashParsing(format!("unsupported bstr additional {additional}"))),
+        _ => {
+            return Err(Error::ZcashParsing(format!(
+                "unsupported bstr additional {additional}"
+            )))
+        }
     };
 
     if header_end + len > data.len() {
         return Err(Error::ZcashParsing("truncated bstr data".to_string()));
     }
-    Ok((data[header_end..header_end + len].to_vec(), header_end + len))
+    Ok((
+        data[header_end..header_end + len].to_vec(),
+        header_end + len,
+    ))
 }
 
 fn cbor_decode_map_len(data: &[u8], offset: usize) -> Result<(usize, usize)> {
@@ -1013,16 +1136,22 @@ fn cbor_decode_map_len(data: &[u8], offset: usize) -> Result<(usize, usize)> {
     let additional = first & 0x1f;
 
     if major != 5 {
-        return Err(Error::ZcashParsing(format!("expected map (major 5), got major {major}")));
+        return Err(Error::ZcashParsing(format!(
+            "expected map (major 5), got major {major}"
+        )));
     }
 
     match additional {
         0..=23 => Ok((additional as usize, offset + 1)),
         24 => {
-            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated map len".to_string())); }
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("truncated map len".to_string()));
+            }
             Ok((data[offset + 1] as usize, offset + 2))
         }
-        _ => Err(Error::ZcashParsing(format!("unsupported map additional {additional}"))),
+        _ => Err(Error::ZcashParsing(format!(
+            "unsupported map additional {additional}"
+        ))),
     }
 }
 
@@ -1035,27 +1164,40 @@ fn cbor_decode_array_len(data: &[u8], offset: usize) -> Result<(usize, usize)> {
     let additional = first & 0x1f;
 
     if major != 4 {
-        return Err(Error::ZcashParsing(format!("expected array (major 4), got major {major}")));
+        return Err(Error::ZcashParsing(format!(
+            "expected array (major 4), got major {major}"
+        )));
     }
 
     match additional {
         0..=23 => Ok((additional as usize, offset + 1)),
         24 => {
-            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated array len".to_string())); }
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("truncated array len".to_string()));
+            }
             Ok((data[offset + 1] as usize, offset + 2))
         }
         25 => {
-            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated array len".to_string())); }
-            Ok((u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize, offset + 3))
+            if offset + 3 > data.len() {
+                return Err(Error::ZcashParsing("truncated array len".to_string()));
+            }
+            Ok((
+                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize,
+                offset + 3,
+            ))
         }
-        _ => Err(Error::ZcashParsing(format!("unsupported array additional {additional}"))),
+        _ => Err(Error::ZcashParsing(format!(
+            "unsupported array additional {additional}"
+        ))),
     }
 }
 
 fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWithPath, usize)> {
     let (map_len, mut offset) = cbor_decode_map_len(data, offset)?;
     if map_len < 6 {
-        return Err(Error::ZcashParsing(format!("expected note map(6+), got map({map_len})")));
+        return Err(Error::ZcashParsing(format!(
+            "expected note map(6+), got map({map_len})"
+        )));
     }
 
     let mut value = 0u64;
@@ -1079,7 +1221,9 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
                 let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
                 offset = consumed;
                 if bytes.len() != 32 {
-                    return Err(Error::ZcashParsing("nullifier must be 32 bytes".to_string()));
+                    return Err(Error::ZcashParsing(
+                        "nullifier must be 32 bytes".to_string(),
+                    ));
                 }
                 nullifier.copy_from_slice(&bytes);
             }
@@ -1105,13 +1249,17 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
                 let (arr_len, consumed) = cbor_decode_array_len(data, offset)?;
                 offset = consumed;
                 if arr_len != 32 {
-                    return Err(Error::ZcashParsing(format!("merkle path must have 32 siblings, got {arr_len}")));
+                    return Err(Error::ZcashParsing(format!(
+                        "merkle path must have 32 siblings, got {arr_len}"
+                    )));
                 }
                 for i in 0..32 {
                     let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
                     offset = consumed;
                     if bytes.len() != 32 {
-                        return Err(Error::ZcashParsing("merkle sibling must be 32 bytes".to_string()));
+                        return Err(Error::ZcashParsing(
+                            "merkle sibling must be 32 bytes".to_string(),
+                        ));
                     }
                     merkle_path[i].copy_from_slice(&bytes);
                 }
@@ -1122,14 +1270,17 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
         }
     }
 
-    Ok((ZcashNoteWithPath {
-        value,
-        nullifier,
-        cmx,
-        position,
-        block_height,
-        merkle_path,
-    }, offset))
+    Ok((
+        ZcashNoteWithPath {
+            value,
+            nullifier,
+            cmx,
+            position,
+            block_height,
+            merkle_path,
+        },
+        offset,
+    ))
 }
 
 /// Skip a single CBOR value (for unknown map keys)
@@ -1144,18 +1295,39 @@ fn cbor_skip_value(data: &[u8], offset: usize) -> Result<usize> {
     let (content_len, header_end) = match additional {
         0..=23 => (additional as usize, offset + 1),
         24 => {
-            if offset + 2 > data.len() { return Err(Error::ZcashParsing("truncated".to_string())); }
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParsing("truncated".to_string()));
+            }
             (data[offset + 1] as usize, offset + 2)
         }
         25 => {
-            if offset + 3 > data.len() { return Err(Error::ZcashParsing("truncated".to_string())); }
-            (u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize, offset + 3)
+            if offset + 3 > data.len() {
+                return Err(Error::ZcashParsing("truncated".to_string()));
+            }
+            (
+                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize,
+                offset + 3,
+            )
         }
         26 => {
-            if offset + 5 > data.len() { return Err(Error::ZcashParsing("truncated".to_string())); }
-            (u32::from_be_bytes([data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4]]) as usize, offset + 5)
+            if offset + 5 > data.len() {
+                return Err(Error::ZcashParsing("truncated".to_string()));
+            }
+            (
+                u32::from_be_bytes([
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                ]) as usize,
+                offset + 5,
+            )
         }
-        _ => return Err(Error::ZcashParsing(format!("unsupported CBOR additional {additional}"))),
+        _ => {
+            return Err(Error::ZcashParsing(format!(
+                "unsupported CBOR additional {additional}"
+            )))
+        }
     };
 
     match major {
@@ -1179,7 +1351,9 @@ fn cbor_skip_value(data: &[u8], offset: usize) -> Result<usize> {
             Ok(pos)
         }
         7 => Ok(offset + 1), // simple values (true/false/null) or floats
-        _ => Err(Error::ZcashParsing(format!("unsupported CBOR major type {major}"))),
+        _ => Err(Error::ZcashParsing(format!(
+            "unsupported CBOR major type {major}"
+        ))),
     }
 }
 

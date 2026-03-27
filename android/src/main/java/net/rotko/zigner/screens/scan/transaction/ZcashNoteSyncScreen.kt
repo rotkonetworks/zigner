@@ -119,6 +119,31 @@ fun ZcashNoteSyncScreen(
 					color = MaterialTheme.colors.textSecondary
 				)
 			}
+
+			// Anchor attestation status
+			Column(
+				modifier = Modifier
+					.fillMaxWidth()
+					.clip(RoundedCornerShape(8.dp))
+					.background(MaterialTheme.colors.fill6)
+					.padding(12.dp),
+				verticalArrangement = Arrangement.spacedBy(4.dp)
+			) {
+				Text(
+					text = if (result.anchorVerified) "Anchor: Attested by threshold group"
+						else "Anchor: From zcli (single-signer)",
+					style = SignerTypeface.LabelM,
+					color = if (result.anchorVerified) MaterialTheme.colors.primary
+						else MaterialTheme.colors.textTertiary
+				)
+				if (!result.anchorVerified) {
+					Text(
+						text = "No FROST wallet — anchor trust relies on zcli. Set up a threshold wallet for independent verification.",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary
+					)
+				}
+			}
 		}
 
 		SignerDivider()
