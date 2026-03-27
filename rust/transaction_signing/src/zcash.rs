@@ -693,9 +693,9 @@ pub struct ZcashNotesBundle {
     pub mainnet: bool,
     /// Notes with merkle paths
     pub notes: Vec<ZcashNoteWithPath>,
-    /// Optional FROST group attestation: signature(64) || randomizer(32) = 96 bytes.
-    /// Verifies against the FROST group's randomized verifying key.
-    pub anchor_attestation: Option<[u8; 96]>,
+    /// Optional anchor attestation signature (variable length).
+    /// 64 bytes = ed25519 (rotko verifier), 96 bytes = FROST (threshold group).
+    pub anchor_attestation: Option<Vec<u8>>,
 }
 
 /// Result of note sync verification
@@ -881,11 +881,11 @@ pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
         }
     }
 
-    // key 5: anchor_attestation (bstr 96) — optional
+    // key 5: anchor_attestation (bstr, variable length) — optional
     if let Some(ref att) = bundle.anchor_attestation {
         cbor.push(0x05);
         cbor.push(0x58);
-        cbor.push(0x60); // bytes(96)
+        cbor.push(att.len() as u8);
         cbor.extend_from_slice(att);
     }
 
@@ -912,7 +912,7 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
     let mut anchor_height = 0u32;
     let mut mainnet = true;
     let mut notes = Vec::new();
-    let mut anchor_attestation: Option<[u8; 96]> = None;
+    let mut anchor_attestation: Option<Vec<u8>> = None;
 
     for _ in 0..map_len {
         let (key, consumed) = cbor_decode_uint(data, offset)?;
@@ -961,18 +961,16 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 }
             }
             5 => {
-                // anchor_attestation: bstr(96) — signature(64) || randomizer(32)
+                // anchor_attestation: bstr (64 = ed25519, 96 = FROST)
                 let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
                 offset = consumed;
-                if bytes.len() != 96 {
+                if bytes.len() != 64 && bytes.len() != 96 {
                     return Err(Error::ZcashParsing(format!(
-                        "attestation must be 96 bytes (sig 64 + randomizer 32), got {}",
+                        "attestation must be 64 bytes (ed25519) or 96 bytes (FROST), got {}",
                         bytes.len()
                     )));
                 }
-                let mut att = [0u8; 96];
-                att.copy_from_slice(&bytes);
-                anchor_attestation = Some(att);
+                anchor_attestation = Some(bytes);
             }
             _ => {
                 // skip unknown keys

@@ -2197,7 +2197,7 @@ fn decode_and_verify_zcash_notes(
     ur_parts: Vec<String>,
 ) -> Result<ZcashNoteSyncResult, ErrorDisplayed> {
     use transaction_signing::zcash::{
-        decode_notes_bundle_from_cbor, verify_anchor_attestation, verify_merkle_path,
+        decode_notes_bundle_from_cbor, verify_merkle_path,
     };
 
     if ur_parts.is_empty() {
@@ -2230,86 +2230,52 @@ fn decode_and_verify_zcash_notes(
         }
     }
 
-    // Check attestation requirement: sticky flag (survives FROST wallet deletion)
-    let attestation_required =
-        db_handling::zcash::is_attestation_required(database).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to check attestation flag: {e}"),
-        })?;
-
-    let anchor_verified = if !attestation_required {
-        false
-    } else {
-        let attestation =
-            bundle
-                .anchor_attestation
-                .as_ref()
-                .ok_or_else(|| ErrorDisplayed::Str {
-                    s: "Anchor attestation required but not present in notes bundle. \
-                    A threshold group signature over the anchor is needed."
-                        .to_string(),
-                })?;
-
-        let frost_wallets =
-            db_handling::frost::list_frost_wallets(database).map_err(|e| ErrorDisplayed::Str {
-                s: format!("Failed to list FROST wallets: {e}"),
-            })?;
-
-        if frost_wallets.is_empty() {
+    // Verify anchor attestation: ed25519 signature from rotko verifier
+    let anchor_verified = if let Some(attestation) = &bundle.anchor_attestation {
+        // attestation is 64 bytes: ed25519 signature over anchor digest
+        if attestation.len() < 64 {
             return Err(ErrorDisplayed::Str {
-                s: "Attestation required (FROST was previously configured) but no \
-                    FROST wallets remain. Re-run DKG or restore wallet backup."
-                    .to_string(),
+                s: format!("attestation too short: {} bytes, need 64", attestation.len()),
             });
         }
+        let signature = &attestation[..64];
+        // Rotko Networks verifier key for Zcash anchor attestation
+        // TODO: replace with production key before release
+        let verifier_key: [u8; 32] = [0u8; 32]; // placeholder
 
-        let mut verified = false;
-        let mut last_error: Option<String> = None;
+        // skip verification if verifier key is not set (all zeros = development mode)
+        if verifier_key == [0u8; 32] {
+            false // no verifier configured, accept without verification
+        } else {
+            // compute attestation digest: SHA-256("zcash-anchor-v1" || pubkey || anchor || height || mainnet)
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(b"zcash-anchor-v1");
+            hasher.update(&verifier_key);
+            hasher.update(&bundle.anchor);
+            hasher.update(&bundle.anchor_height.to_le_bytes());
+            hasher.update(&[u8::from(bundle.mainnet)]);
+            let digest: [u8; 32] = hasher.finalize().into();
 
-        for wallet_summary in &frost_wallets {
-            let wallet_data =
-                match db_handling::frost::get_frost_wallet(database, &wallet_summary.wallet_id) {
-                    Ok(Some(data)) => data,
-                    Ok(None) => continue,
-                    Err(e) => {
-                        last_error = Some(format!("load wallet {}: {e}", wallet_summary.wallet_id));
-                        continue;
-                    }
-                };
-
-            match verify_anchor_attestation(
-                attestation,
-                &wallet_data.public_key_package_hex,
-                &bundle.anchor,
-                bundle.anchor_height,
-                bundle.mainnet,
-            ) {
-                Ok(true) => {
-                    verified = true;
-                    break;
-                }
-                Ok(false) => continue,
-                Err(e) => {
-                    last_error = Some(format!(
-                        "verify attestation for wallet {}: {e}",
-                        wallet_summary.wallet_id
-                    ));
-                    continue;
-                }
+            // verify ed25519 signature
+            let pubkey = sp_core::ed25519::Public::from_raw(verifier_key);
+            let sig = sp_core::ed25519::Signature::from_raw({
+                let mut s = [0u8; 64];
+                s.copy_from_slice(signature);
+                s
+            });
+            if <sp_core::ed25519::Pair as sp_core::Pair>::verify(&sig, &digest, &pubkey) {
+                true
+            } else {
+                return Err(ErrorDisplayed::Str {
+                    s: "Anchor attestation signature invalid — \
+                        not signed by rotko verifier key."
+                        .to_string(),
+                });
             }
         }
-
-        if !verified {
-            let detail = last_error
-                .map(|e| format!(" Last error: {e}"))
-                .unwrap_or_default();
-            return Err(ErrorDisplayed::Str {
-                s: format!(
-                    "Anchor attestation is invalid — no stored FROST group key \
-                     could verify it. The anchor may be fabricated.{detail}"
-                ),
-            });
-        }
-        true
+    } else {
+        false // no attestation present, accept as unverified
     };
 
     // Verify each note's merkle path against anchor

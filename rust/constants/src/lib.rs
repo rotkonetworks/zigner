@@ -103,6 +103,13 @@ pub const FROST_KEYS_TREE: &[u8] = b"frost_keys";
 /// Key: address string bytes, Value: JSON-encoded contact metadata
 pub const CONTACTS_TREE: &[u8] = b"contacts";
 
+/// Rotko Networks ed25519 public key for Zcash anchor verification.
+/// The signer trusts this key to attest that anchors come from the real chain.
+/// Same trust model as Parity's verifier key in Polkadot Vault.
+///
+/// TODO: replace with rotko's production ed25519 public key
+pub const ROTKO_ZCASH_VERIFIER: [u8; 32] = [0u8; 32]; // placeholder — set before release
+
 /// Tree name for the tree storing database settings
 ///
 /// In cold database, the settings tree contains general verifier, types
