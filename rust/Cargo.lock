@@ -2288,23 +2288,6 @@ dependencies = [
 [[package]]
 name = "frost-spend"
 version = "0.1.0"
-dependencies = [
- "blake2b_simd 1.0.3",
- "ed25519-consensus",
- "hex",
- "orchard 0.10.1",
- "osst",
- "pasta_curves",
- "rand_core 0.6.4",
- "reddsa 0.5.1 (git+https://github.com/ZcashFoundation/reddsa.git?rev=475a552)",
- "serde",
- "serde_json",
- "sha2 0.10.8",
-]
-
-[[package]]
-name = "frost-spend"
-version = "0.1.0"
 source = "git+https://github.com/rotkonetworks/zcli.git?rev=b3b32a9#b3b32a9c48003bb9231441c10b86bcef135064bb"
 dependencies = [
  "blake2b_simd 1.0.3",
@@ -7007,11 +6990,12 @@ version = "0.1.0"
 dependencies = [
  "android_logger",
  "anyhow",
+ "chacha20poly1305 0.10.1",
  "db_handling",
  "definitions",
  "env_logger",
  "ffi-support",
- "frost-spend 0.1.0",
+ "frost-spend",
  "generate_message",
  "hex",
  "hmac 0.12.1",
@@ -7036,6 +7020,8 @@ dependencies = [
  "ur",
  "zcash_address 0.4.0",
  "zcash_transparent",
+ "zeroize",
+ "zoda-vss",
 ]
 
 [[package]]
@@ -8260,7 +8246,7 @@ dependencies = [
  "decaf377",
  "decaf377-rdsa",
  "definitions",
- "frost-spend 0.1.0 (git+https://github.com/rotkonetworks/zcli.git?rev=b3b32a9)",
+ "frost-spend",
  "hex",
  "hmac 0.12.1",
  "orchard 0.12.0",
@@ -9602,6 +9588,14 @@ dependencies = [
  "memuse",
  "subtle",
  "zcash_spec 0.2.1",
+]
+
+[[package]]
+name = "zoda-vss"
+version = "0.1.0"
+dependencies = [
+ "rand_core 0.6.4",
+ "sha2 0.10.8",
 ]
 
 [[package]]

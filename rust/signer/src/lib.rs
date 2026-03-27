@@ -30,6 +30,7 @@
 use zcash_transparent as _;
 
 pub mod auth;
+pub mod backup;
 mod ffi_types;
 pub mod frost_multisig;
 
@@ -2201,11 +2202,12 @@ fn decode_and_verify_zcash_notes(
 
     if ur_parts.is_empty() {
         return Err(ErrorDisplayed::Str {
-            s: "No UR parts provided".to_string(),
+            s: "No QR parts provided".to_string(),
         });
     }
 
-    let cbor_data = decode_ur_payload(&ur_parts, "zcash-notes")?;
+    // auto-detect UR or zoda transport format
+    let cbor_data = decode_qr_payload(&ur_parts, "zcash-notes")?;
 
     let bundle = decode_notes_bundle_from_cbor(&cbor_data).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to parse notes CBOR: {e}"),
@@ -2423,6 +2425,64 @@ fn clear_zcash_notes() -> Result<(), ErrorDisplayed> {
 }
 
 /// Generic UR decoder that handles both single-part and multi-part (fountain) URs
+/// Decode QR payload — auto-detects UR (`ur:`) or zoda transport (`zt:`) format.
+fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    if parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "No QR parts provided".to_string(),
+        });
+    }
+    let lower = parts[0].to_lowercase();
+    if lower.starts_with("zt:") {
+        decode_zt_payload(parts, expected_type)
+    } else {
+        decode_ur_payload(parts, expected_type)
+    }
+}
+
+/// Decode zoda transport frames (`zt:type/hex`).
+fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    use zoda_vss::transport::{Decoder as ZtDecoder, TransportError};
+
+    let zt_prefix = format!("zt:{}/", expected_type);
+
+    let mut decoder = ZtDecoder::new();
+
+    for part in parts {
+        let lower = part.to_lowercase();
+        if !lower.starts_with(&zt_prefix) {
+            // skip non-matching frames (could be stray QRs)
+            continue;
+        }
+
+        let hex_data = &part[zt_prefix.len()..];
+        let frame_bytes = hex::decode(hex_data).map_err(|e| ErrorDisplayed::Str {
+            s: format!("bad hex in zt frame: {e}"),
+        })?;
+
+        match decoder.receive(&frame_bytes) {
+            Ok(_) => {}
+            Err(TransportError::SessionMismatch) => {
+                // stray QR from different session — skip silently
+                continue;
+            }
+            Err(e) => {
+                return Err(ErrorDisplayed::Str {
+                    s: format!("zt transport error: {e}"),
+                });
+            }
+        }
+
+        if decoder.complete() {
+            break;
+        }
+    }
+
+    decoder.reconstruct().map_err(|e| ErrorDisplayed::Str {
+        s: format!("zt reconstruct failed: {e}"),
+    })
+}
+
 fn decode_ur_payload(ur_parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
     use ur::ur::decode;
 
@@ -2594,6 +2654,436 @@ fn auth_verify(
     let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
     auth::verify_signature(pubkey_hex, signature_hex, &challenge)
         .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+// ── contacts (address book) ──
+
+fn store_contact(
+    address: &str,
+    label: &str,
+    chain_id: &str,
+) -> Result<(), ErrorDisplayed> {
+    let db = get_db()?;
+    let contact = db_handling::contacts::Contact {
+        address: address.to_string(),
+        label: label.to_string(),
+        chain_id: chain_id.to_string(),
+    };
+    db_handling::contacts::store_contact(&db, &contact)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))
+}
+
+fn get_contacts() -> Result<String, ErrorDisplayed> {
+    let db = get_db()?;
+    let contacts = db_handling::contacts::get_contacts(&db)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
+    let json: Vec<serde_json::Value> = contacts
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "address": c.address,
+                "label": c.label,
+                "chain_id": c.chain_id,
+            })
+        })
+        .collect();
+    serde_json::to_string(&json)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))
+}
+
+fn get_contact_label(address: &str) -> Result<String, ErrorDisplayed> {
+    let db = get_db()?;
+    match db_handling::contacts::get_contact_label(&db, address)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))?
+    {
+        Some(label) => Ok(label),
+        None => Ok(String::new()),
+    }
+}
+
+fn delete_contact(address: &str) -> Result<(), ErrorDisplayed> {
+    let db = get_db()?;
+    db_handling::contacts::delete_contact(&db, address)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))
+}
+
+/// Export contacts as CBOR for QR display (unencrypted, for live scan)
+fn export_contacts_cbor() -> Result<Vec<u8>, ErrorDisplayed> {
+    let db = get_db()?;
+    let contacts = db_handling::contacts::get_contacts(&db)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
+    Ok(backup::encode_contacts_cbor(&contacts))
+}
+
+/// Import contacts from CBOR (from QR scan)
+fn import_contacts_cbor(cbor: Vec<u8>) -> Result<u32, ErrorDisplayed> {
+    let contacts = backup::decode_contacts_cbor(&cbor)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let db = get_db()?;
+    let count = db_handling::contacts::import_contacts(&db, &contacts)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
+    Ok(count as u32)
+}
+
+/// Export contacts as UR-encoded animated QR string frames
+fn export_contacts_ur(max_fragment_len: u32) -> Result<Vec<String>, ErrorDisplayed> {
+    let cbor = export_contacts_cbor()?;
+    ur_encode_cbor(&cbor, "zigner-contacts", max_fragment_len)
+}
+
+/// Export contacts as zoda transport frames (verified erasure coding)
+fn export_contacts_zt(k: u8, n: u8) -> Result<Vec<String>, ErrorDisplayed> {
+    let cbor = export_contacts_cbor()?;
+    zt_encode(&cbor, "zigner-contacts", k, n)
+}
+
+/// Encode data as zoda transport QR frames: `zt:type/hex`
+fn zt_encode(data: &[u8], zt_type: &str, k: u8, n: u8) -> Result<Vec<String>, ErrorDisplayed> {
+    let (frames, _session_id) = zoda_vss::transport::Encoder::encode(data, k, n);
+    let strings: Vec<String> = frames
+        .iter()
+        .map(|f| format!("zt:{}/{}", zt_type, hex::encode(f.to_bytes())))
+        .collect();
+    Ok(strings)
+}
+
+// ── encrypted backup ──
+
+/// Create encrypted backup of all exportable data.
+/// Returns UR-encoded frames of the encrypted bundle.
+fn create_encrypted_backup(
+    seed_name: &str,
+    seed_phrase: &str,
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
+    // Gather all backup data
+    let accounts_json = bs_export_backup_data(seed_name, seed_phrase)?;
+
+    let db = get_db()?;
+    let contacts = db_handling::contacts::get_contacts(&db)
+        .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
+    let contacts_cbor = backup::encode_contacts_cbor(&contacts);
+
+    // Build the backup bundle: CBOR map { 1: accounts_json(tstr), 2: contacts_cbor(bstr) }
+    let mut bundle = Vec::new();
+    bundle.push(0xa2); // map(2)
+
+    // key 1: accounts (tstr — JSON string)
+    bundle.push(0x01);
+    let json_bytes = accounts_json.as_bytes();
+    cbor_tstr_into(&mut bundle, json_bytes);
+
+    // key 2: contacts (bstr — raw CBOR)
+    bundle.push(0x02);
+    cbor_bstr_into(&mut bundle, &contacts_cbor);
+
+    // Encrypt
+    let key = backup::derive_backup_key(seed_phrase);
+    let encrypted = backup::encrypt(&key, &bundle)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    ur_encode_cbor(&encrypted, "zigner-backup", max_fragment_len)
+}
+
+/// Restore from encrypted backup.
+/// Returns the accounts JSON for the caller to process.
+fn restore_encrypted_backup(
+    seed_phrase: &str,
+    ur_parts: Vec<String>,
+) -> Result<String, ErrorDisplayed> {
+    let cbor_data = ur_decode_parts(&ur_parts)?;
+
+    // Decrypt
+    let key = backup::derive_backup_key(seed_phrase);
+    let bundle = backup::decrypt(&key, &cbor_data)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    // Parse bundle CBOR: map { 1: accounts_tstr, 2: contacts_bstr }
+    if bundle.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "empty bundle".to_string(),
+        });
+    }
+
+    let (map_len, mut offset) =
+        cbor_parse_map_header(&bundle).map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    let mut accounts_json = String::new();
+
+    for _ in 0..map_len {
+        let (key, consumed) =
+            cbor_parse_uint(&bundle, offset).map_err(|e| ErrorDisplayed::Str { s: e })?;
+        offset = consumed;
+
+        match key {
+            1 => {
+                // tstr: accounts JSON
+                let (s, consumed) =
+                    parse_cbor_tstr(&bundle, offset).map_err(|e| ErrorDisplayed::Str { s: e })?;
+                offset = consumed;
+                accounts_json = s;
+            }
+            2 => {
+                // bstr: contacts CBOR
+                let (bytes, consumed) =
+                    parse_cbor_bytes(&bundle[offset..]).map_err(|e| ErrorDisplayed::Str {
+                        s: format!("contacts bstr: {e}"),
+                    })?;
+                offset += consumed;
+                // Import contacts
+                let contacts = backup::decode_contacts_cbor(&bytes)
+                    .map_err(|e| ErrorDisplayed::Str { s: e })?;
+                let db = get_db()?;
+                db_handling::contacts::import_contacts(&db, &contacts)
+                    .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
+            }
+            _ => {
+                // skip unknown value (handles any CBOR type)
+                offset =
+                    cbor_skip_any(&bundle, offset).map_err(|e| ErrorDisplayed::Str { s: e })?;
+            }
+        }
+    }
+
+    Ok(accounts_json)
+}
+
+// ── UR helpers ──
+
+fn ur_encode_cbor(
+    data: &[u8],
+    ur_type: &str,
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
+    // Wrap in CBOR bstr
+    let mut cbor = Vec::with_capacity(data.len() + 5);
+    cbor_bstr_into(&mut cbor, data);
+
+    if max_fragment_len == 0 || cbor.len() <= max_fragment_len as usize {
+        let ur_string = ur::ur::encode(&cbor, &ur::Type::Custom(ur_type));
+        Ok(vec![ur_string])
+    } else {
+        let mut encoder =
+            ur::ur::Encoder::new(&cbor, max_fragment_len as usize, ur_type).map_err(|e| {
+                ErrorDisplayed::Str {
+                    s: format!("UR encoder: {e:?}"),
+                }
+            })?;
+        let count = encoder.fragment_count() * 2;
+        let mut frames = Vec::with_capacity(count);
+        for _ in 0..count {
+            let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {
+                s: format!("UR part: {e:?}"),
+            })?;
+            frames.push(part);
+        }
+        Ok(frames)
+    }
+}
+
+fn ur_decode_parts(ur_parts: &[String]) -> Result<Vec<u8>, ErrorDisplayed> {
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "no UR parts".to_string(),
+        });
+    }
+    if ur_parts.len() == 1 {
+        let (_, cbor) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
+            s: format!("UR decode: {e:?}"),
+        })?;
+        let (bytes, _) = parse_cbor_bytes(&cbor).map_err(|e| ErrorDisplayed::Str {
+            s: format!("CBOR: {e}"),
+        })?;
+        return Ok(bytes);
+    }
+    let mut decoder = ur::ur::Decoder::default();
+    for part in ur_parts {
+        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
+            s: format!("UR receive: {e:?}"),
+        })?;
+        if decoder.complete() {
+            let cbor = decoder.message().map_err(|e| ErrorDisplayed::Str {
+                s: format!("UR message: {e:?}"),
+            })?.ok_or_else(|| ErrorDisplayed::Str {
+                s: "UR complete but no message".to_string(),
+            })?;
+            let (bytes, _) = parse_cbor_bytes(&cbor).map_err(|e| ErrorDisplayed::Str {
+                s: format!("CBOR: {e}"),
+            })?;
+            return Ok(bytes);
+        }
+    }
+    Err(ErrorDisplayed::Str {
+        s: "incomplete UR".to_string(),
+    })
+}
+
+fn cbor_tstr_into(buf: &mut Vec<u8>, s: &[u8]) {
+    let len = s.len();
+    if len <= 23 {
+        buf.push(0x60 | len as u8);
+    } else if len <= 0xff {
+        buf.push(0x78);
+        buf.push(len as u8);
+    } else if len <= 0xffff {
+        buf.push(0x79);
+        buf.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        buf.push(0x7a);
+        buf.extend_from_slice(&(len as u32).to_be_bytes());
+    }
+    buf.extend_from_slice(s);
+}
+
+fn cbor_bstr_into(buf: &mut Vec<u8>, data: &[u8]) {
+    let len = data.len();
+    if len <= 23 {
+        buf.push(0x40 | len as u8);
+    } else if len <= 0xff {
+        buf.push(0x58);
+        buf.push(len as u8);
+    } else if len <= 0xffff {
+        buf.push(0x59);
+        buf.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        buf.push(0x5a);
+        buf.extend_from_slice(&(len as u32).to_be_bytes());
+    }
+    buf.extend_from_slice(data);
+}
+
+fn parse_cbor_tstr(data: &[u8], offset: usize) -> Result<(String, usize), String> {
+    if offset >= data.len() {
+        return Err("truncated tstr".to_string());
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    if major != 3 {
+        return Err(format!("expected tstr, got major {major}"));
+    }
+    let additional = first & 0x1f;
+    let (len, header_end) = match additional {
+        0..=23 => (additional as usize, offset + 1),
+        24 => {
+            if offset + 2 > data.len() {
+                return Err("truncated".to_string());
+            }
+            (data[offset + 1] as usize, offset + 2)
+        }
+        25 => {
+            if offset + 3 > data.len() {
+                return Err("truncated".to_string());
+            }
+            (
+                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize,
+                offset + 3,
+            )
+        }
+        _ => return Err(format!("unsupported tstr additional {additional}")),
+    };
+    if header_end + len > data.len() {
+        return Err("truncated tstr data".to_string());
+    }
+    let s = std::str::from_utf8(&data[header_end..header_end + len])
+        .map_err(|e| format!("invalid UTF-8: {e}"))?;
+    Ok((s.to_string(), header_end + len))
+}
+
+/// Parse a CBOR map header, returning (length, offset after header).
+fn cbor_parse_map_header(data: &[u8]) -> Result<(usize, usize), String> {
+    if data.is_empty() {
+        return Err("empty CBOR".to_string());
+    }
+    let first = data[0];
+    let major = first >> 5;
+    if major != 5 {
+        return Err(format!("expected map (major 5), got major {major}"));
+    }
+    let additional = first & 0x1f;
+    cbor_parse_length(data, 0, additional).map(|(len, off)| (len as usize, off))
+}
+
+/// Parse a CBOR unsigned integer at offset.
+fn cbor_parse_uint(data: &[u8], offset: usize) -> Result<(u64, usize), String> {
+    if offset >= data.len() {
+        return Err("truncated uint".to_string());
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    if major != 0 {
+        return Err(format!("expected uint (major 0), got major {major}"));
+    }
+    cbor_parse_length(data, offset, first & 0x1f)
+}
+
+/// Decode CBOR additional info into a length/value.
+fn cbor_parse_length(data: &[u8], offset: usize, additional: u8) -> Result<(u64, usize), String> {
+    match additional {
+        0..=23 => Ok((additional as u64, offset + 1)),
+        24 => {
+            if offset + 2 > data.len() {
+                return Err("truncated length".to_string());
+            }
+            Ok((data[offset + 1] as u64, offset + 2))
+        }
+        25 => {
+            if offset + 3 > data.len() {
+                return Err("truncated length".to_string());
+            }
+            Ok((
+                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as u64,
+                offset + 3,
+            ))
+        }
+        26 => {
+            if offset + 5 > data.len() {
+                return Err("truncated length".to_string());
+            }
+            Ok((
+                u32::from_be_bytes([
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                    data[offset + 4],
+                ]) as u64,
+                offset + 5,
+            ))
+        }
+        _ => Err(format!("unsupported CBOR additional {additional}")),
+    }
+}
+
+/// Skip a single CBOR value of any type at offset.
+fn cbor_skip_any(data: &[u8], offset: usize) -> Result<usize, String> {
+    if offset >= data.len() {
+        return Err("truncated CBOR value".to_string());
+    }
+    let first = data[offset];
+    let major = first >> 5;
+    let additional = first & 0x1f;
+    let (content_len, header_end) = cbor_parse_length(data, offset, additional)?;
+    let content_len = content_len as usize;
+    match major {
+        0 | 1 => Ok(header_end),                    // uint/negint
+        2 | 3 => Ok(header_end + content_len),       // bstr/tstr
+        4 => {
+            let mut pos = header_end;
+            for _ in 0..content_len {
+                pos = cbor_skip_any(data, pos)?;
+            }
+            Ok(pos)
+        }
+        5 => {
+            let mut pos = header_end;
+            for _ in 0..content_len {
+                pos = cbor_skip_any(data, pos)?;     // key
+                pos = cbor_skip_any(data, pos)?;     // value
+            }
+            Ok(pos)
+        }
+        7 => Ok(offset + 1),                         // simple (bool/null)
+        _ => Err(format!("unsupported CBOR major {major}")),
+    }
 }
 
 // ── FROST threshold multisig ──

@@ -60,6 +60,8 @@ pub mod zcash;
 #[cfg(feature = "zcash")]
 pub mod frost;
 
+pub mod contacts;
+
 #[cfg(feature = "bitcoin_keys")]
 pub mod bitcoin;
 

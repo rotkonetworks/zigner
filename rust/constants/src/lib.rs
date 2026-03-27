@@ -99,6 +99,10 @@ pub const ZCASH_NOTES_TREE: &[u8] = b"zcash_notes";
 /// Value: JSON-encoded FrostWalletData
 pub const FROST_KEYS_TREE: &[u8] = b"frost_keys";
 
+/// Tree name for the tree storing contacts (address book)
+/// Key: address string bytes, Value: JSON-encoded contact metadata
+pub const CONTACTS_TREE: &[u8] = b"contacts";
+
 /// Tree name for the tree storing database settings
 ///
 /// In cold database, the settings tree contains general verifier, types

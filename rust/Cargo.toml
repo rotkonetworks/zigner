@@ -23,3 +23,4 @@ members = [
 # Shared crates — single source of truth across zcli/zafu/zigner
 [workspace.dependencies]
 frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "b3b32a9" }
+zoda-vss = { path = "/steam/rotko/zeratul/crates/zoda-vss" }

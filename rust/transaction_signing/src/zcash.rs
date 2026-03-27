@@ -815,8 +815,14 @@ pub fn verify_anchor_attestation(
 pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
     let mut cbor = Vec::new();
 
-    // map(4)
-    cbor.push(0xa4);
+    // map(5) — version + anchor + height + mainnet + notes
+    // (attestation adds a 6th key if present)
+    let map_len = 5 + if bundle.anchor_attestation.is_some() { 1 } else { 0 };
+    cbor.push(0xa0 | map_len as u8);
+
+    // key 0: version (uint)
+    cbor.push(0x00);
+    cbor.push(0x01); // version 1
 
     // key 1: anchor (bstr 32)
     cbor.push(0x01);
@@ -873,6 +879,14 @@ pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
             cbor.push(0x20);
             cbor.extend_from_slice(sibling);
         }
+    }
+
+    // key 5: anchor_attestation (bstr 96) — optional
+    if let Some(ref att) = bundle.anchor_attestation {
+        cbor.push(0x05);
+        cbor.push(0x58);
+        cbor.push(0x60); // bytes(96)
+        cbor.extend_from_slice(att);
     }
 
     cbor
@@ -2238,6 +2252,7 @@ mod tests {
                     merkle_path: [[0x55; 32]; 32],
                 },
             ],
+            anchor_attestation: None,
         };
 
         let cbor = encode_notes_bundle_to_cbor(&bundle);
@@ -2266,6 +2281,7 @@ mod tests {
             anchor_height: 0,
             mainnet: false,
             notes: vec![],
+            anchor_attestation: None,
         };
 
         let cbor = encode_notes_bundle_to_cbor(&bundle);

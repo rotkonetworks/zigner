@@ -893,6 +893,55 @@ namespace signer {
     boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
 
     // ========================================================================
+    // Contacts (address book)
+    // ========================================================================
+
+    // Store a contact (address → label mapping)
+    [Throws=ErrorDisplayed]
+    void store_contact([ByRef] string address, [ByRef] string label, [ByRef] string chain_id);
+
+    // Get all contacts as JSON array
+    [Throws=ErrorDisplayed]
+    string get_contacts();
+
+    // Get contact label by address (empty string if not found)
+    [Throws=ErrorDisplayed]
+    string get_contact_label([ByRef] string address);
+
+    // Delete a contact by address
+    [Throws=ErrorDisplayed]
+    void delete_contact([ByRef] string address);
+
+    // Export contacts as CBOR for QR display
+    [Throws=ErrorDisplayed]
+    sequence<u8> export_contacts_cbor();
+
+    // Import contacts from CBOR (from QR scan)
+    [Throws=ErrorDisplayed]
+    u32 import_contacts_cbor(sequence<u8> cbor);
+
+    // Export contacts as UR-encoded animated QR frames
+    [Throws=ErrorDisplayed]
+    sequence<string> export_contacts_ur(u32 max_fragment_len);
+
+    // Export contacts as zoda transport frames (verified erasure coding)
+    // k = minimum frames needed, n = total frames generated
+    [Throws=ErrorDisplayed]
+    sequence<string> export_contacts_zt(u8 k, u8 n);
+
+    // ========================================================================
+    // Encrypted backup (seed phrase = decryption key)
+    // ========================================================================
+
+    // Create encrypted backup of all data, returns UR frames
+    [Throws=ErrorDisplayed]
+    sequence<string> create_encrypted_backup([ByRef] string seed_name, [ByRef] string seed_phrase, u32 max_fragment_len);
+
+    // Restore from encrypted backup UR frames, returns accounts JSON
+    [Throws=ErrorDisplayed]
+    string restore_encrypted_backup([ByRef] string seed_phrase, sequence<string> ur_parts);
+
+    // ========================================================================
     // FROST threshold multisig (t-of-n)
     // All inputs/outputs are JSON strings with hex-encoded FROST data.
     // ========================================================================
