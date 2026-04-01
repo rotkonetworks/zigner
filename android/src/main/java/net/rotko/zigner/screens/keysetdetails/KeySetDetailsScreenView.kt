@@ -53,6 +53,7 @@ import net.rotko.zigner.domain.KeySetDetailsModel
 import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.abbreviateString
 import net.rotko.zigner.domain.conditional
+import net.rotko.zigner.screens.keysetdetails.items.HotWalletQrSection
 import net.rotko.zigner.screens.keysetdetails.items.KeyDerivedItem
 import net.rotko.zigner.screens.keysetdetails.items.SeedKeyDetails
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
@@ -80,6 +81,7 @@ fun KeySetDetailsScreenView(
 	onAddNewDerivation: Callback,
 	onShowRoot: Callback,
 	onOpenKey: (keyAddr: String, keySpecs: String) -> Unit,
+	getSeedPhrase: suspend (String) -> String? = { null },
 ) {
 	Column {
 		KeySetDetailsHeader(
@@ -100,6 +102,11 @@ fun KeySetDetailsScreenView(
 						model = model,
 						onSeedSelect = onSeedSelect,
 						onShowRoot = onShowRoot
+					)
+
+					HotWalletQrSection(
+						seedName = model.root.seedName,
+						getSeedPhrase = getSeedPhrase,
 					)
 
 					FilterRow(onFilterClicked)

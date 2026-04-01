@@ -897,6 +897,10 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string derive_hot_wallet([ByRef] string seed_phrase);
 
+    // Derive hot wallet mnemonic and encode as ur:zafu-hot-wallet QR PNG.
+    [Throws=ErrorDisplayed]
+    sequence<u8> derive_hot_wallet_qr([ByRef] string seed_phrase);
+
     // ========================================================================
     // Contacts (address book)
     // ========================================================================

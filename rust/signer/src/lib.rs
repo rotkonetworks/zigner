@@ -2628,6 +2628,98 @@ fn derive_hot_wallet(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+/// Derive hot wallet mnemonic and encode as ur:zafu-hot-wallet QR PNG.
+/// Returns the PNG bytes for a single static QR code.
+fn derive_hot_wallet_qr(seed_phrase: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    let mnemonic = auth::derive_hot_wallet_mnemonic(seed_phrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    // Build CBOR: map(2) { 1: text(mnemonic), 2: text("default") }
+    let identity = "default";
+    let mut cbor = Vec::new();
+    // map with 2 entries: major type 5, additional 2
+    cbor.push(0xa2);
+    // key 1 (uint)
+    cbor.push(0x01);
+    // text string: mnemonic
+    encode_cbor_text(&mut cbor, &mnemonic);
+    // key 2 (uint)
+    cbor.push(0x02);
+    // text string: identity
+    encode_cbor_text(&mut cbor, identity);
+
+    // Encode as UR bytewords with CRC32 checksum
+    let ur_string = encode_ur("zafu-hot-wallet", &cbor);
+
+    // Encode UR string as QR PNG
+    encode_to_qr(ur_string.as_bytes(), true)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Encode a text string in CBOR (major type 3)
+fn encode_cbor_text(buf: &mut Vec<u8>, text: &str) {
+    let len = text.len();
+    if len < 24 {
+        buf.push(0x60 | len as u8);
+    } else if len < 256 {
+        buf.push(0x78);
+        buf.push(len as u8);
+    } else {
+        buf.push(0x79);
+        buf.push((len >> 8) as u8);
+        buf.push(len as u8);
+    }
+    buf.extend_from_slice(text.as_bytes());
+}
+
+/// Encode bytes as ur:TYPE/bytewords string
+fn encode_ur(ur_type: &str, payload: &[u8]) -> String {
+    // CRC32 checksum
+    let checksum = crc32(payload);
+    let mut data = payload.to_vec();
+    data.push((checksum >> 24) as u8);
+    data.push((checksum >> 16) as u8);
+    data.push((checksum >> 8) as u8);
+    data.push(checksum as u8);
+
+    // Minimal bytewords encoding (2 chars per byte)
+    let bytewords: String = data.iter().map(|&b| minimal_byteword(b)).collect();
+    format!("ur:{ur_type}/{bytewords}")
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xffffffff;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb88320 } else { crc >> 1 };
+        }
+    }
+    crc ^ 0xffffffff
+}
+
+fn minimal_byteword(byte: u8) -> &'static str {
+    const WORDS: [&str; 256] = [
+        "ae","ad","ao","ax","aa","ah","am","at","ay","as","bk","bd","bn","bt","ba","bs",
+        "be","by","bg","bw","bb","bz","cm","ch","cs","cf","cy","cw","ce","ca","ck","ct",
+        "cx","cl","cp","cn","dk","da","ds","di","de","dt","dr","dn","dw","dp","dm","dl",
+        "dy","eh","ey","eo","ee","ec","en","em","et","es","ft","fr","fn","fs","fm","fh",
+        "fz","fp","fw","fx","fy","fe","fg","fl","fd","ga","ge","gr","gs","gt","gl","gw",
+        "gd","gy","gm","gu","gh","go","hf","hg","hd","hk","ht","hp","hh","hl","hy","he",
+        "hn","hs","id","ia","ie","ih","iy","io","is","in","im","je","jz","jn","jt","jl",
+        "jo","js","jp","jk","jy","kp","ko","kt","ks","kk","kn","kg","ke","ki","kb","lb",
+        "la","ly","lf","ls","lr","lp","ln","lt","lo","ld","le","lu","lk","lg","mn","my",
+        "mh","me","mo","mu","mw","md","mt","ms","mk","nl","ny","nd","ns","nt","nn","ne",
+        "nb","oy","oe","ot","ox","on","ol","os","pd","pt","pk","py","ps","pm","pl","pe",
+        "pf","pa","pr","qd","qz","re","rp","rl","ro","rh","rd","rk","rf","ry","rn","rs",
+        "rt","se","sa","sr","ss","sk","sw","st","sp","so","sg","sb","sf","sn","to","tk",
+        "ti","tt","td","te","ty","tl","tb","ts","tp","ta","tn","uy","uo","ut","ue","ur",
+        "vt","vy","vo","vl","ve","vw","va","vd","vs","wl","wd","wm","wp","we","wy","ws",
+        "wt","wn","wz","wf","wk","yk","yn","yl","ya","yt","zs","zo","zt","zc","ze","zm",
+    ];
+    WORDS[byte as usize]
+}
+
 // ── contacts (address book) ──
 
 fn store_contact(

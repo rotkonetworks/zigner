@@ -129,6 +129,7 @@ fun KeySetDetailsScreenSubgraph(
 							)
 						)
 					},
+					getSeedPhrase = { seedName -> keySetViewModel.getSeedPhrase(seedName) },
 				)
 			}
 
