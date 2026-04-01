@@ -140,6 +140,60 @@ fn derive_domain_keypair(
     Ok(ed25519::Pair::from_seed(&seed))
 }
 
+// ── hot wallet derivation ──
+
+/// Derive a 12-word BIP39 hot wallet mnemonic from the master seed phrase.
+///
+/// Matches zafu's identity.ts derivation exactly:
+///   root     = HMAC-SHA512(key="zid-v1", data=mnemonic)
+///   identity = HMAC-SHA512(key=root, data="identity:default")
+///   seed     = HMAC-SHA512(key=identity, data="hot-wallet-v1")
+///   entropy  = seed[0..16]  (128 bits = 12 words)
+///
+/// The resulting mnemonic is deterministic and recoverable from the master seed.
+pub fn derive_hot_wallet_mnemonic(seed_phrase: &str) -> Result<String, String> {
+    derive_hot_wallet_mnemonic_for_identity(seed_phrase, "default")
+}
+
+/// Derive hot wallet mnemonic for a specific identity name.
+pub fn derive_hot_wallet_mnemonic_for_identity(
+    seed_phrase: &str,
+    identity_name: &str,
+) -> Result<String, String> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    type HmacSha512 = Hmac<Sha512>;
+
+    // step 1: root = HMAC-SHA512(key="zid-v1", data=mnemonic)
+    let mut mac = HmacSha512::new_from_slice(b"zid-v1")
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(seed_phrase.as_bytes());
+    let root = mac.finalize().into_bytes();
+
+    // step 2: identity = HMAC-SHA512(key=root, data="identity:{name}")
+    let mut mac = HmacSha512::new_from_slice(&root)
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(format!("identity:{identity_name}").as_bytes());
+    let identity = mac.finalize().into_bytes();
+
+    // step 3: seed = HMAC-SHA512(key=identity, data="hot-wallet-v1")
+    let mut mac = HmacSha512::new_from_slice(&identity)
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(b"hot-wallet-v1");
+    let seed = mac.finalize().into_bytes();
+
+    // step 4: entropy = first 16 bytes (128 bits = 12-word mnemonic)
+    let entropy: [u8; 16] = seed[..16].try_into()
+        .map_err(|_| "entropy slice failed".to_string())?;
+
+    // convert to BIP39 mnemonic
+    use bip39::{Language, Mnemonic};
+    let mnemonic = Mnemonic::from_entropy(&entropy, Language::English)
+        .map_err(|e| format!("bip39: {e}"))?;
+
+    Ok(mnemonic.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +261,23 @@ mod tests {
         let base = derive_identity(TEST_PHRASE, 0).unwrap();
         let empty_domain = derive_domain_identity(TEST_PHRASE, "", 0).unwrap();
         assert_eq!(base, empty_domain);
+    }
+
+    #[test]
+    fn test_hot_wallet_deterministic() {
+        let m1 = derive_hot_wallet_mnemonic(TEST_PHRASE).unwrap();
+        let m2 = derive_hot_wallet_mnemonic(TEST_PHRASE).unwrap();
+        assert_eq!(m1, m2);
+        // 12 words
+        assert_eq!(m1.split_whitespace().count(), 12);
+        // different from master seed
+        assert_ne!(m1, TEST_PHRASE);
+    }
+
+    #[test]
+    fn test_hot_wallet_different_identities() {
+        let default = derive_hot_wallet_mnemonic(TEST_PHRASE).unwrap();
+        let poker = derive_hot_wallet_mnemonic_for_identity(TEST_PHRASE, "poker").unwrap();
+        assert_ne!(default, poker);
     }
 }

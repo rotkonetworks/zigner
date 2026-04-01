@@ -2620,6 +2620,14 @@ fn auth_verify(
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+/// Derive a 12-word hot wallet mnemonic from the master seed.
+/// The hot wallet is deterministic and can be used for ZID, pro subscription,
+/// and day-to-day spending in zafu.
+fn derive_hot_wallet(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
+    auth::derive_hot_wallet_mnemonic(seed_phrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
 // ── contacts (address book) ──
 
 fn store_contact(

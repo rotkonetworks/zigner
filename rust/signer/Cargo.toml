@@ -27,6 +27,8 @@ orchard = "0.12"
 zcash_address = "0.4"
 # Auth identity derivation (HMAC-SHA512 KDF) and backup encryption
 hmac = "0.12"
+# BIP39 mnemonic for hot wallet derivation
+bip39 = { package = "tiny-bip39", version = "1.0.0", default-features = false }
 chacha20poly1305 = "0.10"
 zeroize = { version = "1.7", features = ["derive"] }
 # Verified erasure-coded QR transport (zoda-vss)

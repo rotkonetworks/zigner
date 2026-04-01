@@ -892,6 +892,11 @@ namespace signer {
     [Throws=ErrorDisplayed]
     boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
 
+    // Derive a 12-word hot wallet mnemonic from the master seed.
+    // Used for ZID identity, pro subscription, and daily spending in zafu.
+    [Throws=ErrorDisplayed]
+    string derive_hot_wallet([ByRef] string seed_phrase);
+
     // ========================================================================
     // Contacts (address book)
     // ========================================================================
