@@ -142,24 +142,25 @@ fn derive_domain_keypair(
 
 // ── ZID root derivation (two-stage KDF) ──
 
-/// Derive the ZID root seed from a mnemonic via two-stage KDF.
+/// Derive the ZID root seed from the mnemonic words via HKDF.
 ///
 /// Matches zafu's identity.ts v2 derivation:
-///   spending_seed = BIP39(mnemonic, "")            // 64 bytes
-///   zid_seed = HKDF-SHA256(spending_seed, "zafu-zid-v2", "identity-root", 64)
+///   mnemonic_hash = SHA-256(mnemonic_string)
+///   zid_seed = HKDF-SHA256(mnemonic_hash, "zafu-zid-v2", "identity-root", 64)
 ///
-/// This ensures ZID keys are cryptographically independent from spending keys.
-/// Knowing zid_seed reveals nothing about spending_seed.
+/// NOTE: we derive from SHA-256(mnemonic), NOT from BIP39Seed(mnemonic).
+/// BIP39Seed = PBKDF2(mnemonic, "mnemonic" + passphrase) is what spending
+/// keys use. By hashing the mnemonic string directly, ZID shares zero
+/// intermediate material with spending keys.
+///
+/// Same mnemonic, completely separate derivation path.
 fn derive_zid_root(seed_phrase: &str) -> Result<[u8; 64], String> {
-    use bip39::{Language, Mnemonic, Seed};
     use hkdf::Hkdf;
-    use sha2::Sha256;
+    use sha2::{Sha256, Digest};
 
-    let mnemonic = Mnemonic::from_phrase(seed_phrase, Language::English)
-        .map_err(|e| format!("bip39: {e}"))?;
-    let spending_seed = Seed::new(&mnemonic, "");
+    let mnemonic_hash = Sha256::digest(seed_phrase.as_bytes());
 
-    let hk = Hkdf::<Sha256>::new(Some(b"zafu-zid-v2"), spending_seed.as_bytes());
+    let hk = Hkdf::<Sha256>::new(Some(b"zafu-zid-v2"), &mnemonic_hash);
     let mut zid_root = [0u8; 64];
     hk.expand(b"identity-root", &mut zid_root)
         .map_err(|e| format!("hkdf expand: {e}"))?;
