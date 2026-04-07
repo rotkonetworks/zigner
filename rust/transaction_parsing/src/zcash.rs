@@ -41,6 +41,8 @@ pub struct ZcashSignRequestData {
     pub summary: String,
     /// network: true = mainnet, false = testnet
     pub mainnet: bool,
+    /// true if this is a shielding (transparent → orchard) transaction
+    pub shielding: bool,
 }
 
 impl ZcashSignRequestData {
@@ -78,6 +80,7 @@ impl ZcashSignRequestData {
         // parse flags
         let flags = data[offset];
         let mainnet = (flags & 0x01) != 0;
+        let shielding = (flags & 0x02) != 0;
         offset += 1;
 
         // account index
@@ -94,31 +97,72 @@ impl ZcashSignRequestData {
         ]);
         offset += 4;
 
-        // sighash (32 bytes)
-        if offset + 32 > data.len() {
-            return Err(Error::ZcashParseError("sighash truncated".to_string()));
-        }
-        let mut sighash = [0u8; 32];
-        sighash.copy_from_slice(&data[offset..offset + 32]);
-        offset += 32;
+        let sighash;
+        let orchard_alphas;
 
-        // action count
-        if offset + 2 > data.len() {
-            return Err(Error::ZcashParseError("action count truncated".to_string()));
-        }
-        let action_count = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
-        offset += 2;
-
-        // each action's alpha (32 bytes each)
-        let mut orchard_alphas = Vec::with_capacity(action_count);
-        for _ in 0..action_count {
-            if offset + 32 > data.len() {
-                return Err(Error::ZcashParseError("alpha truncated".to_string()));
+        if shielding {
+            // shielding format: multiple transparent inputs, no orchard alphas
+            // [input_count: 2B LE][per-input: sighash(32B) + address_index(4B LE)]...[action_count=0: 2B LE]
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParseError("input count truncated".to_string()));
             }
-            let mut alpha = [0u8; 32];
-            alpha.copy_from_slice(&data[offset..offset + 32]);
-            orchard_alphas.push(alpha);
+            let input_count = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+            offset += 2;
+
+            // use the first input's sighash as the representative sighash
+            if input_count == 0 {
+                return Err(Error::ZcashParseError("shielding: no inputs".to_string()));
+            }
+
+            let mut first_sighash = [0u8; 32];
+            // parse all inputs (sighash + address_index per input)
+            for i in 0..input_count {
+                if offset + 36 > data.len() {
+                    return Err(Error::ZcashParseError(format!("shielding input {} truncated", i)));
+                }
+                if i == 0 {
+                    first_sighash.copy_from_slice(&data[offset..offset + 32]);
+                }
+                offset += 32; // sighash
+                offset += 4;  // address_index
+            }
+            sighash = first_sighash;
+
+            // action count (should be 0 for shielding)
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParseError("action count truncated".to_string()));
+            }
+            offset += 2; // skip action_count (0)
+            orchard_alphas = Vec::new();
+        } else {
+            // regular send format: single sighash + orchard alphas
+            if offset + 32 > data.len() {
+                return Err(Error::ZcashParseError("sighash truncated".to_string()));
+            }
+            let mut sh = [0u8; 32];
+            sh.copy_from_slice(&data[offset..offset + 32]);
+            sighash = sh;
             offset += 32;
+
+            // action count
+            if offset + 2 > data.len() {
+                return Err(Error::ZcashParseError("action count truncated".to_string()));
+            }
+            let action_count = u16::from_le_bytes([data[offset], data[offset + 1]]) as usize;
+            offset += 2;
+
+            // each action's alpha (32 bytes each)
+            let mut alphas = Vec::with_capacity(action_count);
+            for _ in 0..action_count {
+                if offset + 32 > data.len() {
+                    return Err(Error::ZcashParseError("alpha truncated".to_string()));
+                }
+                let mut alpha = [0u8; 32];
+                alpha.copy_from_slice(&data[offset..offset + 32]);
+                alphas.push(alpha);
+                offset += 32;
+            }
+            orchard_alphas = alphas;
         }
 
         // summary (length-prefixed string)
@@ -140,6 +184,7 @@ impl ZcashSignRequestData {
             orchard_alphas,
             summary,
             mainnet,
+            shielding,
         })
     }
 }
@@ -420,6 +465,7 @@ mod tests {
             orchard_alphas: vec![[0x11u8; 32], [0x22u8; 32]],
             summary: "Send 1.0 ZEC".to_string(),
             mainnet: true,
+            shielding: false,
         };
 
         let cards = create_zcash_cards(&request);
@@ -440,6 +486,7 @@ mod tests {
             orchard_alphas: vec![[0x11u8; 32]],
             summary: "".to_string(),
             mainnet: false,
+            shielding: false,
         };
 
         let cards = create_zcash_cards(&request);
