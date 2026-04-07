@@ -115,6 +115,17 @@ pub fn sign_transparent(
     Ok(sig)
 }
 
+/// derive compressed public key (33 bytes) from spending key
+#[cfg(feature = "zcash")]
+pub fn derive_compressed_pubkey(secret_key: &TransparentSpendingKey) -> Result<Vec<u8>> {
+    use secp256k1::{PublicKey, Secp256k1, SecretKey};
+    let secp = Secp256k1::new();
+    let sk = SecretKey::from_slice(&secret_key.0)
+        .map_err(|e| Error::ZcashKeyDerivation(format!("invalid secret key: {e}")))?;
+    let pk = PublicKey::from_secret_key(&secp, &sk);
+    Ok(pk.serialize().to_vec())
+}
+
 /// derive transparent address from spending key
 #[cfg(feature = "zcash")]
 pub fn derive_transparent_address(
@@ -1381,7 +1392,8 @@ fn cbor_skip_value(data: &[u8], offset: usize) -> Result<usize> {
 pub struct ZcashSignRequest {
     /// Account index for key derivation
     pub account_index: u32,
-    /// The transaction sighash (32 bytes)
+    /// The transaction sighash (32 bytes) — for regular sends, the single sighash;
+    /// for shielding, the first input's sighash (used for response verification)
     pub sighash: [u8; 32],
     /// Orchard action randomizers (alpha values)
     pub orchard_alphas: Vec<[u8; 32]>,
@@ -1390,6 +1402,10 @@ pub struct ZcashSignRequest {
     /// Network: true = mainnet, false = testnet
     /// SECURITY: This should be verified by the user before signing
     pub mainnet: bool,
+    /// true if this is a shielding (transparent → orchard) transaction
+    pub shielding: bool,
+    /// per-input data for shielding: (sighash, BIP44 address_index)
+    pub shielding_inputs: Vec<([u8; 32], u32)>,
 }
 
 impl ZcashSignRequest {
@@ -1433,39 +1449,65 @@ impl ZcashSignRequest {
         let mainnet: bool;
         let first_byte = data[offset];
 
-        // v2 detection: if first byte looks like a flags byte (0x00 or 0x01)
-        // and the next 4 bytes don't look like a small account index
-        if first_byte <= 0x01 {
-            // likely v2 format with flags
+        // v2 detection: if first byte looks like a flags byte (0x00-0x03)
+        let shielding: bool;
+        if first_byte <= 0x03 {
+            // v2 format with flags
             mainnet = (first_byte & 0x01) != 0;
+            shielding = (first_byte & 0x02) != 0;
             offset += 1;
         } else {
             // v1 format (no flags), assume mainnet with warning
-            mainnet = true; // default assumption, but show warning in UI
+            mainnet = true;
+            shielding = false;
         }
 
         // Account index
         let account_index = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
         offset += 4;
 
-        // Sighash (32 bytes)
-        let sighash: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-        offset += 32;
+        let sighash: [u8; 32];
+        let orchard_alphas: Vec<[u8; 32]>;
 
-        // Action count
-        let action_count =
-            u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-        offset += 2;
-
-        // Each action's alpha (32 bytes each)
-        let mut orchard_alphas = Vec::with_capacity(action_count);
-        for _ in 0..action_count {
-            if offset + 32 > data.len() {
-                return Err(Error::ZcashParsing("alpha truncated".to_string()));
+        let shielding_inputs;
+        if shielding {
+            // shielding format: [input_count: 2B][per-input: sighash(32B)+addr_index(4B)]...[action_count=0: 2B]
+            let input_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+            if input_count == 0 {
+                return Err(Error::ZcashParsing("shielding: no inputs".to_string()));
             }
-            let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-            orchard_alphas.push(alpha);
+            let mut inputs = Vec::with_capacity(input_count);
+            sighash = data[offset..offset + 32].try_into().unwrap(); // first input's sighash for response
+            for _ in 0..input_count {
+                let sh: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+                offset += 32;
+                let addr_idx = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+                offset += 4;
+                inputs.push((sh, addr_idx));
+            }
+            offset += 2; // action_count = 0
+            orchard_alphas = Vec::new();
+            shielding_inputs = inputs;
+        } else {
+            // regular send: [sighash: 32B][action_count: 2B][alphas...]
+            sighash = data[offset..offset + 32].try_into().unwrap();
             offset += 32;
+            let action_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            offset += 2;
+
+            // Each action's alpha (32 bytes each)
+            let mut alphas = Vec::with_capacity(action_count);
+            for _ in 0..action_count {
+                if offset + 32 > data.len() {
+                    return Err(Error::ZcashParsing("alpha truncated".to_string()));
+                }
+                let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+                alphas.push(alpha);
+                offset += 32;
+            }
+            orchard_alphas = alphas;
+            shielding_inputs = Vec::new();
         }
 
         // Summary (length-prefixed string)
@@ -1488,27 +1530,51 @@ impl ZcashSignRequest {
             orchard_alphas,
             summary,
             mainnet,
+            shielding,
+            shielding_inputs,
         })
     }
 
     /// Sign this request and produce a signature response
     #[cfg(feature = "zcash")]
     pub fn sign(&self, seed_phrase: &str) -> Result<ZcashSignatureResponse> {
-        let mut orchard_sigs = Vec::with_capacity(self.orchard_alphas.len());
+        if self.shielding {
+            // shielding: sign each transparent input with its per-address key
+            let mut transparent_sigs = Vec::with_capacity(self.shielding_inputs.len());
+            for (sighash, addr_index) in &self.shielding_inputs {
+                // BIP44 path: m/44'/133'/account'/0/index
+                let tsk = TransparentSpendingKey::from_seed_phrase(
+                    seed_phrase, self.account_index, 0, *addr_index,
+                )?;
+                let sig = sign_transparent(sighash, &tsk)?;
+                // combine: DER sig + compressed pubkey (zafu expects this format)
+                let pubkey = derive_compressed_pubkey(&tsk)?;
+                let mut combined = sig;
+                combined.extend_from_slice(&pubkey);
+                transparent_sigs.push(combined);
+            }
 
-        // Derive spending key and sign each action
-        let sk = OrchardSpendingKey::from_seed_phrase(seed_phrase, self.account_index)?;
+            Ok(ZcashSignatureResponse {
+                sighash: self.sighash,
+                transparent_sigs,
+                orchard_sigs: vec![],
+            })
+        } else {
+            // regular send: sign each orchard action
+            let mut orchard_sigs = Vec::with_capacity(self.orchard_alphas.len());
+            let sk = OrchardSpendingKey::from_seed_phrase(seed_phrase, self.account_index)?;
 
-        for alpha in &self.orchard_alphas {
-            let sig = sign_orchard_action(&self.sighash, alpha, &sk)?;
-            orchard_sigs.push(sig);
+            for alpha in &self.orchard_alphas {
+                let sig = sign_orchard_action(&self.sighash, alpha, &sk)?;
+                orchard_sigs.push(sig);
+            }
+
+            Ok(ZcashSignatureResponse {
+                sighash: self.sighash,
+                transparent_sigs: vec![],
+                orchard_sigs,
+            })
         }
-
-        Ok(ZcashSignatureResponse {
-            sighash: self.sighash,
-            transparent_sigs: vec![], // No transparent inputs for now
-            orchard_sigs,
-        })
     }
 }
 
@@ -2302,6 +2368,8 @@ mod tests {
             orchard_alphas: vec![[0x01; 32]],
             summary: "test".to_string(),
             mainnet: true,
+            shielding: false,
+            shielding_inputs: vec![],
         };
 
         let response = request.sign(test_mnemonic).unwrap();

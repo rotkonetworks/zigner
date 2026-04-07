@@ -9,13 +9,14 @@ import kotlinx.coroutines.runBlocking
 
 class AllNetworksUseCase(val uniffiInteractor: UniffiInteractor) {
 
-	fun getAllNetworks(): List<NetworkModel> = runBlocking { getNetworks() }
+	// Networks available in the UI. To re-enable cosmos/polkadot, add them here:
+	// "Polkadot", "Kusama", "Osmosis", "Noble", "Celestia", etc.
+	private val launchedNetworks = listOf("Zcash", "Penumbra")
 
-	// Zigner focuses on Zcash and Penumbra cold wallet signing
-	private val preselectedkeys = listOf<String>("Zcash", "Penumbra")
+	fun getAllNetworks(): List<NetworkModel> = runBlocking { getNetworks() }
+		.filter { launchedNetworks.contains(it.title) }
 
 	fun getDefaultPreselectedNetworks(): List<NetworkModel> = getAllNetworks()
-		.filter { preselectedkeys.contains(it.title) }
 
 	private suspend fun getNetworks(): List<NetworkModel> {
 		return uniffiInteractor.getAllNetworks().mapErrorForce()
