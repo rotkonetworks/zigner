@@ -218,6 +218,29 @@ pub fn derive_hot_wallet_mnemonic_for_identity(
     Ok(mnemonic.to_string())
 }
 
+// ========================================================================
+// POST-QUANTUM RECOVERY: reserved derivation paths
+// ========================================================================
+//
+// The derivation tree (HKDF-SHA256 root + HMAC-SHA512 branches) is quantum-safe.
+// Only the final ed25519 keypair is vulnerable to Shor's algorithm.
+//
+// When PQ signatures are needed, derive from the SAME mnemonic using reserved tags.
+// No protocol-breaking changes required - mnemonic recovery always works.
+//
+// Reserved tags (DO NOT USE until PQ migration):
+//   "zid-falcon-v1"       - FALCON-512 site-scoped identity
+//   "zid-falcon-cross-v1" - FALCON-512 cross-site identity
+//   "ring-vrf-pq-v1"      - post-quantum ring VRF
+//
+// Migration: same derive_zid_root() + identity, then
+//   HMAC-SHA512(identity, "zid-falcon-v1") -> 48 bytes -> FALCON-512 keypair
+//   Hybrid signing via falconed crate (ed25519 + FALCON-512)
+//
+// FALCON-512: 897B pubkey, 666B sig (QR-friendly for zigner)
+// Dilithium2: 1312B pubkey, 2420B sig (too large for single QR)
+// ========================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
