@@ -2637,6 +2637,44 @@ fn derive_zid_qr(seed_phrase: &str) -> Result<Vec<u8>, ErrorDisplayed> {
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+/// Parse a ZID sign challenge QR (JSON), sign it, return JSON response.
+///
+/// Input JSON: {"type":"zid-sign","v":1,"challenge":"<hex>","identity":"default",
+///              "mode":"site","origin":"...","rotation":0,"algorithm":"ed25519",...}
+/// Output JSON: {"type":"zid-resp","v":1,"signature":"<hex>","publicKey":"<hex>"}
+fn sign_zid_qr(seed_phrase: &str, qr_json: &str) -> Result<String, ErrorDisplayed> {
+    let parsed: serde_json::Value = serde_json::from_str(qr_json)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("invalid JSON: {e}") })?;
+
+    let qr_type = parsed["type"].as_str().unwrap_or("");
+    if qr_type != "zid-sign" {
+        return Err(ErrorDisplayed::Str { s: format!("unexpected type: {qr_type}") });
+    }
+
+    let challenge_hex = parsed["challenge"].as_str()
+        .ok_or_else(|| ErrorDisplayed::Str { s: "missing challenge".into() })?;
+    let identity = parsed["identity"].as_str().unwrap_or("default");
+    let mode = parsed["mode"].as_str().unwrap_or("site");
+    let origin = parsed["origin"].as_str().unwrap_or("");
+    let rotation = parsed["rotation"].as_u64().unwrap_or(0) as u32;
+    let algorithm = parsed["algorithm"].as_str().unwrap_or("ed25519");
+
+    if algorithm != "ed25519" {
+        return Err(ErrorDisplayed::Str { s: format!("unsupported algorithm: {algorithm}") });
+    }
+
+    let challenge = hex::decode(challenge_hex)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("bad challenge hex: {e}") })?;
+
+    let (signature, pubkey) = auth::sign_zid_challenge(
+        seed_phrase, identity, mode, origin, rotation, &challenge,
+    ).map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    Ok(format!(
+        r#"{{"type":"zid-resp","v":1,"signature":"{signature}","publicKey":"{pubkey}"}}"#
+    ))
+}
+
 /// Derive a 12-word hot wallet mnemonic from the master seed.
 /// The hot wallet is deterministic and can be used for ZID, pro subscription,
 /// and day-to-day spending in zafu.

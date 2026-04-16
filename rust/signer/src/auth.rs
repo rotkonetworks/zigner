@@ -214,6 +214,56 @@ pub fn derive_zid_pubkey_for_identity(
     Ok(hex::encode(pair.public().0))
 }
 
+/// Sign a ZID challenge. Supports both site-specific and cross-site modes.
+///
+/// Matches zafu's signZid():
+///   - mode "site": tag = "site:{origin}" or "site:{origin}:{rotation}"
+///   - mode "cross-site": tag = "cross-site"
+///
+/// Returns (signature_hex, pubkey_hex).
+pub fn sign_zid_challenge(
+    seed_phrase: &str,
+    identity_name: &str,
+    mode: &str,
+    origin: &str,
+    rotation: u32,
+    challenge: &[u8],
+) -> Result<(String, String), String> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    type HmacSha512 = Hmac<Sha512>;
+
+    let zid_root = derive_zid_root(seed_phrase)?;
+
+    // identity = HMAC-SHA512(zid_root, "identity:{name}")
+    let mut mac = HmacSha512::new_from_slice(&zid_root)
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(format!("identity:{identity_name}").as_bytes());
+    let identity = mac.finalize().into_bytes();
+
+    // derive seed based on mode
+    let tag = if mode == "cross-site" {
+        "cross-site".to_string()
+    } else if rotation == 0 {
+        format!("site:{origin}")
+    } else {
+        format!("site:{origin}:{rotation}")
+    };
+
+    let mut mac = HmacSha512::new_from_slice(&identity)
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(tag.as_bytes());
+    let seed = mac.finalize().into_bytes();
+
+    let key_seed: [u8; 32] = seed[..32]
+        .try_into()
+        .map_err(|_| "seed slice failed".to_string())?;
+    let pair = ed25519::Pair::from_seed(&key_seed);
+    let signature = pair.sign(challenge);
+
+    Ok((hex::encode(signature.0), hex::encode(pair.public().0)))
+}
+
 // ── hot wallet derivation ──
 
 /// Derive a 12-word BIP39 hot wallet mnemonic from the master seed phrase.
@@ -385,6 +435,54 @@ mod tests {
         let zid = derive_zid_pubkey(TEST_PHRASE).unwrap();
         let base = derive_identity(TEST_PHRASE, 0).unwrap();
         assert_ne!(zid, base);
+    }
+
+    #[test]
+    fn test_sign_zid_challenge_cross_site() {
+        let challenge = b"test-challenge-data";
+        let (sig1, pk1) = sign_zid_challenge(TEST_PHRASE, "default", "cross-site", "", 0, challenge).unwrap();
+        let (sig2, pk2) = sign_zid_challenge(TEST_PHRASE, "default", "cross-site", "", 0, challenge).unwrap();
+        // deterministic
+        assert_eq!(sig1, sig2);
+        assert_eq!(pk1, pk2);
+        // pubkey matches derive_zid_pubkey (both are cross-site "default")
+        let expected_pk = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        assert_eq!(pk1, expected_pk);
+        // signature verifies
+        assert!(verify_signature(&pk1, &sig1, challenge).unwrap());
+    }
+
+    #[test]
+    fn test_sign_zid_challenge_site_specific() {
+        let challenge = b"site-challenge";
+        let (sig_a, pk_a) = sign_zid_challenge(TEST_PHRASE, "default", "site", "https://example.com", 0, challenge).unwrap();
+        let (sig_b, pk_b) = sign_zid_challenge(TEST_PHRASE, "default", "site", "https://other.org", 0, challenge).unwrap();
+        // different sites produce different keys
+        assert_ne!(pk_a, pk_b);
+        // both verify
+        assert!(verify_signature(&pk_a, &sig_a, challenge).unwrap());
+        assert!(verify_signature(&pk_b, &sig_b, challenge).unwrap());
+        // site-specific differs from cross-site
+        let cross_pk = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        assert_ne!(pk_a, cross_pk);
+    }
+
+    #[test]
+    fn test_sign_zid_challenge_rotation() {
+        let challenge = b"rotate";
+        let (_, pk0) = sign_zid_challenge(TEST_PHRASE, "default", "site", "https://example.com", 0, challenge).unwrap();
+        let (_, pk1) = sign_zid_challenge(TEST_PHRASE, "default", "site", "https://example.com", 1, challenge).unwrap();
+        assert_ne!(pk0, pk1);
+    }
+
+    #[test]
+    fn test_sign_zid_site_specific_matches_zafu() {
+        // cross-repo compat: site-specific pubkeys must match zafu's deriveZidForSite()
+        let challenge = b"x";
+        let (_, pk) = sign_zid_challenge(TEST_PHRASE, "default", "site", "https://example.com", 0, challenge).unwrap();
+        assert_eq!(pk, "3f96957e3a6ded64243bc0a3926faf79c25ddfb93b33c4d15d787fb13322ec5f");
+        let (_, pk1) = sign_zid_challenge(TEST_PHRASE, "default", "site", "https://example.com", 1, challenge).unwrap();
+        assert_eq!(pk1, "9eb0ab0f2c8c252e04b7dd4af0615ffe209171162523347e1a402bbdcffb42a5");
     }
 
     #[test]
