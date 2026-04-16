@@ -46,6 +46,7 @@ fun ScanScreen(
 	onZcashPczt: (List<String>) -> Unit = {},
 	onFrost: (org.json.JSONObject) -> Unit = {},
 	onAuth: (org.json.JSONObject) -> Unit = {},
+	onZidSign: (org.json.JSONObject) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
 
@@ -66,6 +67,7 @@ fun ScanScreen(
 	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
 	val currentOnFrost by rememberUpdatedState(onFrost)
 	val currentOnAuth by rememberUpdatedState(onAuth)
+	val currentOnZidSign by rememberUpdatedState(onZidSign)
 
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
@@ -191,6 +193,16 @@ fun ScanScreen(
 				.collect { json ->
 					currentOnAuth(json)
 					viewModel.resetAuthPayload()
+				}
+		}
+
+		// ZID sign handler
+		launch {
+			viewModel.zidSignPayload
+				.filterNotNull()
+				.collect { json ->
+					currentOnZidSign(json)
+					viewModel.resetZidSignPayload()
 				}
 		}
 	}

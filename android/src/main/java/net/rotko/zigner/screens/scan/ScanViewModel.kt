@@ -143,6 +143,8 @@ class ScanViewModel : ViewModel() {
 
 	// Auth challenge state
 	var authPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
+	// ZID sign request state
+	var zidSignPayload: MutableStateFlow<org.json.JSONObject?> = MutableStateFlow(null)
 
 	private val transactionIsInProgress = MutableStateFlow<Boolean>(false)
 
@@ -457,6 +459,7 @@ class ScanViewModel : ViewModel() {
 		clearFrostDkgState()
 		clearFrostSignState()
 		authPayload.value = null
+		zidSignPayload.value = null
 	}
 
 	private suspend fun signTransaction(
