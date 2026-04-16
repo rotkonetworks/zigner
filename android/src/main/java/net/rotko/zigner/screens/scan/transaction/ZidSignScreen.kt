@@ -1,5 +1,7 @@
 package net.rotko.zigner.screens.scan.transaction
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,13 +12,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
-import net.rotko.zigner.components.qrcode.AnimatedQrKeysInfo
-import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
 import io.parity.signer.uniffi.signZidQr
@@ -28,11 +32,14 @@ import org.json.JSONObject
 
 /**
  * ZID identity sign screen — scan {"type":"zid-sign",...} QR from zafu,
- * review the request details, sign with the ZID key, display response QR.
+ * review the request details, authenticate, sign, display response QR.
+ *
+ * Flow: review → approve → biometric/password → sign → show response QR
  */
 
 enum class ZidSignState {
 	REVIEW,
+	AUTHENTICATING,
 	SIGNING,
 	DISPLAY_RESPONSE,
 	ERROR,
@@ -41,14 +48,14 @@ enum class ZidSignState {
 @Composable
 fun ZidSignScreen(
 	qrJson: JSONObject,
-	seedPhrase: String,
+	getSeedPhrase: suspend () -> String,
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
 	val scope = rememberCoroutineScope()
 	var state by remember { mutableStateOf(ZidSignState.REVIEW) }
 	var errorMsg by remember { mutableStateOf("") }
-	var responseJson by remember { mutableStateOf("") }
+	var qrBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
 	val origin = qrJson.optString("origin", "unknown")
 	val identity = qrJson.optString("identity", "default")
@@ -77,7 +84,7 @@ fun ZidSignScreen(
 					modifier = Modifier.weight(1f),
 					verticalArrangement = Arrangement.spacedBy(12.dp)
 				) {
-					// Origin — big and prominent
+					// Origin
 					Column(
 						modifier = Modifier
 							.fillMaxWidth()
@@ -135,7 +142,6 @@ fun ZidSignScreen(
 						DetailRow("challenge", if (challengeHex.length > 32) challengeHex.take(32) + "..." else challengeHex)
 					}
 
-					// Safety note
 					Text(
 						text = "This will sign a challenge proving your identity. No transactions or funds are involved.",
 						style = SignerTypeface.CaptionM,
@@ -150,12 +156,32 @@ fun ZidSignScreen(
 					PrimaryButtonWide(
 						label = "Approve",
 						onClicked = {
-							state = ZidSignState.SIGNING
+							state = ZidSignState.AUTHENTICATING
 							scope.launch {
 								try {
-									responseJson = withContext(Dispatchers.Default) {
+									// biometric/password auth happens here
+									val seedPhrase = getSeedPhrase()
+									if (seedPhrase.isEmpty()) {
+										errorMsg = "Authentication failed"
+										state = ZidSignState.ERROR
+										return@launch
+									}
+
+									state = ZidSignState.SIGNING
+
+									val responseJson = withContext(Dispatchers.Default) {
 										signZidQr(seedPhrase, qrJson.toString())
 									}
+
+									// encode response JSON as QR bitmap
+									val pngBytes = withContext(Dispatchers.Default) {
+										val bytes = responseJson.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+										encodeToQr(bytes, false)
+									}
+									val byteArray = pngBytes.map { it.toByte() }.toByteArray()
+									qrBitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
+										?.asImageBitmap()
+
 									state = ZidSignState.DISPLAY_RESPONSE
 								} catch (e: Exception) {
 									errorMsg = e.message ?: "Signing failed"
@@ -165,6 +191,16 @@ fun ZidSignScreen(
 						}
 					)
 					SecondaryButtonWide(label = "Decline", onClicked = onDone)
+				}
+			}
+
+			ZidSignState.AUTHENTICATING -> {
+				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+					Column(horizontalAlignment = Alignment.CenterHorizontally) {
+						CircularProgressIndicator(color = MaterialTheme.colors.pink500, modifier = Modifier.size(48.dp))
+						Spacer(modifier = Modifier.height(16.dp))
+						Text("Authenticating...", style = SignerTypeface.TitleS, color = MaterialTheme.colors.primary)
+					}
 				}
 			}
 
@@ -180,24 +216,34 @@ fun ZidSignScreen(
 
 			ZidSignState.DISPLAY_RESPONSE -> {
 				Text(
-					text = "Show this to zafu",
+					text = "Show this QR to zafu",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)
 				)
-				val qrBytes = remember(responseJson) {
-					try {
-						val bytes = responseJson.toByteArray(Charsets.UTF_8).map { it.toUByte() }
-						kotlinx.coroutines.runBlocking { encodeToQr(bytes, false) }
-					} catch (_: Exception) { null }
-				}
-				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-					if (qrBytes != null) {
-						AnimatedQrKeysInfo<List<List<UByte>>>(
-							input = listOf(qrBytes),
-							provider = EmptyQrCodeProvider(),
-							modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
-						)
+				Box(
+					modifier = Modifier
+						.weight(1f)
+						.fillMaxWidth(),
+					contentAlignment = Alignment.Center
+				) {
+					qrBitmap?.let { bitmap ->
+						Box(
+							modifier = Modifier
+								.fillMaxWidth()
+								.padding(horizontal = 24.dp)
+								.aspectRatio(1f)
+								.clip(RoundedCornerShape(12.dp))
+								.background(Color.White),
+							contentAlignment = Alignment.Center,
+						) {
+							Image(
+								bitmap = bitmap,
+								contentDescription = "ZID response QR",
+								contentScale = ContentScale.Fit,
+								modifier = Modifier.padding(8.dp)
+							)
+						}
 					}
 				}
 				SignerDivider()

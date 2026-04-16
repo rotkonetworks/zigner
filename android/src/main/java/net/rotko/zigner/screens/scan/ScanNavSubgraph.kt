@@ -216,18 +216,12 @@ fun ScanNavSubgraph(
 		}
 	} else if (scanViewModel.zidSignPayload.collectAsStateWithLifecycle().value != null) {
 		val zidJson = scanViewModel.zidSignPayload.collectAsStateWithLifecycle().value!!
-		var seedPhrase by remember { mutableStateOf("") }
-		LaunchedEffect(zidJson) {
-			seedPhrase = scanViewModel.getFirstSeedPhrase()
-		}
-		if (seedPhrase.isNotEmpty()) {
-			ZidSignScreen(
-				qrJson = zidJson,
-				seedPhrase = seedPhrase,
-				modifier = Modifier.statusBarsPadding(),
-				onDone = { scanViewModel.zidSignPayload.value = null },
-			)
-		}
+		ZidSignScreen(
+			qrJson = zidJson,
+			getSeedPhrase = { scanViewModel.getFirstSeedPhrase() },
+			modifier = Modifier.statusBarsPadding(),
+			onDone = { scanViewModel.zidSignPayload.value = null },
+		)
 	} else if (zcashNoteSyncResult.value != null) {
 		ZcashNoteSyncScreen(
 			result = zcashNoteSyncResult.value!!,
