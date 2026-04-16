@@ -2620,6 +2620,23 @@ fn auth_verify(
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+/// Derive the ZID cross-site ed25519 public key from the master seed.
+/// Returns hex-encoded 32-byte public key.
+fn derive_zid(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
+    auth::derive_zid_pubkey(seed_phrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Derive ZID pubkey and encode as "zid:<64hex>" QR PNG.
+/// Returns the PNG bytes for a single static QR code.
+fn derive_zid_qr(seed_phrase: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    let pubkey_hex = auth::derive_zid_pubkey(seed_phrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let qr_data = format!("zid:{pubkey_hex}");
+    encode_to_qr(qr_data.as_bytes(), false)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
 /// Derive a 12-word hot wallet mnemonic from the master seed.
 /// The hot wallet is deterministic and can be used for ZID, pro subscription,
 /// and day-to-day spending in zafu.

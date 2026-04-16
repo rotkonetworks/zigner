@@ -892,6 +892,14 @@ namespace signer {
     [Throws=ErrorDisplayed]
     boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
 
+    // Derive ZID cross-site ed25519 public key (hex).
+    [Throws=ErrorDisplayed]
+    string derive_zid([ByRef] string seed_phrase);
+
+    // Derive ZID pubkey and encode as "zid:<hex>" QR PNG.
+    [Throws=ErrorDisplayed]
+    sequence<u8> derive_zid_qr([ByRef] string seed_phrase);
+
     // Derive a 12-word hot wallet mnemonic from the master seed.
     // Used for ZID identity, pro subscription, and daily spending in zafu.
     [Throws=ErrorDisplayed]

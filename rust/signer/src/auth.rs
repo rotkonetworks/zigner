@@ -168,6 +168,52 @@ fn derive_zid_root(seed_phrase: &str) -> Result<[u8; 64], String> {
     Ok(zid_root)
 }
 
+// ── ZID pubkey derivation ──
+
+/// Derive the ZID cross-site public key from the mnemonic.
+///
+/// Matches zafu's deriveZidCrossSite(mnemonic, "default"):
+///   zid_root  = derive_zid_root(mnemonic)
+///   identity  = HMAC-SHA512(zid_root, "identity:default")
+///   seed      = HMAC-SHA512(identity, "cross-site")
+///   pubkey    = ed25519.getPublicKey(seed[0:32])
+///
+/// Returns hex-encoded 32-byte ed25519 public key.
+pub fn derive_zid_pubkey(seed_phrase: &str) -> Result<String, String> {
+    derive_zid_pubkey_for_identity(seed_phrase, "default")
+}
+
+/// Derive ZID pubkey for a specific identity name.
+pub fn derive_zid_pubkey_for_identity(
+    seed_phrase: &str,
+    identity_name: &str,
+) -> Result<String, String> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    type HmacSha512 = Hmac<Sha512>;
+
+    let zid_root = derive_zid_root(seed_phrase)?;
+
+    // identity = HMAC-SHA512(zid_root, "identity:{name}")
+    let mut mac = HmacSha512::new_from_slice(&zid_root)
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(format!("identity:{identity_name}").as_bytes());
+    let identity = mac.finalize().into_bytes();
+
+    // seed = HMAC-SHA512(identity, "cross-site")
+    let mut mac = HmacSha512::new_from_slice(&identity)
+        .map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(b"cross-site");
+    let seed = mac.finalize().into_bytes();
+
+    let key_seed: [u8; 32] = seed[..32]
+        .try_into()
+        .map_err(|_| "seed slice failed".to_string())?;
+    let pair = ed25519::Pair::from_seed(&key_seed);
+
+    Ok(hex::encode(pair.public().0))
+}
+
 // ── hot wallet derivation ──
 
 /// Derive a 12-word BIP39 hot wallet mnemonic from the master seed phrase.
@@ -308,6 +354,37 @@ mod tests {
         let base = derive_identity(TEST_PHRASE, 0).unwrap();
         let empty_domain = derive_domain_identity(TEST_PHRASE, "", 0).unwrap();
         assert_eq!(base, empty_domain);
+    }
+
+    #[test]
+    fn test_zid_pubkey_deterministic() {
+        let pk1 = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        let pk2 = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        assert_eq!(pk1, pk2);
+        assert_eq!(pk1.len(), 64); // 32 bytes hex
+    }
+
+    #[test]
+    fn test_zid_pubkey_matches_zafu() {
+        // cross-repo compat: this value is produced by zafu's identity.ts
+        // deriveZidCrossSite("abandon...about", "default")
+        let pk = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        assert_eq!(pk, "c19e35c5735667f974a39729fddb3b19fb90f325fd9fdbed7b3bf32116e97835");
+    }
+
+    #[test]
+    fn test_zid_pubkey_different_identities() {
+        let default = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        let poker = derive_zid_pubkey_for_identity(TEST_PHRASE, "poker").unwrap();
+        assert_ne!(default, poker);
+    }
+
+    #[test]
+    fn test_zid_pubkey_differs_from_base_identity() {
+        // ZID v2 (HKDF-based) must differ from old zafu-identity (direct HMAC)
+        let zid = derive_zid_pubkey(TEST_PHRASE).unwrap();
+        let base = derive_identity(TEST_PHRASE, 0).unwrap();
+        assert_ne!(zid, base);
     }
 
     #[test]
