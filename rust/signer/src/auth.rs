@@ -1,15 +1,29 @@
 // auth.rs — ed25519 identity derivation and QR-based authentication
 //
-// Compatible with zafu's identity.ts derivation:
-//   HMAC-SHA512("zafu-identity", mnemonic || '\0' || index) → ed25519 seed
+// Two derivation schemes coexist here:
 //
-// This produces the same keypairs as zafu for the same mnemonic + index.
-// Identity is wallet-level, not per-domain. Domain binding happens in
-// the challenge message, not the key derivation.
+// * v1 (legacy, still used by Android FFI via lib.rs auth_* shims):
+//     HMAC-SHA512("zafu-identity", mnemonic || '\0' || index) → ed25519 seed
+//   Kept for backwards compatibility with older zafu builds. Do not use
+//   for new code. See `derive_base_keypair` / `derive_domain_keypair`.
 //
-// For per-service keys, use domain-separated derivation:
-//   HMAC-SHA512("zafu-identity:" || domain, mnemonic || '\0' || index) → ed25519 seed
-// These are distinct from the base identity (different HMAC key).
+// * v2 (canonical, matches zafu's identity.ts post-refactor):
+//     mnemonic_hash = SHA-256(mnemonic_string)
+//     zid_seed      = HKDF-SHA256(mnemonic_hash, "zafu-zid-v2", "identity-root", 64)
+//     identity[N]   = HMAC-SHA512(zid_seed, "identity:" + N)
+//     site key      = HMAC-SHA512(identity, "site:" + origin[:":" + rotation])
+//     cross-site    = HMAC-SHA512(identity, "cross-site")
+//     contact key   = HMAC-SHA512(identity, "contact:" + contact_id)
+//     ed25519 seed  = first 32 bytes of the resulting HMAC output
+//   See `derive_zid_root`, `derive_zid_pubkey_for_identity`, `sign_zid_challenge`.
+//
+// Test vectors in this file pin the v2 output so zafu and zigner stay
+// in lockstep. If zafu's derivation changes, the vectors here fail —
+// catching the drift in CI before a release.
+//
+// v1 produces DIFFERENT pubkeys from v2 for the same seed. This is by
+// design: v2 is cryptographically separated from spending keys via
+// HKDF, v1 was a direct HMAC over the mnemonic string.
 
 use sp_core::{ed25519, Pair};
 use std::convert::TryInto;
