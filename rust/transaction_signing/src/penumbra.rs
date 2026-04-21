@@ -773,12 +773,13 @@ impl FvkExportData {
         offset += 32;
 
         // optional ZID extension (v2 format): [0x01][32 bytes]
-        let zid_pubkey = if offset < data.len() && data[offset] == 0x01 && offset + 1 + 32 <= data.len() {
-            let zid: [u8; 32] = data[offset + 1..offset + 1 + 32].try_into().unwrap();
-            Some(zid)
-        } else {
-            None
-        };
+        let zid_pubkey =
+            if offset < data.len() && data[offset] == 0x01 && offset + 1 + 32 <= data.len() {
+                let zid: [u8; 32] = data[offset + 1..offset + 1 + 32].try_into().unwrap();
+                Some(zid)
+            } else {
+                None
+            };
 
         Ok(Self {
             account_index,

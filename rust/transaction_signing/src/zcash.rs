@@ -828,7 +828,11 @@ pub fn encode_notes_bundle_to_cbor(bundle: &ZcashNotesBundle) -> Vec<u8> {
 
     // map(5) — version + anchor + height + mainnet + notes
     // (attestation adds a 6th key if present)
-    let map_len = 5 + if bundle.anchor_attestation.is_some() { 1 } else { 0 };
+    let map_len = 5 + if bundle.anchor_attestation.is_some() {
+        1
+    } else {
+        0
+    };
     cbor.push(0xa0 | map_len as u8);
 
     // key 0: version (uint)
@@ -1472,7 +1476,8 @@ impl ZcashSignRequest {
         let shielding_inputs;
         if shielding {
             // shielding format: [input_count: 2B][per-input: sighash(32B)+addr_index(4B)]...[action_count=0: 2B]
-            let input_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            let input_count =
+                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
             offset += 2;
             if input_count == 0 {
                 return Err(Error::ZcashParsing("shielding: no inputs".to_string()));
@@ -1493,7 +1498,8 @@ impl ZcashSignRequest {
             // regular send: [sighash: 32B][action_count: 2B][alphas...]
             sighash = data[offset..offset + 32].try_into().unwrap();
             offset += 32;
-            let action_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
+            let action_count =
+                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
             offset += 2;
 
             // Each action's alpha (32 bytes each)
@@ -1544,7 +1550,10 @@ impl ZcashSignRequest {
             for (sighash, addr_index) in &self.shielding_inputs {
                 // BIP44 path: m/44'/133'/account'/0/index
                 let tsk = TransparentSpendingKey::from_seed_phrase(
-                    seed_phrase, self.account_index, 0, *addr_index,
+                    seed_phrase,
+                    self.account_index,
+                    0,
+                    *addr_index,
                 )?;
                 let sig = sign_transparent(sighash, &tsk)?;
                 // combine: DER sig + compressed pubkey (zafu expects this format)

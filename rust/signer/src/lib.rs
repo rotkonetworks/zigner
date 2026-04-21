@@ -1650,9 +1650,8 @@ fn export_zcash_fvk(
     let zid_flag: u8 = if zid_bytes.is_some() { 0x10 } else { 0x00 };
     let flags: u8 = (if mainnet { 0x01 } else { 0x00 }) | 0x02 | 0x08 | zid_flag;
 
-    let mut qr_data = Vec::with_capacity(
-        3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len() + 32,
-    );
+    let mut qr_data =
+        Vec::with_capacity(3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len() + 32);
     qr_data.push(0x53); // 'S' for Signer (substrate compat)
     qr_data.push(0x04); // Zcash chain ID
     qr_data.push(QR_TYPE_ZCASH_FVK_EXPORT);
@@ -2246,9 +2245,7 @@ fn encode_pczt_to_cbor(pczt_bytes: &[u8]) -> Vec<u8> {
 fn decode_and_verify_zcash_notes(
     ur_parts: Vec<String>,
 ) -> Result<ZcashNoteSyncResult, ErrorDisplayed> {
-    use transaction_signing::zcash::{
-        decode_notes_bundle_from_cbor, verify_merkle_path,
-    };
+    use transaction_signing::zcash::{decode_notes_bundle_from_cbor, verify_merkle_path};
 
     if ur_parts.is_empty() {
         return Err(ErrorDisplayed::Str {
@@ -2285,7 +2282,10 @@ fn decode_and_verify_zcash_notes(
         // attestation is 64 bytes: ed25519 signature over anchor digest
         if attestation.len() < 64 {
             return Err(ErrorDisplayed::Str {
-                s: format!("attestation too short: {} bytes, need 64", attestation.len()),
+                s: format!(
+                    "attestation too short: {} bytes, need 64",
+                    attestation.len()
+                ),
             });
         }
         let signature = &attestation[..64];
@@ -2676,16 +2676,23 @@ fn auth_verify(
 ///              "mode":"site","origin":"...","rotation":0,"algorithm":"ed25519",...}
 /// Output JSON: {"type":"zid-resp","v":1,"signature":"<hex>","publicKey":"<hex>"}
 fn sign_zid_qr(seed_phrase: &str, qr_json: &str) -> Result<String, ErrorDisplayed> {
-    let parsed: serde_json::Value = serde_json::from_str(qr_json)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("invalid JSON: {e}") })?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(qr_json).map_err(|e| ErrorDisplayed::Str {
+            s: format!("invalid JSON: {e}"),
+        })?;
 
     let qr_type = parsed["type"].as_str().unwrap_or("");
     if qr_type != "zid-sign" {
-        return Err(ErrorDisplayed::Str { s: format!("unexpected type: {qr_type}") });
+        return Err(ErrorDisplayed::Str {
+            s: format!("unexpected type: {qr_type}"),
+        });
     }
 
-    let challenge_hex = parsed["challenge"].as_str()
-        .ok_or_else(|| ErrorDisplayed::Str { s: "missing challenge".into() })?;
+    let challenge_hex = parsed["challenge"]
+        .as_str()
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: "missing challenge".into(),
+        })?;
     let identity = parsed["identity"].as_str().unwrap_or("default");
     let mode = parsed["mode"].as_str().unwrap_or("site");
     let origin = parsed["origin"].as_str().unwrap_or("");
@@ -2693,15 +2700,18 @@ fn sign_zid_qr(seed_phrase: &str, qr_json: &str) -> Result<String, ErrorDisplaye
     let algorithm = parsed["algorithm"].as_str().unwrap_or("ed25519");
 
     if algorithm != "ed25519" {
-        return Err(ErrorDisplayed::Str { s: format!("unsupported algorithm: {algorithm}") });
+        return Err(ErrorDisplayed::Str {
+            s: format!("unsupported algorithm: {algorithm}"),
+        });
     }
 
-    let challenge = hex::decode(challenge_hex)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("bad challenge hex: {e}") })?;
+    let challenge = hex::decode(challenge_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("bad challenge hex: {e}"),
+    })?;
 
-    let (signature, pubkey) = auth::sign_zid_challenge(
-        seed_phrase, identity, mode, origin, rotation, &challenge,
-    ).map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let (signature, pubkey) =
+        auth::sign_zid_challenge(seed_phrase, identity, mode, origin, rotation, &challenge)
+            .map_err(|e| ErrorDisplayed::Str { s: e })?;
 
     Ok(format!(
         r#"{{"type":"zid-resp","v":1,"signature":"{signature}","publicKey":"{pubkey}"}}"#
@@ -2712,15 +2722,14 @@ fn sign_zid_qr(seed_phrase: &str, qr_json: &str) -> Result<String, ErrorDisplaye
 /// The hot wallet is deterministic and can be used for ZID, pro subscription,
 /// and day-to-day spending in zafu.
 fn derive_hot_wallet(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
-    auth::derive_hot_wallet_mnemonic(seed_phrase)
-        .map_err(|e| ErrorDisplayed::Str { s: e })
+    auth::derive_hot_wallet_mnemonic(seed_phrase).map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 /// Derive hot wallet mnemonic and encode as ur:zafu-hot-wallet QR PNG.
 /// Returns the PNG bytes for a single static QR code.
 fn derive_hot_wallet_qr(seed_phrase: &str) -> Result<Vec<u8>, ErrorDisplayed> {
-    let mnemonic = auth::derive_hot_wallet_mnemonic(seed_phrase)
-        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let mnemonic =
+        auth::derive_hot_wallet_mnemonic(seed_phrase).map_err(|e| ErrorDisplayed::Str { s: e })?;
 
     // Build CBOR: map(2) { 1: text(mnemonic), 2: text("default") }
     let identity = "default";
@@ -2740,8 +2749,7 @@ fn derive_hot_wallet_qr(seed_phrase: &str) -> Result<Vec<u8>, ErrorDisplayed> {
     let ur_string = encode_ur("zafu-hot-wallet", &cbor);
 
     // Encode UR string as QR PNG
-    encode_to_qr(ur_string.as_bytes(), true)
-        .map_err(|e| ErrorDisplayed::Str { s: e })
+    encode_to_qr(ur_string.as_bytes(), true).map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 /// Encode a text string in CBOR (major type 3)
@@ -2780,7 +2788,11 @@ fn crc32(data: &[u8]) -> u32 {
     for &byte in data {
         crc ^= byte as u32;
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb88320 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xedb88320
+            } else {
+                crc >> 1
+            };
         }
     }
     crc ^ 0xffffffff
@@ -2788,33 +2800,31 @@ fn crc32(data: &[u8]) -> u32 {
 
 fn minimal_byteword(byte: u8) -> &'static str {
     const WORDS: [&str; 256] = [
-        "ae","ad","ao","ax","aa","ah","am","at","ay","as","bk","bd","bn","bt","ba","bs",
-        "be","by","bg","bw","bb","bz","cm","ch","cs","cf","cy","cw","ce","ca","ck","ct",
-        "cx","cl","cp","cn","dk","da","ds","di","de","dt","dr","dn","dw","dp","dm","dl",
-        "dy","eh","ey","eo","ee","ec","en","em","et","es","ft","fr","fn","fs","fm","fh",
-        "fz","fp","fw","fx","fy","fe","fg","fl","fd","ga","ge","gr","gs","gt","gl","gw",
-        "gd","gy","gm","gu","gh","go","hf","hg","hd","hk","ht","hp","hh","hl","hy","he",
-        "hn","hs","id","ia","ie","ih","iy","io","is","in","im","je","jz","jn","jt","jl",
-        "jo","js","jp","jk","jy","kp","ko","kt","ks","kk","kn","kg","ke","ki","kb","lb",
-        "la","ly","lf","ls","lr","lp","ln","lt","lo","ld","le","lu","lk","lg","mn","my",
-        "mh","me","mo","mu","mw","md","mt","ms","mk","nl","ny","nd","ns","nt","nn","ne",
-        "nb","oy","oe","ot","ox","on","ol","os","pd","pt","pk","py","ps","pm","pl","pe",
-        "pf","pa","pr","qd","qz","re","rp","rl","ro","rh","rd","rk","rf","ry","rn","rs",
-        "rt","se","sa","sr","ss","sk","sw","st","sp","so","sg","sb","sf","sn","to","tk",
-        "ti","tt","td","te","ty","tl","tb","ts","tp","ta","tn","uy","uo","ut","ue","ur",
-        "vt","vy","vo","vl","ve","vw","va","vd","vs","wl","wd","wm","wp","we","wy","ws",
-        "wt","wn","wz","wf","wk","yk","yn","yl","ya","yt","zs","zo","zt","zc","ze","zm",
+        "ae", "ad", "ao", "ax", "aa", "ah", "am", "at", "ay", "as", "bk", "bd", "bn", "bt", "ba",
+        "bs", "be", "by", "bg", "bw", "bb", "bz", "cm", "ch", "cs", "cf", "cy", "cw", "ce", "ca",
+        "ck", "ct", "cx", "cl", "cp", "cn", "dk", "da", "ds", "di", "de", "dt", "dr", "dn", "dw",
+        "dp", "dm", "dl", "dy", "eh", "ey", "eo", "ee", "ec", "en", "em", "et", "es", "ft", "fr",
+        "fn", "fs", "fm", "fh", "fz", "fp", "fw", "fx", "fy", "fe", "fg", "fl", "fd", "ga", "ge",
+        "gr", "gs", "gt", "gl", "gw", "gd", "gy", "gm", "gu", "gh", "go", "hf", "hg", "hd", "hk",
+        "ht", "hp", "hh", "hl", "hy", "he", "hn", "hs", "id", "ia", "ie", "ih", "iy", "io", "is",
+        "in", "im", "je", "jz", "jn", "jt", "jl", "jo", "js", "jp", "jk", "jy", "kp", "ko", "kt",
+        "ks", "kk", "kn", "kg", "ke", "ki", "kb", "lb", "la", "ly", "lf", "ls", "lr", "lp", "ln",
+        "lt", "lo", "ld", "le", "lu", "lk", "lg", "mn", "my", "mh", "me", "mo", "mu", "mw", "md",
+        "mt", "ms", "mk", "nl", "ny", "nd", "ns", "nt", "nn", "ne", "nb", "oy", "oe", "ot", "ox",
+        "on", "ol", "os", "pd", "pt", "pk", "py", "ps", "pm", "pl", "pe", "pf", "pa", "pr", "qd",
+        "qz", "re", "rp", "rl", "ro", "rh", "rd", "rk", "rf", "ry", "rn", "rs", "rt", "se", "sa",
+        "sr", "ss", "sk", "sw", "st", "sp", "so", "sg", "sb", "sf", "sn", "to", "tk", "ti", "tt",
+        "td", "te", "ty", "tl", "tb", "ts", "tp", "ta", "tn", "uy", "uo", "ut", "ue", "ur", "vt",
+        "vy", "vo", "vl", "ve", "vw", "va", "vd", "vs", "wl", "wd", "wm", "wp", "we", "wy", "ws",
+        "wt", "wn", "wz", "wf", "wk", "yk", "yn", "yl", "ya", "yt", "zs", "zo", "zt", "zc", "ze",
+        "zm",
     ];
     WORDS[byte as usize]
 }
 
 // ── contacts (address book) ──
 
-fn store_contact(
-    address: &str,
-    label: &str,
-    chain_id: &str,
-) -> Result<(), ErrorDisplayed> {
+fn store_contact(address: &str, label: &str, chain_id: &str) -> Result<(), ErrorDisplayed> {
     let db = get_db()?;
     let contact = db_handling::contacts::Contact {
         address: address.to_string(),
@@ -2839,8 +2849,7 @@ fn get_contacts() -> Result<String, ErrorDisplayed> {
             })
         })
         .collect();
-    serde_json::to_string(&json)
-        .map_err(|e| ErrorDisplayed::from(format!("{e}")))
+    serde_json::to_string(&json).map_err(|e| ErrorDisplayed::from(format!("{e}")))
 }
 
 fn get_contact_label(address: &str) -> Result<String, ErrorDisplayed> {
@@ -2869,8 +2878,7 @@ fn export_contacts_cbor() -> Result<Vec<u8>, ErrorDisplayed> {
 
 /// Import contacts from CBOR (from QR scan)
 fn import_contacts_cbor(cbor: Vec<u8>) -> Result<u32, ErrorDisplayed> {
-    let contacts = backup::decode_contacts_cbor(&cbor)
-        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let contacts = backup::decode_contacts_cbor(&cbor).map_err(|e| ErrorDisplayed::Str { s: e })?;
     let db = get_db()?;
     let count = db_handling::contacts::import_contacts(&db, &contacts)
         .map_err(|e| ErrorDisplayed::from(format!("{e}")))?;
@@ -2931,8 +2939,7 @@ fn create_encrypted_backup(
 
     // Encrypt
     let key = backup::derive_backup_key(seed_phrase);
-    let encrypted = backup::encrypt(&key, &bundle)
-        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let encrypted = backup::encrypt(&key, &bundle).map_err(|e| ErrorDisplayed::Str { s: e })?;
 
     ur_encode_cbor(&encrypted, "zigner-backup", max_fragment_len)
 }
@@ -2947,8 +2954,7 @@ fn restore_encrypted_backup(
 
     // Decrypt
     let key = backup::derive_backup_key(seed_phrase);
-    let bundle = backup::decrypt(&key, &cbor_data)
-        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let bundle = backup::decrypt(&key, &cbor_data).map_err(|e| ErrorDisplayed::Str { s: e })?;
 
     // Parse bundle CBOR: map { 1: accounts_tstr, 2: contacts_bstr }
     if bundle.is_empty() {
@@ -3054,11 +3060,14 @@ fn ur_decode_parts(ur_parts: &[String]) -> Result<Vec<u8>, ErrorDisplayed> {
             s: format!("UR receive: {e:?}"),
         })?;
         if decoder.complete() {
-            let cbor = decoder.message().map_err(|e| ErrorDisplayed::Str {
-                s: format!("UR message: {e:?}"),
-            })?.ok_or_else(|| ErrorDisplayed::Str {
-                s: "UR complete but no message".to_string(),
-            })?;
+            let cbor = decoder
+                .message()
+                .map_err(|e| ErrorDisplayed::Str {
+                    s: format!("UR message: {e:?}"),
+                })?
+                .ok_or_else(|| ErrorDisplayed::Str {
+                    s: "UR complete but no message".to_string(),
+                })?;
             let (bytes, _) = parse_cbor_bytes(&cbor).map_err(|e| ErrorDisplayed::Str {
                 s: format!("CBOR: {e}"),
             })?;
@@ -3216,8 +3225,8 @@ fn cbor_skip_any(data: &[u8], offset: usize) -> Result<usize, String> {
     let (content_len, header_end) = cbor_parse_length(data, offset, additional)?;
     let content_len = content_len as usize;
     match major {
-        0 | 1 => Ok(header_end),                    // uint/negint
-        2 | 3 => Ok(header_end + content_len),       // bstr/tstr
+        0 | 1 => Ok(header_end),               // uint/negint
+        2 | 3 => Ok(header_end + content_len), // bstr/tstr
         4 => {
             let mut pos = header_end;
             for _ in 0..content_len {
@@ -3228,12 +3237,12 @@ fn cbor_skip_any(data: &[u8], offset: usize) -> Result<usize, String> {
         5 => {
             let mut pos = header_end;
             for _ in 0..content_len {
-                pos = cbor_skip_any(data, pos)?;     // key
-                pos = cbor_skip_any(data, pos)?;     // value
+                pos = cbor_skip_any(data, pos)?; // key
+                pos = cbor_skip_any(data, pos)?; // value
             }
             Ok(pos)
         }
-        7 => Ok(offset + 1),                         // simple (bool/null)
+        7 => Ok(offset + 1), // simple (bool/null)
         _ => Err(format!("unsupported CBOR major {major}")),
     }
 }
