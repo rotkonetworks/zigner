@@ -50,7 +50,9 @@ fn validate_contact(contact: &Contact) -> Result<()> {
         }
     }
     if contact.address.is_empty() {
-        return Err(Error::Other(anyhow::anyhow!("contact address must not be empty")));
+        return Err(Error::Other(anyhow::anyhow!(
+            "contact address must not be empty"
+        )));
     }
     Ok(())
 }
@@ -65,9 +67,7 @@ pub fn get_contacts(database: &sled::Db) -> Result<Vec<Contact>> {
             .map_err(|e| Error::Other(anyhow::anyhow!("bad contact key: {e}")))?;
         let raw = String::from_utf8(value.to_vec())
             .map_err(|e| Error::Other(anyhow::anyhow!("bad contact value: {e}")))?;
-        let (chain_id, label) = raw
-            .split_once('\0')
-            .unwrap_or(("", &raw));
+        let (chain_id, label) = raw.split_once('\0').unwrap_or(("", &raw));
         contacts.push(Contact {
             address,
             label: label.to_string(),

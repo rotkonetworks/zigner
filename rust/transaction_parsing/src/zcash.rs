@@ -118,13 +118,16 @@ impl ZcashSignRequestData {
             // parse all inputs (sighash + address_index per input)
             for i in 0..input_count {
                 if offset + 36 > data.len() {
-                    return Err(Error::ZcashParseError(format!("shielding input {} truncated", i)));
+                    return Err(Error::ZcashParseError(format!(
+                        "shielding input {} truncated",
+                        i
+                    )));
                 }
                 if i == 0 {
                     first_sighash.copy_from_slice(&data[offset..offset + 32]);
                 }
                 offset += 32; // sighash
-                offset += 4;  // address_index
+                offset += 4; // address_index
             }
             sighash = first_sighash;
 

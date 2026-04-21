@@ -235,7 +235,10 @@ fn cbor_decode_array_len(data: &[u8], offset: usize) -> Result<(usize, usize), S
     }
     let first = data[offset];
     if first >> 5 != 4 {
-        return Err(format!("expected array (major 4), got major {}", first >> 5));
+        return Err(format!(
+            "expected array (major 4), got major {}",
+            first >> 5
+        ));
     }
     let (len, end) = decode_length(data, offset, first & 0x1f)?;
     Ok((len as usize, end))
@@ -315,8 +318,7 @@ fn getrandom(buf: &mut [u8]) -> Result<(), String> {
     // We read it directly rather than pulling in the getrandom crate
     // to avoid adding another dependency. This is the same approach
     // used throughout the signer for key generation.
-    let mut f =
-        std::fs::File::open("/dev/urandom").map_err(|e| format!("open urandom: {e}"))?;
+    let mut f = std::fs::File::open("/dev/urandom").map_err(|e| format!("open urandom: {e}"))?;
     f.read_exact(buf)
         .map_err(|e| format!("read urandom: {e}"))?;
     Ok(())
