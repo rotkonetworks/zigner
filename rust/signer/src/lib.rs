@@ -972,12 +972,20 @@ fn export_penumbra_fvk(
     } else {
         Some(label.to_string())
     };
-    let export_data =
+    let mut export_data =
         FvkExportData::from_spend_key(&spend_key_bytes, account_index, label_opt.clone()).map_err(
             |e| ErrorDisplayed::Str {
                 s: format!("Failed to create FVK export: {e}"),
             },
         )?;
+
+    // embed ZID pubkey so zafu can link this wallet to the same zigner device
+    // across network imports. best-effort — if ZID derivation fails, the FVK
+    // export still succeeds, just without the canonical device identity.
+    export_data.zid_pubkey = auth::derive_zid_pubkey(seed_phrase)
+        .ok()
+        .and_then(|hex_str| hex::decode(&hex_str).ok())
+        .and_then(|bytes| bytes.try_into().ok());
 
     // Get bech32m encoded strings
     let fvk = FullViewingKey::derive_from(&spend_key_bytes).map_err(|e| ErrorDisplayed::Str {
@@ -1002,6 +1010,9 @@ fn export_penumbra_fvk(
     // Tag 49301 in hex = 0xC095, encoded as: 0xd9 0xc0 0x95
     // Tag 49302 in hex = 0xC096, encoded as: 0xd9 0xc0 0x96
     // ========================================================================
+    // Pre-compute ZID for the inner CBOR map (best-effort, optional).
+    let ur_zid: Option<[u8; 32]> = export_data.zid_pubkey;
+
     let ur_string = {
         let mut cbor_data = Vec::new();
 
@@ -1028,13 +1039,12 @@ fn export_penumbra_fvk(
         cbor_data.push(0xc0); // high byte: 49302 >> 8 = 192 = 0xc0
         cbor_data.push(0x96); // low byte: 49302 & 0xff = 150 = 0x96
 
-        // PenumbraFullViewingKey: map with 2 or 3 entries
+        // PenumbraFullViewingKey: map with 2..4 entries
+        // (key 1 fvk, key 2 index, key 3 name optional, key 4 zid optional)
         let has_name = !label.is_empty();
-        if has_name {
-            cbor_data.push(0xa3); // map(3)
-        } else {
-            cbor_data.push(0xa2); // map(2)
-        }
+        let has_zid = ur_zid.is_some();
+        let map_entries: u8 = 2 + (has_name as u8) + (has_zid as u8);
+        cbor_data.push(0xa0 + map_entries);
 
         // Key 1: fvk (text string - bech32m encoded)
         cbor_data.push(0x01); // key = 1
@@ -1073,6 +1083,15 @@ fn export_penumbra_fvk(
                 cbor_data.push(label_bytes.len() as u8);
             }
             cbor_data.extend_from_slice(label_bytes);
+        }
+
+        // Key 4: zid_pubkey (optional 32-byte string) — canonical device identity
+        // for zafu dedup across network imports. Unknown to legacy parsers.
+        if let Some(zid) = ur_zid {
+            cbor_data.push(0x04); // key = 4
+            cbor_data.push(0x58); // bytes with 1-byte length
+            cbor_data.push(0x20); // 32 bytes
+            cbor_data.extend_from_slice(&zid);
         }
 
         // Encode CBOR as UR string
@@ -1516,6 +1535,13 @@ fn export_zcash_fvk(
     // The UR string format is: ur:zcash-accounts/<bytewords-encoded-cbor>
     // where the CBOR payload matches the Keystone SDK zcash_accounts.rs structure
     // ========================================================================
+    // Try to derive ZID early so we can include it as a CBOR field below.
+    // Best-effort — if it fails, we just omit the field (backwards compatible).
+    let ur_zid: Option<[u8; 32]> = auth::derive_zid_pubkey(seed_phrase)
+        .ok()
+        .and_then(|h| hex::decode(&h).ok())
+        .and_then(|b| b.try_into().ok());
+
     let ur_string = {
         let mut cbor_data = Vec::new();
 
@@ -1541,13 +1567,12 @@ fn export_zcash_fvk(
         cbor_data.push(0xc0); // high byte: 49203 >> 8 = 192 = 0xc0
         cbor_data.push(0x33); // low byte: 49203 & 0xff = 51 = 0x33
 
-        // ZcashUnifiedFullViewingKey: map with 2 or 3 entries
+        // ZcashUnifiedFullViewingKey: map with 2..4 entries
+        // (key 1 ufvk, key 2 index, key 3 name optional, key 4 zid optional)
         let has_name = !label.is_empty();
-        if has_name {
-            cbor_data.push(0xa3); // map(3)
-        } else {
-            cbor_data.push(0xa2); // map(2)
-        }
+        let has_zid = ur_zid.is_some();
+        let map_entries: u8 = 2 + (has_name as u8) + (has_zid as u8);
+        cbor_data.push(0xa0 + map_entries); // 0xa2 / 0xa3 / 0xa4
 
         // Key 1: ufvk (text string)
         // CBOR text string encoding: 0x60-0x77 for len 0-23, 0x78+len for len<256, 0x79+2bytes for len<65536
@@ -1590,6 +1615,16 @@ fn export_zcash_fvk(
             cbor_data.extend_from_slice(label_bytes);
         }
 
+        // Key 4: zid_pubkey (optional 32-byte string) — canonical device identity
+        // for zafu dedup across network imports. Unknown to legacy parsers (Zashi,
+        // Keystone) which simply ignore unrecognized keys.
+        if let Some(zid) = ur_zid {
+            cbor_data.push(0x04); // key = 4
+            cbor_data.push(0x58); // bytes with 1-byte length
+            cbor_data.push(0x20); // 32 bytes
+            cbor_data.extend_from_slice(&zid);
+        }
+
         // Encode CBOR as UR string using bytewords encoding
         // Result format: "ur:zcash-accounts/..."
         ur::ur::encode(&cbor_data, &ur::Type::Custom("zcash-accounts"))
@@ -1602,11 +1637,22 @@ fn export_zcash_fvk(
     let label_len = label_bytes.len().min(255) as u8;
     let address_bytes = address.as_bytes();
 
-    // flags: bit 0 = mainnet, bit 1 = has orchard, bit 2 = has transparent, bit 3 = has address
-    let flags: u8 = (if mainnet { 0x01 } else { 0x00 }) | 0x02 | 0x08; // has orchard + has address
+    // Try to derive ZID pubkey (32 bytes) — lets zafu link this wallet to the
+    // same zigner device across network imports for dedup. Best-effort: if it
+    // fails for any reason, omit the ZID bytes rather than failing FVK export.
+    let zid_bytes: Option<[u8; 32]> = auth::derive_zid_pubkey(seed_phrase)
+        .ok()
+        .and_then(|hex_str| hex::decode(&hex_str).ok())
+        .and_then(|bytes| bytes.try_into().ok());
 
-    let mut qr_data =
-        Vec::with_capacity(3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len());
+    // flags: bit 0 = mainnet, bit 1 = has orchard, bit 2 = has transparent,
+    //        bit 3 = has address, bit 4 = has ZID pubkey (32 bytes appended)
+    let zid_flag: u8 = if zid_bytes.is_some() { 0x10 } else { 0x00 };
+    let flags: u8 = (if mainnet { 0x01 } else { 0x00 }) | 0x02 | 0x08 | zid_flag;
+
+    let mut qr_data = Vec::with_capacity(
+        3 + 1 + 4 + 1 + label_bytes.len() + 96 + 2 + address_bytes.len() + 32,
+    );
     qr_data.push(0x53); // 'S' for Signer (substrate compat)
     qr_data.push(0x04); // Zcash chain ID
     qr_data.push(QR_TYPE_ZCASH_FVK_EXPORT);
@@ -1618,6 +1664,10 @@ fn export_zcash_fvk(
     // Add unified address (bit 3 flag)
     qr_data.extend_from_slice(&(address_bytes.len() as u16).to_le_bytes());
     qr_data.extend_from_slice(address_bytes);
+    // Add ZID pubkey (bit 4 flag) — canonical device identity
+    if let Some(zid) = zid_bytes {
+        qr_data.extend_from_slice(&zid);
+    }
 
     Ok(ZcashFvkExport {
         account_index,
@@ -2617,23 +2667,6 @@ fn auth_verify(
 ) -> Result<bool, ErrorDisplayed> {
     let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
     auth::verify_signature(pubkey_hex, signature_hex, &challenge)
-        .map_err(|e| ErrorDisplayed::Str { s: e })
-}
-
-/// Derive the ZID cross-site ed25519 public key from the master seed.
-/// Returns hex-encoded 32-byte public key.
-fn derive_zid(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
-    auth::derive_zid_pubkey(seed_phrase)
-        .map_err(|e| ErrorDisplayed::Str { s: e })
-}
-
-/// Derive ZID pubkey and encode as "zid:<64hex>" QR PNG.
-/// Returns the PNG bytes for a single static QR code.
-fn derive_zid_qr(seed_phrase: &str) -> Result<Vec<u8>, ErrorDisplayed> {
-    let pubkey_hex = auth::derive_zid_pubkey(seed_phrase)
-        .map_err(|e| ErrorDisplayed::Str { s: e })?;
-    let qr_data = format!("zid:{pubkey_hex}");
-    encode_to_qr(qr_data.as_bytes(), false)
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 

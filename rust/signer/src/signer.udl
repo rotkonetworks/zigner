@@ -892,14 +892,6 @@ namespace signer {
     [Throws=ErrorDisplayed]
     boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
 
-    // Derive ZID cross-site ed25519 public key (hex).
-    [Throws=ErrorDisplayed]
-    string derive_zid([ByRef] string seed_phrase);
-
-    // Derive ZID pubkey and encode as "zid:<hex>" QR PNG.
-    [Throws=ErrorDisplayed]
-    sequence<u8> derive_zid_qr([ByRef] string seed_phrase);
-
     // Parse ZID sign challenge QR (JSON), sign with derived key, return JSON response.
     [Throws=ErrorDisplayed]
     string sign_zid_qr([ByRef] string seed_phrase, [ByRef] string qr_json);

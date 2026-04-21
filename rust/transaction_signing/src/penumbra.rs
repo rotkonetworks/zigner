@@ -629,6 +629,9 @@ pub struct FvkExportData {
     pub fvk_bytes: [u8; 64],
     /// the wallet id (32 bytes)
     pub wallet_id: [u8; 32],
+    /// ZID pubkey (32 bytes) — canonical device identity for zafu dedup.
+    /// None for legacy exports; newer zigner builds always include it.
+    pub zid_pubkey: Option<[u8; 32]>,
 }
 
 impl FvkExportData {
@@ -647,12 +650,13 @@ impl FvkExportData {
             label,
             fvk_bytes: fvk.to_bytes(),
             wallet_id: wallet_id.0,
+            zid_pubkey: None,
         })
     }
 
     /// encode for QR code
     ///
-    /// format:
+    /// format (v1 — legacy):
     /// ```text
     /// [0x53][0x03][0x01]           - prelude (substrate compat, penumbra, fvk export)
     /// [account_index: 4 bytes LE]  - which account
@@ -661,6 +665,15 @@ impl FvkExportData {
     /// [fvk: 64 bytes]              - ak || nk
     /// [wallet_id: 32 bytes]        - for verification
     /// ```
+    ///
+    /// format (v2 — extended with ZID):
+    /// ```text
+    /// ... above ...
+    /// [0x01]                       - extension flag: 1 = ZID present
+    /// [zid_pubkey: 32 bytes]       - canonical device identity for dedup
+    /// ```
+    ///
+    /// parsers see v1 payloads as exactly 104 bytes; v2 adds 33 more bytes.
     pub fn encode_qr(&self) -> Vec<u8> {
         let mut output = Vec::new();
 
@@ -690,6 +703,12 @@ impl FvkExportData {
 
         // wallet id
         output.extend_from_slice(&self.wallet_id);
+
+        // optional ZID extension
+        if let Some(zid) = &self.zid_pubkey {
+            output.push(0x01); // extension: ZID present
+            output.extend_from_slice(zid);
+        }
 
         output
     }
@@ -751,12 +770,22 @@ impl FvkExportData {
             ));
         }
         let wallet_id: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+        offset += 32;
+
+        // optional ZID extension (v2 format): [0x01][32 bytes]
+        let zid_pubkey = if offset < data.len() && data[offset] == 0x01 && offset + 1 + 32 <= data.len() {
+            let zid: [u8; 32] = data[offset + 1..offset + 1 + 32].try_into().unwrap();
+            Some(zid)
+        } else {
+            None
+        };
 
         Ok(Self {
             account_index,
             label,
             fvk_bytes,
             wallet_id,
+            zid_pubkey,
         })
     }
 
