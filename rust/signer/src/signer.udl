@@ -892,6 +892,10 @@ namespace signer {
     [Throws=ErrorDisplayed]
     boolean auth_verify([ByRef] string pubkey_hex, [ByRef] string signature_hex, [ByRef] string domain, [ByRef] string nonce, u64 timestamp);
 
+    // Parse ZID sign challenge QR (JSON), sign with derived key, return JSON response.
+    [Throws=ErrorDisplayed]
+    string sign_zid_qr([ByRef] string seed_phrase, [ByRef] string qr_json);
+
     // Derive a 12-word hot wallet mnemonic from the master seed.
     // Used for ZID identity, pro subscription, and daily spending in zafu.
     [Throws=ErrorDisplayed]

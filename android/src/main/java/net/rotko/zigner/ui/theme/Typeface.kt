@@ -146,6 +146,11 @@ object SignerTypeface {
 		fontWeight = FontWeight.Normal,
 		fontSize = 14.sp
 	)
+	val BodyS = TextStyle(
+		fontFamily = InterFontFamily,
+		fontWeight = FontWeight.Normal,
+		fontSize = 12.sp
+	)
 	val CaptionM = TextStyle(
 		fontFamily = InterFontFamily,
 		fontWeight = FontWeight.Normal,

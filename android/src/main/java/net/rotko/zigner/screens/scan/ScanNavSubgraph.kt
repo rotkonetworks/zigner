@@ -29,6 +29,7 @@ import net.rotko.zigner.screens.scan.errors.LocalErrorSheetModel
 import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
 import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
 import net.rotko.zigner.screens.scan.transaction.AuthChallengeScreen
+import net.rotko.zigner.screens.scan.transaction.ZidSignScreen
 import net.rotko.zigner.screens.scan.transaction.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
@@ -213,6 +214,14 @@ fun ScanNavSubgraph(
 				onDone = { scanViewModel.authPayload.value = null },
 			)
 		}
+	} else if (scanViewModel.zidSignPayload.collectAsStateWithLifecycle().value != null) {
+		val zidJson = scanViewModel.zidSignPayload.collectAsStateWithLifecycle().value!!
+		ZidSignScreen(
+			qrJson = zidJson,
+			getSeedPhrase = { scanViewModel.getFirstSeedPhrase() },
+			modifier = Modifier.statusBarsPadding(),
+			onDone = { scanViewModel.zidSignPayload.value = null },
+		)
 	} else if (zcashNoteSyncResult.value != null) {
 		ZcashNoteSyncScreen(
 			result = zcashNoteSyncResult.value!!,
@@ -339,6 +348,9 @@ fun ScanNavSubgraph(
 			},
 			onAuth = { json ->
 				scanViewModel.authPayload.value = json
+			},
+			onZidSign = { json ->
+				scanViewModel.zidSignPayload.value = json
 			},
 		)
 	} else {

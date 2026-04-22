@@ -2288,7 +2288,7 @@ dependencies = [
 [[package]]
 name = "frost-spend"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=a5fd532#a5fd53279971bb2949c7f6933834c144b32a4d00"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=7ceaab5#7ceaab55d783ce63e87cca1491f4476c1fdd5211"
 dependencies = [
  "blake2b_simd 1.0.3",
  "ed25519-consensus",
@@ -4463,7 +4463,7 @@ dependencies = [
 [[package]]
 name = "osst"
 version = "0.1.1"
-source = "git+https://github.com/rotkonetworks/zeratul.git?rev=90add33#90add33172c189f6bc54dc5a16b4cb7049e89d5a"
+source = "git+https://github.com/rotkonetworks/frostito?rev=ae5b415e#ae5b415e5cb7fc08a588f34b4edcd84fa67ccc8e"
 dependencies = [
  "blake2b_simd 1.0.3",
  "pasta_curves",
@@ -9605,7 +9605,7 @@ dependencies = [
 [[package]]
 name = "zoda-vss"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=a5fd532#a5fd53279971bb2949c7f6933834c144b32a4d00"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=7ceaab5#7ceaab55d783ce63e87cca1491f4476c1fdd5211"
 dependencies = [
  "rand_core 0.6.4",
  "sha2 0.10.8",

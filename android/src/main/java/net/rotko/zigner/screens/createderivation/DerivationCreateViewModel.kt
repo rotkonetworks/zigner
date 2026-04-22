@@ -146,13 +146,15 @@ class DerivationCreateViewModel : ViewModel() {
 					}
 
 					is OperationResult.Err -> {
+						// log full error to logcat for debugging (toast truncates long messages)
+						Timber.e(TAG, "create derivation failed: $result.error")
 						Toast.makeText(
 							context,
 							context.getString(
 								R.string.create_derivations_failure,
-								result.error.localizedMessage
+								result.error.localizedMessage ?: result.error.toString()
 							),
-							Toast.LENGTH_SHORT
+							Toast.LENGTH_LONG
 						).show()
 					}
 				}

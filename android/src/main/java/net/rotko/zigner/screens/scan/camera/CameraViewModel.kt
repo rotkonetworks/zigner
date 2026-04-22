@@ -68,6 +68,8 @@ class CameraViewModel() : ViewModel() {
 	val frostPayload: StateFlow<JSONObject?> = _frostPayload.asStateFlow()
 	private val _authPayload = MutableStateFlow<JSONObject?>(null)
 	val authPayload: StateFlow<JSONObject?> = _authPayload.asStateFlow()
+	private val _zidSignPayload = MutableStateFlow<JSONObject?>(null)
+	val zidSignPayload: StateFlow<JSONObject?> = _zidSignPayload.asStateFlow()
 
 	private val _dynamicDerivationPayload =
 		MutableStateFlow<String?>(null)
@@ -128,6 +130,11 @@ class CameraViewModel() : ViewModel() {
 							if (json.has("auth")) {
 								resetScanValues()
 								_authPayload.value = json
+								return@forEach
+							}
+							if (json.optString("type") == "zid-sign") {
+								resetScanValues()
+								_zidSignPayload.value = json
 								return@forEach
 							}
 						} catch (_: Exception) { /* not valid JSON, continue */ }
@@ -359,6 +366,7 @@ class CameraViewModel() : ViewModel() {
 		_zcashPcztComplete.value = null
 		_frostPayload.value = null
 		_authPayload.value = null
+		_zidSignPayload.value = null
 		resetScanValues()
 	}
 
@@ -383,6 +391,10 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetAuthPayload() {
 		_authPayload.value = null
+	}
+
+	fun resetZidSignPayload() {
+		_zidSignPayload.value = null
 	}
 
 	fun resetPenumbraSignRequest() {
