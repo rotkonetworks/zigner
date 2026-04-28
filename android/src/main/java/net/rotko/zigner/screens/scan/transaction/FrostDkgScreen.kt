@@ -2,16 +2,12 @@ package net.rotko.zigner.screens.scan.transaction
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
@@ -40,13 +36,13 @@ import kotlinx.coroutines.withContext
  * Round 2: triggered by {"frost":"dkg2"} → compute with saved secret → display packages QR
  *   → user shows QR to coordinator → taps "Scan Next" → back to camera
  *
- * Round 3: triggered by {"frost":"dkg3"} → compute with saved secret → store wallet → done
+ * Round 3: triggered by {"frost":"dkg3"} → compute with saved secret → store wallet
+ *   → display r3 ack QR with public_key_package so zafu can derive UFVK → done
  */
 
 enum class DkgState {
 	COMPUTING,
 	DISPLAY_QR,
-	COMPLETE,
 	ERROR,
 }
 
@@ -103,17 +99,24 @@ fun FrostDkgScreen(
 							frostDkgPart3(previousSecret, round1BroadcastsJson, round2PackagesJson)
 						}
 						val json = org.json.JSONObject(result)
+						val pkg = json.getString("public_key_package")
 						val wid = withContext(Dispatchers.Default) {
 							frostStoreWallet(
 								json.getString("key_package"),
-								json.getString("public_key_package"),
+								pkg,
 								json.getString("ephemeral_seed"),
 								label, minSigners, maxSigners, mainnet
 							)
 						}
 						walletId = wid
 						onSecretUpdated("") // clear secret
-						state = DkgState.COMPLETE
+						// emit r3 ack so zafu can derive UFVK + address from public_key_package
+						qrData = org.json.JSONObject().apply {
+							put("frost", "r3")
+							put("public_key_package", pkg)
+							put("wallet_id", wid)
+						}.toString()
+						state = DkgState.DISPLAY_QR
 					}
 				}
 			} catch (e: Exception) {
@@ -155,7 +158,8 @@ fun FrostDkgScreen(
 
 			DkgState.DISPLAY_QR -> {
 				Text(
-					text = "Show this to the coordinator",
+					text = if (round == 3) "Key share stored — show this to zafu"
+					       else "Show this to the coordinator",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)
@@ -186,31 +190,14 @@ fun FrostDkgScreen(
 					)
 					PrimaryButtonWide(label = "Scan Round ${round + 1}", onClicked = onScanNext)
 				} else {
+					Text(
+						text = "Wallet $walletId saved. Tap Done after zafu confirms it scanned the QR.",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+						modifier = Modifier.padding(bottom = 8.dp)
+					)
 					PrimaryButtonWide(label = "Done", onClicked = onDone)
 				}
-			}
-
-			DkgState.COMPLETE -> {
-				Column(
-					modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-					verticalArrangement = Arrangement.spacedBy(12.dp)
-				) {
-					Column(
-						modifier = Modifier
-							.fillMaxWidth()
-							.clip(RoundedCornerShape(12.dp))
-							.background(MaterialTheme.colors.fill6)
-							.padding(16.dp),
-						verticalArrangement = Arrangement.spacedBy(8.dp)
-					) {
-						Text("DKG Complete", style = SignerTypeface.TitleS, color = MaterialTheme.colors.primary)
-						Text("Key share stored securely", style = SignerTypeface.BodyL, color = MaterialTheme.colors.textSecondary)
-						Text("Wallet: $walletId", style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textTertiary)
-					}
-				}
-				SignerDivider()
-				Spacer(modifier = Modifier.height(16.dp))
-				PrimaryButtonWide(label = "Done", onClicked = onDone)
 			}
 
 			DkgState.ERROR -> {
