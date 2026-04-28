@@ -113,16 +113,32 @@ class CameraViewModel() : ViewModel() {
 				barcodes.forEach {
 					// Check for UR QR codes first (text-based, start with "ur:")
 					val textValue = it?.rawValue
+					val rawBytesLen = it?.rawBytes?.size ?: -1
+					Timber.d("[FROST] barcode: rawValueLen=${textValue?.length ?: -1} rawBytesLen=$rawBytesLen format=${it?.format}")
 					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
 						processUrFrame(textValue)
 						return@forEach
 					}
 
-					// Check for FROST JSON QR codes ({"frost":...})
-					if (textValue != null && textValue.trimStart().startsWith("{")) {
+					// Check for FROST/auth/zid JSON QR codes. rawValue is null for
+					// byte-mode QRs (zafu's QrDisplay), so fall back to UTF-8 of rawBytes.
+					val jsonText: String? = run {
+						if (textValue != null && textValue.trimStart().startsWith("{")) {
+							Timber.d("[FROST] JSON via rawValue: ${textValue.take(80)}")
+							return@run textValue
+						}
+						val bytes = it?.rawBytes ?: return@run null
+						val decoded = bytes.toString(Charsets.UTF_8)
+						val trimmed = decoded.trimStart()
+						Timber.d("[FROST] rawBytes decoded head: ${trimmed.take(80)}")
+						if (trimmed.startsWith("{")) decoded else null
+					}
+					if (jsonText != null) {
 						try {
-							val json = JSONObject(textValue)
+							val json = JSONObject(jsonText)
+							Timber.d("[FROST] JSON parsed; keys=${json.keys().asSequence().toList()}")
 							if (json.has("frost")) {
+								Timber.d("[FROST] frost type=${json.optString("frost")} -> setting frostPayload")
 								resetScanValues()
 								_frostPayload.value = json
 								return@forEach
@@ -137,7 +153,10 @@ class CameraViewModel() : ViewModel() {
 								_zidSignPayload.value = json
 								return@forEach
 							}
-						} catch (_: Exception) { /* not valid JSON, continue */ }
+							Timber.w("[FROST] JSON had no frost/auth/zid keys, falling through")
+						} catch (e: Exception) {
+							Timber.w(e, "[FROST] JSON parse failed for: ${jsonText.take(80)}")
+						}
 					}
 
 					// Try rawBytes first; fall back to rawValue for byte-mode QR codes
