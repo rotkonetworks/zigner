@@ -16,15 +16,14 @@ import net.rotko.zigner.components.qrcode.AnimatedQrKeysInfo
 import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
-import io.parity.signer.uniffi.encodeToQr
 import io.parity.signer.uniffi.frostDkgPart1
 import io.parity.signer.uniffi.frostDkgPart2
 import io.parity.signer.uniffi.frostDkgPart3
 import io.parity.signer.uniffi.frostStoreWallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * FROST DKG — handles one round at a time.
@@ -72,16 +71,20 @@ fun FrostDkgScreen(
 	var walletId by remember { mutableStateOf("") }
 
 	LaunchedEffect(Unit) {
+		Timber.d("[FROST] FrostDkgScreen round=$round t=$minSigners n=$maxSigners label='$label' mainnet=$mainnet")
 		scope.launch {
 			try {
 				when (round) {
 					1 -> {
+						Timber.d("[FROST] calling frostDkgPart1($maxSigners, $minSigners)")
 						val result = withContext(Dispatchers.Default) {
 							frostDkgPart1(maxSigners, minSigners)
 						}
+						Timber.d("[FROST] frostDkgPart1 returned ${result.length} chars")
 						val json = org.json.JSONObject(result)
 						onSecretUpdated(json.getString("secret"))
 						qrData = json.getString("broadcast")
+						Timber.d("[FROST] r1 broadcast hex length=${qrData.length}")
 						state = DkgState.DISPLAY_QR
 					}
 					2 -> {
@@ -120,6 +123,7 @@ fun FrostDkgScreen(
 					}
 				}
 			} catch (e: Exception) {
+				Timber.e(e, "[FROST] DKG round $round failed")
 				errorMsg = e.message ?: "DKG round $round failed"
 				state = DkgState.ERROR
 			}
@@ -164,15 +168,42 @@ fun FrostDkgScreen(
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)
 				)
-				val qrBytes = remember(qrData) {
+				// AnimatedQrKeysInfo + EmptyQrCodeProvider already call encodeToQr
+				// on each input frame; we hand it raw bytes, not a pre-encoded PNG.
+				// SignedMessage hex bloats Vec<u8> as decimal arrays (~2× over hex-as-bytes),
+				// so we hex-decode when qrData is pure hex to halve the QR payload —
+				// required for round 1 to fit the 2953-byte single-QR cap.
+				val qrBytes: List<UByte>? = remember(qrData) {
 					try {
-						val bytes = qrData.toByteArray(Charsets.UTF_8).map { it.toUByte() }
-						runBlocking { encodeToQr(bytes, false) }
-					} catch (e: Exception) { null }
+						val isHex = qrData.length % 2 == 0 && qrData.matches(Regex("^[0-9a-fA-F]+$"))
+						val bytes = if (isHex) {
+							qrData.chunked(2).map { it.toInt(16).toUByte() }
+						} else {
+							qrData.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+						}
+						Timber.d("[FROST] qrBytes prepared round=$round size=${bytes.size} isHex=$isHex")
+						bytes
+					} catch (e: Exception) {
+						Timber.e(e, "[FROST] qrBytes prep failed for round=$round inputLen=${qrData.length}")
+						null
+					}
 				}
+				val tooLarge = qrBytes != null && qrBytes.size > 2953
 				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-					if (qrBytes != null) {
-						AnimatedQrKeysInfo<List<List<UByte>>>(
+					when {
+						qrBytes == null -> Text(
+							"failed to prepare QR payload",
+							style = SignerTypeface.BodyL,
+							color = MaterialTheme.colors.red500,
+						)
+						tooLarge -> Text(
+							"payload ${qrBytes.size} B exceeds the 2953 B single-QR cap.\n" +
+								"multi-frame DKG QR is not yet implemented.",
+							style = SignerTypeface.BodyL,
+							color = MaterialTheme.colors.red500,
+							modifier = Modifier.padding(horizontal = 24.dp),
+						)
+						else -> AnimatedQrKeysInfo<List<List<UByte>>>(
 							input = listOf(qrBytes),
 							provider = EmptyQrCodeProvider(),
 							modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)

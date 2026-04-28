@@ -109,6 +109,7 @@ fun ScanNavSubgraph(
 	} else if (frostData.value != null) {
 		val json = frostData.value!!
 		val frostType = json.optString("frost", "")
+		timber.log.Timber.d("[FROST] routing frostType='$frostType' keys=${json.keys().asSequence().toList()}")
 		val dismissFrost = { scanViewModel.frostPayload.value = null }
 		val scanNextFrost = {
 			// Dismiss screen, back to camera for next round QR
