@@ -36,6 +36,7 @@ enum class FrostSignState { LOADING, DISPLAY_QR, ERROR }
 fun FrostSignScreen(
 	round: Int,  // 1 or 2
 	publicKeyPackageHex: String = "",
+	walletIdHint: String = "",  // O(1) lookup if present; falls back to pkg scan
 	alphasJson: String = "[]",
 	summary: String = "",
 	sighashHex: String = "",
@@ -57,7 +58,7 @@ fun FrostSignScreen(
 		scope.launch {
 			try {
 				when (round) {
-					1 -> runRound1(publicKeyPackageHex, alphasJson, onNoncesUpdated) { qr -> qrData = qr }
+					1 -> runRound1(publicKeyPackageHex, walletIdHint, alphasJson, onNoncesUpdated) { qr -> qrData = qr }
 					2 -> runRound2(
 						sighashHex, alphasJson, bundledCommitmentsJson,
 						previousNoncesPerAction, previousKeyPackage, onNoncesUpdated,
@@ -171,24 +172,43 @@ fun FrostSignScreen(
 	}
 }
 
-/** Find the wallet by public_key_package match, generate fresh commitments per action. */
+/** Find wallet (O(1) via walletIdHint, else O(n) public_key_package scan), gen fresh commitments per action. */
 private suspend fun runRound1(
 	publicKeyPackageHex: String,
+	walletIdHint: String,
 	alphasJson: String,
 	onNoncesUpdated: (List<String>, String) -> Unit,
 	emit: (qrData: String) -> Unit,
 ) {
-	val wallets = withContext(Dispatchers.Default) { frostListWallets() }
-	val match = wallets.firstOrNull { w ->
+	val walletJson = if (walletIdHint.isNotEmpty()) {
 		runCatching {
-			val w2 = withContext(Dispatchers.Default) { frostLoadWallet(w.walletId) }
-			org.json.JSONObject(w2).getString("public_key_package") == publicKeyPackageHex
-		}.getOrDefault(false)
-	} ?: throw IllegalStateException(
-		"no FROST wallet matches the requested public key package — was it stored on this device?"
-	)
-	Timber.d("[FROST] sign1 matched wallet=${match.walletId}")
-	val wallet = org.json.JSONObject(withContext(Dispatchers.Default) { frostLoadWallet(match.walletId) })
+			val w = withContext(Dispatchers.Default) { frostLoadWallet(walletIdHint) }
+			val pkg = org.json.JSONObject(w).getString("public_key_package")
+			if (pkg != publicKeyPackageHex) {
+				Timber.w("[FROST] walletIdHint=$walletIdHint pkg mismatch — falling back to scan")
+				null
+			} else {
+				Timber.d("[FROST] sign1 walletIdHint hit walletId=$walletIdHint")
+				w
+			}
+		}.getOrNull()
+	} else null
+
+	val finalJson = walletJson ?: run {
+		val wallets = withContext(Dispatchers.Default) { frostListWallets() }
+		val match = wallets.firstOrNull { w ->
+			runCatching {
+				val w2 = withContext(Dispatchers.Default) { frostLoadWallet(w.walletId) }
+				org.json.JSONObject(w2).getString("public_key_package") == publicKeyPackageHex
+			}.getOrDefault(false)
+		} ?: throw IllegalStateException(
+			"no FROST wallet matches the requested public key package — was it stored on this device?"
+		)
+		Timber.d("[FROST] sign1 scan-matched wallet=${match.walletId}")
+		withContext(Dispatchers.Default) { frostLoadWallet(match.walletId) }
+	}
+
+	val wallet = org.json.JSONObject(finalJson)
 	val keyPackage = wallet.getString("key_package")
 	val ephemeralSeed = wallet.getString("ephemeral_seed")
 
