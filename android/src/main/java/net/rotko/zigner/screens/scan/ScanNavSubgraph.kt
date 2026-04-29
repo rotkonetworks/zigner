@@ -30,8 +30,8 @@ import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
 import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
 import net.rotko.zigner.screens.scan.transaction.AuthChallengeScreen
 import net.rotko.zigner.screens.scan.transaction.ZidSignScreen
-import net.rotko.zigner.screens.scan.transaction.FrostDkgScreen
-import net.rotko.zigner.screens.scan.transaction.FrostSignScreen
+import net.rotko.zigner.screens.scan.transaction.frost.FrostDkgScreen
+import net.rotko.zigner.screens.scan.transaction.frost.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedTransactionScreen
