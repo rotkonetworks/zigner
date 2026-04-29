@@ -182,6 +182,7 @@ fun ScanNavSubgraph(
 				FrostSignScreen(
 					round = 1,
 					publicKeyPackageHex = pkg,
+					walletIdHint = json.optString("walletId", ""),
 					alphasJson = json.optJSONArray("alphas")?.toString() ?: "[]",
 					summary = summaryText,
 					onNoncesUpdated = { noncesArr, k ->
