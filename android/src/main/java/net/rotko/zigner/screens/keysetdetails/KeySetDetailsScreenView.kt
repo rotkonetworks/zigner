@@ -26,9 +26,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +46,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import io.parity.signer.uniffi.FrostWalletSummaryFfi
+import io.parity.signer.uniffi.frostListWallets
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.ScanIconComponent
 import net.rotko.zigner.components.base.SecondaryButtonWide
@@ -59,8 +69,10 @@ import net.rotko.zigner.screens.keysetdetails.items.SeedKeyDetails
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
 import net.rotko.zigner.ui.theme.SignerNewTheme
 import net.rotko.zigner.ui.theme.SignerTypeface
+import net.rotko.zigner.ui.theme.fill6
 import net.rotko.zigner.ui.theme.pink300
 import net.rotko.zigner.ui.theme.textDisabled
+import net.rotko.zigner.ui.theme.textSecondary
 import net.rotko.zigner.ui.theme.textTertiary
 
 /**
@@ -122,6 +134,12 @@ fun KeySetDetailsScreenView(
 							)
 						}
 					}
+
+					MultisigSection(
+						onManage = {
+							navController.navigate(CoreUnlockedNavSubgraph.frostWalletList)
+						},
+					)
 				}
 			} else if (fullModelWasEmpty) {
 				//no derived keys at all
@@ -133,6 +151,11 @@ fun KeySetDetailsScreenView(
 						onShowRoot = onShowRoot
 					)
 					KeySetDetailsEmptyList(onAdd = onAddNewDerivation)
+					MultisigSection(
+						onManage = {
+							navController.navigate(CoreUnlockedNavSubgraph.frostWalletList)
+						},
+					)
 				}
 			} else {
 				//nothing to show but filter enabled
@@ -359,6 +382,92 @@ private fun KeySetDetailsEmptyList(onAdd: Callback) {
 			)
 		}
 		Spacer(modifier = Modifier.weight(0.5f))
+	}
+}
+
+@Composable
+private fun MultisigSection(
+	onManage: Callback,
+) {
+	val scope = rememberCoroutineScope()
+	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
+
+	LaunchedEffect(Unit) {
+		scope.launch {
+			runCatching {
+				withContext(Dispatchers.Default) { frostListWallets() }
+			}.onSuccess { wallets = it }
+		}
+	}
+
+	if (wallets.isEmpty()) return
+
+	Row(
+		modifier = Modifier
+			.clickable(onClick = onManage)
+			.padding(horizontal = 24.dp, vertical = 8.dp),
+		verticalAlignment = Alignment.CenterVertically,
+	) {
+		Text(
+			text = "Multisig Wallets",
+			color = MaterialTheme.colors.textTertiary,
+			style = SignerTypeface.BodyM,
+			modifier = Modifier.weight(1f),
+		)
+		Text(
+			text = "Manage",
+			color = MaterialTheme.colors.pink300,
+			style = SignerTypeface.CaptionM,
+		)
+	}
+	for (wallet in wallets) {
+		MultisigWalletRow(wallet = wallet, onClick = onManage)
+	}
+}
+
+@Composable
+private fun MultisigWalletRow(
+	wallet: FrostWalletSummaryFfi,
+	onClick: Callback,
+) {
+	Row(
+		modifier = Modifier
+			.fillMaxWidth()
+			.clickable(onClick = onClick)
+			.padding(horizontal = 24.dp, vertical = 12.dp),
+		verticalAlignment = Alignment.CenterVertically,
+	) {
+		Column(modifier = Modifier.weight(1f)) {
+			Row(verticalAlignment = Alignment.CenterVertically) {
+				Text(
+					text = wallet.label,
+					color = MaterialTheme.colors.primary,
+					style = SignerTypeface.TitleS,
+					modifier = Modifier.weight(1f, fill = false),
+				)
+				Spacer(modifier = Modifier.size(8.dp))
+				Text(
+					text = if (wallet.mainnet) "mainnet" else "testnet",
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textTertiary,
+					modifier = Modifier
+						.clip(RoundedCornerShape(4.dp))
+						.background(MaterialTheme.colors.fill6)
+						.padding(horizontal = 6.dp, vertical = 2.dp),
+				)
+			}
+			Text(
+				text = "${wallet.minSigners}-of-${wallet.maxSigners} threshold",
+				color = MaterialTheme.colors.textSecondary,
+				style = SignerTypeface.BodyM,
+			)
+		}
+		Image(
+			imageVector = Icons.Filled.ChevronRight,
+			contentDescription = null,
+			colorFilter = ColorFilter.tint(MaterialTheme.colors.textDisabled),
+			modifier = Modifier.size(20.dp),
+		)
 	}
 }
 
