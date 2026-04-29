@@ -34,7 +34,7 @@ fun <T> AnimatedQrKeysInfo(
 	modifier: Modifier = Modifier
 ) {
 	val qrRounding = dimensionResource(id = R.dimen.qrShapeCornerRadius)
-	val DELAY = 125.milliseconds //FPS 8
+	val DELAY = 163.milliseconds //FPS ~6 (was 125ms / 8 FPS, slowed 30% so the popup ZXing scanner can keep up)
 	val qrCodes =
 		remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
 	val currentCode = remember { mutableStateOf<ImageBitmap?>(null) }

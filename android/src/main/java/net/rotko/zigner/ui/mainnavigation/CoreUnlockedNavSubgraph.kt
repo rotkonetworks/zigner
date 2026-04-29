@@ -19,6 +19,7 @@ import net.rotko.zigner.screens.keysets.restore.KeysetRecoverSubgraph
 import net.rotko.zigner.screens.scan.ScanNavSubgraph
 import net.rotko.zigner.screens.scan.bananasplitcreate.bananaSplitCreateDestination
 import net.rotko.zigner.screens.settings.backupexport.BackupExportSubgraph
+import net.rotko.zigner.screens.settings.frost.FrostWalletListScreen
 import net.rotko.zigner.screens.settings.networks.helper.networkHelpersCoreSubgraph
 import net.rotko.zigner.screens.settings.settingsFullSubgraph
 
@@ -156,6 +157,11 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 				}
 			)
 		}
+		composable(CoreUnlockedNavSubgraph.frostWalletList) {
+			FrostWalletListScreen(
+				onBack = { navController.popBackStack() },
+			)
+		}
 		settingsFullSubgraph(
 			coreNavController = navController,
 		)
@@ -243,4 +249,5 @@ object CoreUnlockedNavSubgraph {
 	const val airgapBreached = "core_airgap_blocker"
 	const val settings = "core_settings_flow"
 	const val networkHelpers = "network_helpers_path"
+	const val frostWalletList = "frost_wallet_list"
 }
