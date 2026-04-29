@@ -91,6 +91,14 @@ class CameraViewModel() : ViewModel() {
 	// payload of currently scanned qr codes for multiqr transaction like metadata update.
 	private var currentMultiQrTransaction = mutableSetOf<String>()
 
+	// FROST DKG multi-frame assembler — frames look like
+	// `P<idx>/<total>/zafu-frost-dkg/<base64>`. Reset whenever the
+	// (total, type) changes so a stale half-collected sequence doesn't
+	// mix with a new one.
+	private val pFrameChunks = mutableMapOf<Int, String>()
+	private var pFrameTotal = 0
+	private var pFrameType = ""
+
 	/**
 	 * Barcode detecting function.
 	 * This uses experimental features
@@ -122,7 +130,51 @@ class CameraViewModel() : ViewModel() {
 
 					// Check for FROST/auth/zid JSON QR codes. rawValue is null for
 					// byte-mode QRs (zafu's QrDisplay), so fall back to UTF-8 of rawBytes.
-					val jsonText: String? = run {
+					// Also handle P-frame multi-frame format from zafu's AnimatedQrDisplay
+					// (`P<idx>/<total>/<urType>/<base64>`); accumulate until complete then
+					// reassemble to the original UTF-8 payload string.
+					val frameSource: String? = textValue
+						?: it?.rawBytes?.toString(Charsets.UTF_8)
+					val pFrameMatch = frameSource?.let {
+						Regex("""^P(\d+)/(\d+)/([^/]+)/(.+)$""").matchEntire(it)
+					}
+					val jsonText: String? = if (pFrameMatch != null) {
+						val idx = pFrameMatch.groupValues[1].toInt()
+						val total = pFrameMatch.groupValues[2].toInt()
+						val urType = pFrameMatch.groupValues[3]
+						val chunk = pFrameMatch.groupValues[4]
+						if (pFrameTotal != total || pFrameType != urType) {
+							pFrameChunks.clear()
+							pFrameTotal = total
+							pFrameType = urType
+						}
+						val isNew = !pFrameChunks.containsKey(idx)
+						pFrameChunks[idx] = chunk
+						// surface progress to the camera UI via the same state flows
+						// the substrate multi-QR scanner uses, so the user sees a
+						// scanned/total counter while frames are still arriving.
+						_total.value = total
+						_captured.value = pFrameChunks.size
+						if (isNew) {
+							Timber.d("[FROST] P-frame received: $idx/$total type=$urType have=${pFrameChunks.size}")
+						}
+						if (pFrameChunks.size >= total) {
+							try {
+								val b64 = (1..total).joinToString("") { i -> pFrameChunks[i] ?: "" }
+								val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+								val decoded = String(bytes, Charsets.UTF_8)
+								Timber.d("[FROST] P-frame assembled: ${bytes.size}B type=$urType head=${decoded.take(60)}")
+								pFrameChunks.clear(); pFrameTotal = 0; pFrameType = ""
+								_total.value = null; _captured.value = null
+								if (decoded.trimStart().startsWith("{")) decoded else null
+							} catch (e: Exception) {
+								Timber.e(e, "[FROST] P-frame assembly failed")
+								pFrameChunks.clear(); pFrameTotal = 0; pFrameType = ""
+								_total.value = null; _captured.value = null
+								null
+							}
+						} else null
+					} else run {
 						if (textValue != null && textValue.trimStart().startsWith("{")) {
 							Timber.d("[FROST] JSON via rawValue: ${textValue.take(80)}")
 							return@run textValue
@@ -157,6 +209,11 @@ class CameraViewModel() : ViewModel() {
 						} catch (e: Exception) {
 							Timber.w(e, "[FROST] JSON parse failed for: ${jsonText.take(80)}")
 						}
+					}
+					// P-frame partial (or complete-but-not-FROST): bail before the
+					// substrate fallback re-processes the P-frame text.
+					if (pFrameMatch != null) {
+						return@forEach
 					}
 
 					// Try rawBytes first; fall back to rawValue for byte-mode QR codes
