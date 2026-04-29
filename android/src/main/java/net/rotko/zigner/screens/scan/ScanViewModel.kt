@@ -127,8 +127,12 @@ class ScanViewModel : ViewModel() {
 	var frostDkgMinSigners: UShort = 0u
 	var frostDkgLabel: String = ""
 	var frostDkgMainnet: Boolean = true
-	// FROST signing state held across rounds
+	// FROST signing state held across rounds.
+	// One nonce blob per Orchard action — round 1 generates them, round 2 consumes
+	// per-action with that action's bundled commitments. Single-blob legacy field
+	// kept for the older mnemonic-flow callers that sign one action at a time.
 	var frostSignNonces: String = ""
+	var frostSignNoncesPerAction: List<String> = emptyList()
 	var frostSignKeyPackage: String = ""
 	var frostSignWalletId: String = ""
 
@@ -138,6 +142,7 @@ class ScanViewModel : ViewModel() {
 
 	fun clearFrostSignState() {
 		frostSignNonces = ""
+		frostSignNoncesPerAction = emptyList()
 		frostSignKeyPackage = ""
 	}
 
