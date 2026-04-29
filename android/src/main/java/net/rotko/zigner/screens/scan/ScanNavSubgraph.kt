@@ -167,12 +167,25 @@ fun ScanNavSubgraph(
 				)
 			}
 			"sign1" -> {
-				scanViewModel.frostSignWalletId = json.optString("wallet", "")
+				val pkg = json.optString("publicKeyPackage", "")
+				val summaryJson = json.optJSONObject("summary")
+				val summaryText = summaryJson?.let {
+					val rec = it.optString("recipient", "")
+					val amount = it.optString("amountZat", "0").toLongOrNull() ?: 0L
+					val fee = it.optString("feeZat", "0").toLongOrNull() ?: 0L
+					val zec = String.format("%.8f", amount / 1e8).trimEnd('0').trimEnd('.')
+					val feeZec = String.format("%.8f", fee / 1e8).trimEnd('0').trimEnd('.')
+					val t = it.optInt("threshold", 0)
+					val n = it.optInt("maxSigners", 0)
+					"$t-of-$n · send $zec ZEC · fee $feeZec ZEC\n→ ${rec.take(16)}…${rec.takeLast(8)}"
+				} ?: ""
 				FrostSignScreen(
 					round = 1,
-					walletId = scanViewModel.frostSignWalletId,
-					onNoncesUpdated = { n, k ->
-						scanViewModel.frostSignNonces = n
+					publicKeyPackageHex = pkg,
+					alphasJson = json.optJSONArray("alphas")?.toString() ?: "[]",
+					summary = summaryText,
+					onNoncesUpdated = { noncesArr, k ->
+						scanViewModel.frostSignNoncesPerAction = noncesArr
 						scanViewModel.frostSignKeyPackage = k
 					},
 					onScanNext = scanNextFrost,
@@ -183,13 +196,14 @@ fun ScanNavSubgraph(
 			"sign2" -> {
 				FrostSignScreen(
 					round = 2,
+					publicKeyPackageHex = json.optString("publicKeyPackage", ""),
 					sighashHex = json.optString("sighash", ""),
 					alphasJson = json.optJSONArray("alphas")?.toString() ?: "[]",
-					commitmentsJson = json.optJSONArray("commitments")?.toString() ?: "[]",
-					previousNonces = scanViewModel.frostSignNonces,
+					bundledCommitmentsJson = json.optJSONArray("bundledCommitments")?.toString() ?: "[]",
+					previousNoncesPerAction = scanViewModel.frostSignNoncesPerAction,
 					previousKeyPackage = scanViewModel.frostSignKeyPackage,
-					onNoncesUpdated = { n, k ->
-						scanViewModel.frostSignNonces = n
+					onNoncesUpdated = { noncesArr, k ->
+						scanViewModel.frostSignNoncesPerAction = noncesArr
 						scanViewModel.frostSignKeyPackage = k
 					},
 					onScanNext = scanNextFrost,

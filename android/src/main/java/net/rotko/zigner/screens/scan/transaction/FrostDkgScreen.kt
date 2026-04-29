@@ -136,17 +136,22 @@ fun FrostDkgScreen(
 			.background(MaterialTheme.colors.background)
 			.padding(16.dp)
 	) {
-		Text(
-			text = "FROST DKG — Round $round of 3",
-			style = SignerTypeface.TitleL,
-			color = MaterialTheme.colors.primary,
-			modifier = Modifier.padding(bottom = 4.dp)
-		)
+		Row(verticalAlignment = Alignment.CenterVertically) {
+			Text(
+				text = "FROST DKG — Round $round of 3",
+				style = SignerTypeface.TitleL,
+				color = MaterialTheme.colors.primary,
+				modifier = Modifier.weight(1f)
+			)
+			if (state != DkgState.ERROR) {
+				DontQuitIcon(message = "don't leave this screen — quitting cancels DKG")
+			}
+		}
 		Text(
 			text = "${minSigners}-of-${maxSigners} multisig",
 			style = SignerTypeface.BodyL,
 			color = MaterialTheme.colors.textSecondary,
-			modifier = Modifier.padding(bottom = 16.dp)
+			modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
 		)
 
 		when (state) {
