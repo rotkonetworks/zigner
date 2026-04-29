@@ -156,8 +156,10 @@ fun ScanNavSubgraph(
 					label = scanViewModel.frostDkgLabel,
 					mainnet = scanViewModel.frostDkgMainnet,
 					previousSecret = scanViewModel.frostDkgSecret,
-					round1BroadcastsJson = json.optJSONArray("round1")?.toString() ?: "[]",
-					round2PackagesJson = json.optJSONArray("round2")?.toString() ?: "[]",
+					// keys mirror the relay-tag convention (R1:/R2:) used by
+					// the mnemonic flow on the WSS relay.
+					round1BroadcastsJson = json.optJSONArray("r1")?.toString() ?: "[]",
+					round2PackagesJson = json.optJSONArray("r2")?.toString() ?: "[]",
 					onSecretUpdated = { scanViewModel.frostDkgSecret = it },
 					onScanNext = scanNextFrost,
 					modifier = Modifier.statusBarsPadding(),

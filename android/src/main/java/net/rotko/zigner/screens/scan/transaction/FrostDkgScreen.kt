@@ -168,47 +168,55 @@ fun FrostDkgScreen(
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)
 				)
-				// AnimatedQrKeysInfo + EmptyQrCodeProvider already call encodeToQr
-				// on each input frame; we hand it raw bytes, not a pre-encoded PNG.
-				// SignedMessage hex bloats Vec<u8> as decimal arrays (~2× over hex-as-bytes),
-				// so we hex-decode when qrData is pure hex to halve the QR payload —
-				// required for round 1 to fit the 2953-byte single-QR cap.
-				val qrBytes: List<UByte>? = remember(qrData) {
+				// Split the payload into P-frame chunks the way zafu's
+				// AnimatedQrDisplay/Scanner expect: P<idx>/<total>/<urType>/<base64>.
+				// Each frame fits well under the single-QR cap; the receiver
+				// reassembles in order.
+				val frames: List<List<UByte>>? = remember(qrData) {
 					try {
 						val isHex = qrData.length % 2 == 0 && qrData.matches(Regex("^[0-9a-fA-F]+$"))
-						val bytes = if (isHex) {
-							qrData.chunked(2).map { it.toInt(16).toUByte() }
+						val raw: ByteArray = if (isHex) {
+							ByteArray(qrData.length / 2) { i ->
+								qrData.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+							}
 						} else {
-							qrData.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+							qrData.toByteArray(Charsets.UTF_8)
 						}
-						Timber.d("[FROST] qrBytes prepared round=$round size=${bytes.size} isHex=$isHex")
-						bytes
+						val b64 = android.util.Base64.encodeToString(raw, android.util.Base64.NO_WRAP)
+						val chunkSize = 400 // matches zafu's DEFAULT_CHUNK_SIZE
+						val totalChunks = ((b64.length + chunkSize - 1) / chunkSize).coerceAtLeast(1)
+						Timber.d("[FROST] frames prepared round=$round rawBytes=${raw.size} b64Len=${b64.length} totalChunks=$totalChunks isHex=$isHex")
+						(0 until totalChunks).map { i ->
+							val chunk = b64.substring(i * chunkSize, minOf((i + 1) * chunkSize, b64.length))
+							val frameStr = "P${i + 1}/$totalChunks/zafu-frost-dkg/$chunk"
+							frameStr.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+						}
 					} catch (e: Exception) {
-						Timber.e(e, "[FROST] qrBytes prep failed for round=$round inputLen=${qrData.length}")
+						Timber.e(e, "[FROST] frames prep failed for round=$round inputLen=${qrData.length}")
 						null
 					}
 				}
-				val tooLarge = qrBytes != null && qrBytes.size > 2953
 				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
 					when {
-						qrBytes == null -> Text(
+						frames == null -> Text(
 							"failed to prepare QR payload",
 							style = SignerTypeface.BodyL,
 							color = MaterialTheme.colors.red500,
 						)
-						tooLarge -> Text(
-							"payload ${qrBytes.size} B exceeds the 2953 B single-QR cap.\n" +
-								"multi-frame DKG QR is not yet implemented.",
-							style = SignerTypeface.BodyL,
-							color = MaterialTheme.colors.red500,
-							modifier = Modifier.padding(horizontal = 24.dp),
-						)
 						else -> AnimatedQrKeysInfo<List<List<UByte>>>(
-							input = listOf(qrBytes),
+							input = frames,
 							provider = EmptyQrCodeProvider(),
 							modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
 						)
 					}
+				}
+				if (frames != null && frames.size > 1) {
+					Spacer(modifier = Modifier.height(4.dp))
+					Text(
+						text = "${frames.size} frames cycling — let zafu scan one full cycle",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+					)
 				}
 				SignerDivider()
 				Spacer(modifier = Modifier.height(8.dp))
