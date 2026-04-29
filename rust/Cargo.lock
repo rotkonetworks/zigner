@@ -2288,7 +2288,7 @@ dependencies = [
 [[package]]
 name = "frost-spend"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=7ceaab5#7ceaab55d783ce63e87cca1491f4476c1fdd5211"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=06cd04f#06cd04fec4288dc4e296de0b95e68f9641274559"
 dependencies = [
  "blake2b_simd 1.0.3",
  "ed25519-consensus",
@@ -2785,6 +2785,9 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "hex-conservative"
@@ -4357,9 +4360,7 @@ dependencies = [
  "fpe",
  "getset",
  "group",
- "halo2_gadgets 0.3.1",
  "halo2_poseidon",
- "halo2_proofs",
  "hex",
  "incrementalmerkletree 0.7.1",
  "lazy_static",
@@ -9605,7 +9606,7 @@ dependencies = [
 [[package]]
 name = "zoda-vss"
 version = "0.1.0"
-source = "git+https://github.com/rotkonetworks/zcli.git?rev=7ceaab5#7ceaab55d783ce63e87cca1491f4476c1fdd5211"
+source = "git+https://github.com/rotkonetworks/zcli.git?rev=06cd04f#06cd04fec4288dc4e296de0b95e68f9641274559"
 dependencies = [
  "rand_core 0.6.4",
  "sha2 0.10.8",
