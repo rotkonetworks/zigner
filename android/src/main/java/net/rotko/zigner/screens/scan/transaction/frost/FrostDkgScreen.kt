@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.parity.signer.uniffi.frostDeriveMetadata
 import io.parity.signer.uniffi.frostDkgPart1
 import io.parity.signer.uniffi.frostDkgPart2
 import io.parity.signer.uniffi.frostDkgPart3
@@ -39,6 +40,10 @@ fun FrostDkgScreen(
 	round1BroadcastsJson: String = "[]",
 	round2PackagesJson: String = "[]",
 	previousSecret: String = "",
+	// host-broadcast random `sk` + relay url; carried in the dkg3 trigger so
+	// zigner derives UFVK/address itself and bakes them into the r3 ack.
+	skHex: String = "",
+	relayUrl: String = "",
 	onSecretUpdated: (String) -> Unit = {},
 	onScanNext: Callback,
 	onDone: Callback,
@@ -75,21 +80,44 @@ fun FrostDkgScreen(
 						}
 						val json = org.json.JSONObject(result)
 						val pkg = json.getString("public_key_package")
-						// orchard_fvk_uview / address / relay_url are populated by a
-						// follow-up metadata-pairing flow with zafu; stored as None for now.
+
+						// derive UFVK + unified address from pkg + sk so this wallet record
+						// has everything zafu needs to re-add as airgap multisig later.
+						// sk is host-broadcast and identical for every participant; derivation
+						// is deterministic so values match what zafu computes during FVK echo.
+						var ufvk = ""
+						var addr = ""
+						if (skHex.isNotEmpty()) {
+							runCatching {
+								val meta = withContext(Dispatchers.Default) {
+									frostDeriveMetadata(pkg, skHex, mainnet, 0u)
+								}
+								val mjson = org.json.JSONObject(meta)
+								ufvk = mjson.optString("orchard_fvk_uview", "")
+								addr = mjson.optString("address", "")
+							}.onFailure {
+								Timber.e(it, "[FROST] dkg3 derive_metadata failed — wallet stored without UFVK/address")
+							}
+						}
+
 						val wid = withContext(Dispatchers.Default) {
 							frostStoreWallet(
 								json.getString("key_package"), pkg, json.getString("ephemeral_seed"),
 								label, minSigners, maxSigners, mainnet,
-								"", "", "",
+								ufvk, addr, relayUrl,
 							)
 						}
 						walletId = wid
 						onSecretUpdated("")
+						// r3 ack now carries the metadata zafu would otherwise compute itself,
+						// so zafu can persist the wallet immediately without a r4-meta round-trip.
 						qrData = org.json.JSONObject().apply {
 							put("frost", "r3")
 							put("public_key_package", pkg)
 							put("wallet_id", wid)
+							if (ufvk.isNotEmpty()) put("orchard_fvk_uview", ufvk)
+							if (addr.isNotEmpty()) put("address", addr)
+							if (relayUrl.isNotEmpty()) put("relay_url", relayUrl)
 						}.toString()
 						state = DkgState.DISPLAY_QR
 					}

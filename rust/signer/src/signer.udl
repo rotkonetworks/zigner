@@ -1030,6 +1030,28 @@ namespace signer {
     [Throws=ErrorDisplayed]
     void frost_delete_wallet([ByRef] string wallet_id);
 
+    // Derive UFVK + address from a FROST public_key_package + host-broadcast sk.
+    // Returns JSON {"orchard_fvk_uview": "...", "address": "..."}. Lets zigner
+    // compute the metadata locally during DKG instead of round-tripping with zafu.
+    [Throws=ErrorDisplayed]
+    string frost_derive_metadata(
+        [ByRef] string public_key_package_hex,
+        [ByRef] string sk_hex,
+        boolean mainnet,
+        u32 diversifier_index
+    );
+
+    // Update public-derived metadata on an existing FROST wallet (no secret
+    // material). Empty strings are ignored. Used during DKG to receive
+    // orchard FVK / address / relay URL from zafu.
+    [Throws=ErrorDisplayed]
+    void frost_set_wallet_metadata(
+        [ByRef] string wallet_id,
+        [ByRef] string orchard_fvk_uview,
+        [ByRef] string address,
+        [ByRef] string relay_url
+    );
+
     // FROST backup: encrypt one wallet's share material into a portable
     // JSON envelope (PBKDF2-HMAC-SHA512 + AES-GCM-256, format identical to
     // zafu's @repo/encryption Box/KeyPrint shape). Returns the envelope JSON.

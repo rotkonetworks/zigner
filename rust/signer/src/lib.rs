@@ -3415,6 +3415,50 @@ fn frost_delete_wallet(wallet_id: &str) -> Result<(), ErrorDisplayed> {
     })
 }
 
+/// Derive UFVK + address from a FROST public_key_package and host-broadcast sk.
+/// Returns JSON `{"orchard_fvk_uview": "...", "address": "..."}`. Used during
+/// DKG so zigner can compute its own metadata locally instead of requiring
+/// a post-DKG round-trip from zafu.
+fn frost_derive_metadata(
+    public_key_package_hex: &str,
+    sk_hex: &str,
+    mainnet: bool,
+    diversifier_index: u32,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_derive_metadata(
+        public_key_package_hex,
+        sk_hex,
+        mainnet,
+        diversifier_index,
+    )
+    .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Update an existing FROST wallet's public-derived metadata (orchard FVK,
+/// address, relay URL). Called after DKG when zafu has computed these from
+/// the public_key_package + sk and hands them back to zigner so the airgap
+/// re-add QR can carry them later.
+fn frost_set_wallet_metadata(
+    wallet_id: &str,
+    orchard_fvk_uview: &str,
+    address: &str,
+    relay_url: &str,
+) -> Result<(), ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    db_handling::frost::update_wallet_metadata(
+        database,
+        wallet_id,
+        orchard_fvk_uview,
+        address,
+        relay_url,
+    )
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("update FROST wallet metadata: {e}"),
+    })
+}
+
 // ── FROST backup encryption (zigner ↔ zafu interoperable envelope) ──
 
 fn frost_export_backup_envelope(

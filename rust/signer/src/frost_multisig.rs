@@ -190,6 +190,48 @@ pub fn frost_derive_address_raw(
     Ok(hex::encode(raw))
 }
 
+/// Derive both the Orchard-only UFVK (`uview1…`) and unified address (`u1…`)
+/// from a FROST public_key_package + the host-broadcast `sk`. Every participant
+/// who calls this with identical inputs lands on byte-identical outputs.
+/// Returns JSON `{ "orchard_fvk_uview": "...", "address": "..." }`.
+pub fn frost_derive_metadata(
+    public_key_package_hex: &str,
+    sk_hex: &str,
+    mainnet: bool,
+    diversifier_index: u32,
+) -> Result<String, String> {
+    use frost_spend::frost_keys::PublicKeyPackage;
+    use frost_spend::keys::{derive_address as fs_derive_address, derive_fvk_from_sk};
+    use frost_spend::orchestrate::from_hex;
+    use zcash_address::unified::{
+        Address as UnifiedAddress, Encoding, Fvk, Receiver, Ufvk,
+    };
+    use zcash_address::Network;
+
+    let sk = parse_32(sk_hex, "fvk sk")?;
+    let pubkeys: PublicKeyPackage = from_hex(public_key_package_hex).map_err(|e| e.to_string())?;
+    let fvk = derive_fvk_from_sk(sk, &pubkeys)
+        .ok_or_else(|| "failed to derive FVK from group key + sk".to_string())?;
+    let addr = fs_derive_address(&fvk, diversifier_index);
+    let raw = addr.to_raw_address_bytes();
+
+    let network = if mainnet { Network::Main } else { Network::Test };
+
+    let ufvk_str = Ufvk::try_from_items(vec![Fvk::Orchard(fvk.to_bytes())])
+        .map_err(|e| format!("build UFVK: {e}"))?
+        .encode(&network);
+
+    let addr_str = UnifiedAddress::try_from_items(vec![Receiver::Orchard(raw)])
+        .map_err(|e| format!("build address: {e}"))?
+        .encode(&network);
+
+    serde_json::to_string(&serde_json::json!({
+        "orchard_fvk_uview": ufvk_str,
+        "address": addr_str,
+    }))
+    .map_err(|e| e.to_string())
+}
+
 // ── helpers ──
 
 fn parse_seed(hex_str: &str) -> Result<[u8; 32], String> {
