@@ -149,17 +149,22 @@ fun ScanNavSubgraph(
 				)
 			}
 			"dkg3" -> {
+				// dkg3 trigger now carries `sk` (host-broadcast random) and `relay_url`
+				// so zigner derives UFVK/address itself in part-3 and bakes them into
+				// the r3 ack — eliminates the post-DKG metadata round-trip.
 				FrostDkgScreen(
 					round = 3,
 					maxSigners = scanViewModel.frostDkgMaxSigners,
 					minSigners = scanViewModel.frostDkgMinSigners,
 					label = scanViewModel.frostDkgLabel,
-					mainnet = scanViewModel.frostDkgMainnet,
+					mainnet = json.optBoolean("mainnet", scanViewModel.frostDkgMainnet),
 					previousSecret = scanViewModel.frostDkgSecret,
 					// keys mirror the relay-tag convention (R1:/R2:) used by
 					// the mnemonic flow on the WSS relay.
 					round1BroadcastsJson = json.optJSONArray("r1")?.toString() ?: "[]",
 					round2PackagesJson = json.optJSONArray("r2")?.toString() ?: "[]",
+					skHex = json.optString("sk", ""),
+					relayUrl = json.optString("relay_url", ""),
 					onSecretUpdated = { scanViewModel.frostDkgSecret = it },
 					onScanNext = scanNextFrost,
 					modifier = Modifier.statusBarsPadding(),

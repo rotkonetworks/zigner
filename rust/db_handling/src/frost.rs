@@ -126,6 +126,41 @@ pub fn delete_frost_wallet(database: &sled::Db, wallet_id_hex: &str) -> Result<(
     Ok(())
 }
 
+/// Update the public-derived metadata fields on an existing FROST wallet.
+/// Used by the DKG metadata round-trip — zafu computes `orchardFvk + address + relayUrl`
+/// after FVK echo and hands them to zigner so the airgap re-add QR can carry them later.
+/// Empty strings are ignored (treated as "no change for this field").
+pub fn update_wallet_metadata(
+    database: &sled::Db,
+    wallet_id_hex: &str,
+    orchard_fvk_uview: &str,
+    address: &str,
+    relay_url: &str,
+) -> Result<()> {
+    let tree = database.open_tree(FROST_KEYS_TREE)?;
+    let id = hex::decode(wallet_id_hex)
+        .map_err(|e| Error::Other(anyhow::anyhow!("bad wallet id hex: {e}")))?;
+    let bytes = tree
+        .get(&id)?
+        .ok_or_else(|| Error::Other(anyhow::anyhow!("FROST wallet not found: {wallet_id_hex}")))?;
+    let mut data: FrostWalletData = serde_json::from_slice(&bytes)
+        .map_err(|e| Error::Other(anyhow::anyhow!("FROST deserialize: {e}")))?;
+    if !orchard_fvk_uview.is_empty() {
+        data.orchard_fvk_uview = Some(orchard_fvk_uview.to_string());
+    }
+    if !address.is_empty() {
+        data.address = Some(address.to_string());
+    }
+    if !relay_url.is_empty() {
+        data.relay_url = Some(relay_url.to_string());
+    }
+    let json = serde_json::to_vec(&data)
+        .map_err(|e| Error::Other(anyhow::anyhow!("FROST serialize: {e}")))?;
+    tree.insert(&id, json.as_slice())?;
+    tree.flush()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
