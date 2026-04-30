@@ -7,7 +7,14 @@
 use crate::error::{Error, Result};
 use constants::FROST_KEYS_TREE;
 
-/// Data stored per FROST wallet
+/// Data stored per FROST wallet.
+///
+/// `orchard_fvk_uview`, `address` and `relay_url` are public-derived data
+/// computed by zafu during DKG (FVK echo step) and handed to zigner in the
+/// r3 ack so zigner can carry them in the airgap-import re-add QR.
+/// All three are optional for backward compat with wallets created before
+/// this schema bump — older wallets simply emit a re-add QR with these
+/// fields absent and zafu will refuse to import (clear error to user).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FrostWalletData {
     pub key_package_hex: String,
@@ -18,6 +25,12 @@ pub struct FrostWalletData {
     pub max_signers: u16,
     pub mainnet: bool,
     pub created_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchard_fvk_uview: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_url: Option<String>,
 }
 
 /// Summary for listing wallets (no secrets)
@@ -137,6 +150,9 @@ mod tests {
             max_signers: 3,
             mainnet: true,
             created_at: 1234567890,
+            orchard_fvk_uview: None,
+            address: None,
+            relay_url: None,
         };
         let id = store_frost_wallet(&db, &data).unwrap();
         let retrieved = get_frost_wallet(&db, &id).unwrap().unwrap();
