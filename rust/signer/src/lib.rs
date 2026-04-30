@@ -32,6 +32,7 @@ use zcash_transparent as _;
 pub mod auth;
 pub mod backup;
 mod ffi_types;
+pub mod frost_backup;
 pub mod frost_multisig;
 
 use crate::ffi_types::*;
@@ -3328,9 +3329,16 @@ fn frost_store_wallet(
     min_signers: u16,
     max_signers: u16,
     mainnet: bool,
+    orchard_fvk_uview: &str,
+    address: &str,
+    relay_url: &str,
 ) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    // Empty strings → None, so older callers that pass "" don't poison the
+    // optional fields with empty data.
+    let none_if_empty = |s: &str| if s.is_empty() { None } else { Some(s.to_string()) };
 
     let data = db_handling::frost::FrostWalletData {
         key_package_hex: key_package_hex.to_string(),
@@ -3344,6 +3352,9 @@ fn frost_store_wallet(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs(),
+        orchard_fvk_uview: none_if_empty(orchard_fvk_uview),
+        address: none_if_empty(address),
+        relay_url: none_if_empty(relay_url),
     };
 
     db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
@@ -3401,6 +3412,71 @@ fn frost_delete_wallet(wallet_id: &str) -> Result<(), ErrorDisplayed> {
 
     db_handling::frost::delete_frost_wallet(database, wallet_id).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to delete FROST wallet: {e}"),
+    })
+}
+
+// ── FROST backup encryption (zigner ↔ zafu interoperable envelope) ──
+
+fn frost_export_backup_envelope(
+    wallet_id: &str,
+    passphrase: &str,
+) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let data = db_handling::frost::get_frost_wallet(database, wallet_id)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("load FROST wallet: {e}"),
+        })?
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: format!("FROST wallet not found: {wallet_id}"),
+        })?;
+
+    let payload = frost_backup::PlaintextPayload {
+        version: 1,
+        kind: "frost-share".into(),
+        label: data.label,
+        public_key_package: data.public_key_package_hex,
+        key_package: data.key_package_hex,
+        ephemeral_seed: data.ephemeral_seed_hex,
+        threshold: data.min_signers,
+        max_signers: data.max_signers,
+        mainnet: data.mainnet,
+        orchard_fvk: data.orchard_fvk_uview,
+        address: data.address,
+        relay_url: data.relay_url,
+        created_at: data.created_at,
+    };
+
+    frost_backup::seal_envelope(&payload, passphrase).map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+fn frost_import_backup_envelope(
+    envelope_json: &str,
+    passphrase: &str,
+) -> Result<String, ErrorDisplayed> {
+    let payload = frost_backup::open_envelope(envelope_json, passphrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let data = db_handling::frost::FrostWalletData {
+        key_package_hex: payload.key_package,
+        public_key_package_hex: payload.public_key_package,
+        ephemeral_seed_hex: payload.ephemeral_seed,
+        label: payload.label,
+        min_signers: payload.threshold,
+        max_signers: payload.max_signers,
+        mainnet: payload.mainnet,
+        created_at: payload.created_at,
+        orchard_fvk_uview: payload.orchard_fvk,
+        address: payload.address,
+        relay_url: payload.relay_url,
+    };
+
+    db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
+        s: format!("store imported wallet: {e}"),
     })
 }
 

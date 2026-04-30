@@ -75,10 +75,13 @@ fun FrostDkgScreen(
 						}
 						val json = org.json.JSONObject(result)
 						val pkg = json.getString("public_key_package")
+						// orchard_fvk_uview / address / relay_url are populated by a
+						// follow-up metadata-pairing flow with zafu; stored as None for now.
 						val wid = withContext(Dispatchers.Default) {
 							frostStoreWallet(
 								json.getString("key_package"), pkg, json.getString("ephemeral_seed"),
 								label, minSigners, maxSigners, mainnet,
+								"", "", "",
 							)
 						}
 						walletId = wid

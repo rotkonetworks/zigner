@@ -998,7 +998,11 @@ namespace signer {
     // FROST wallet storage (key packages from DKG)
     // ========================================================================
 
-    // Store FROST wallet after DKG completion, returns wallet_id hex
+    // Store FROST wallet after DKG completion, returns wallet_id hex.
+    // The `orchard_fvk_uview / address / relay_url` arguments are zafu-side
+    // public-derived data (computed during DKG FVK echo). Pass empty strings
+    // for legacy callers; new callers pass them so the airgap re-add QR can
+    // hand them back to a fresh zafu install during recovery.
     [Throws=ErrorDisplayed]
     string frost_store_wallet(
         [ByRef] string key_package_hex,
@@ -1007,7 +1011,10 @@ namespace signer {
         [ByRef] string label,
         u16 min_signers,
         u16 max_signers,
-        boolean mainnet
+        boolean mainnet,
+        [ByRef] string orchard_fvk_uview,
+        [ByRef] string address,
+        [ByRef] string relay_url
     );
 
     // List all stored FROST wallets (summaries, no secrets)
@@ -1022,6 +1029,23 @@ namespace signer {
     // Delete a FROST wallet
     [Throws=ErrorDisplayed]
     void frost_delete_wallet([ByRef] string wallet_id);
+
+    // FROST backup: encrypt one wallet's share material into a portable
+    // JSON envelope (PBKDF2-HMAC-SHA512 + AES-GCM-256, format identical to
+    // zafu's @repo/encryption Box/KeyPrint shape). Returns the envelope JSON.
+    [Throws=ErrorDisplayed]
+    string frost_export_backup_envelope(
+        [ByRef] string wallet_id,
+        [ByRef] string passphrase
+    );
+
+    // FROST backup restore: decrypt an envelope JSON, store the wallet,
+    // return its new device-local wallet_id (hex).
+    [Throws=ErrorDisplayed]
+    string frost_import_backup_envelope(
+        [ByRef] string envelope_json,
+        [ByRef] string passphrase
+    );
 };
 
 dictionary MKeysNew {

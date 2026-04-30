@@ -1,6 +1,10 @@
 package net.rotko.zigner.screens.settings.frost
 
+import android.content.Context
 import android.content.res.Configuration
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,28 +16,75 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.FrostWalletSummaryFfi
 import io.parity.signer.uniffi.frostDeleteWallet
+import io.parity.signer.uniffi.frostExportBackupEnvelope
+import io.parity.signer.uniffi.frostImportBackupEnvelope
 import io.parity.signer.uniffi.frostListWallets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
+import timber.log.Timber
 
 @Composable
 fun FrostWalletListScreen(
 	onBack: Callback,
 ) {
+	val ctx = LocalContext.current
 	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
 	var error by remember { mutableStateOf<String?>(null) }
+	var toast by remember { mutableStateOf<String?>(null) }
 	var confirmDeleteId by remember { mutableStateOf<String?>(null) }
 	val scope = rememberCoroutineScope()
+
+	// Backup-export flow: passphrase entry → SAF write
+	var exportTarget by remember { mutableStateOf<FrostWalletSummaryFfi?>(null) }
+	var pendingEnvelope by remember { mutableStateOf<String?>(null) }
+	var pendingFilename by remember { mutableStateOf("frost-backup.json") }
+	val saveLauncher = rememberLauncherForActivityResult(
+		ActivityResultContracts.CreateDocument("application/json")
+	) { uri: Uri? ->
+		val envelope = pendingEnvelope
+		pendingEnvelope = null
+		if (uri != null && envelope != null) {
+			scope.launch {
+				try {
+					withContext(Dispatchers.IO) { writeFile(ctx, uri, envelope) }
+					toast = "backup saved"
+				} catch (e: Exception) {
+					Timber.e(e, "[frost-backup] save failed")
+					error = e.message ?: "save failed"
+				}
+			}
+		}
+	}
+
+	// Backup-import flow: SAF read → passphrase entry → frost_import_backup_envelope
+	var importEnvelopeJson by remember { mutableStateOf<String?>(null) }
+	val openLauncher = rememberLauncherForActivityResult(
+		ActivityResultContracts.OpenDocument()
+	) { uri: Uri? ->
+		if (uri != null) {
+			scope.launch {
+				try {
+					val text = withContext(Dispatchers.IO) { readFile(ctx, uri) }
+					importEnvelopeJson = text
+				} catch (e: Exception) {
+					Timber.e(e, "[frost-backup] read failed")
+					error = e.message ?: "read failed"
+				}
+			}
+		}
+	}
 
 	fun loadWallets() {
 		scope.launch {
@@ -72,6 +123,18 @@ fun FrostWalletListScreen(
 				modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
 			)
 		}
+		if (toast != null) {
+			Text(
+				text = toast!!,
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.accentGreen,
+				modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+			)
+			LaunchedEffect(toast) {
+				kotlinx.coroutines.delay(3000)
+				toast = null
+			}
+		}
 
 		if (wallets.isEmpty() && error == null) {
 			Column(
@@ -88,9 +151,15 @@ fun FrostWalletListScreen(
 				)
 				Spacer(modifier = Modifier.height(8.dp))
 				Text(
-					text = "Complete a FROST DKG ceremony to create one.",
+					text = "Complete a FROST DKG ceremony to create one,\nor restore from an encrypted backup.",
 					style = SignerTypeface.CaptionM,
 					color = MaterialTheme.colors.textTertiary,
+				)
+				Spacer(modifier = Modifier.height(24.dp))
+				SecondaryButtonWide(
+					label = "Restore from file",
+					modifier = Modifier.padding(horizontal = 24.dp),
+					onClicked = { openLauncher.launch(arrayOf("application/json")) },
 				)
 			}
 		} else {
@@ -122,11 +191,73 @@ fun FrostWalletListScreen(
 						onDeleteCancel = {
 							confirmDeleteId = null
 						},
+						onExportBackup = { exportTarget = wallet },
 					)
 					SignerDivider()
 				}
+				Spacer(modifier = Modifier.height(16.dp))
+				SecondaryButtonWide(
+					label = "Restore from file",
+					modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+					onClicked = { openLauncher.launch(arrayOf("application/json")) },
+				)
+				Spacer(modifier = Modifier.height(24.dp))
 			}
 		}
+	}
+
+	// ── Export passphrase dialog ──
+	exportTarget?.let { wallet ->
+		FrostBackupDialog(
+			title = "Export \"${wallet.label}\"",
+			subtitle = "Encrypts the FROST share with a passphrase you choose. Save the file somewhere safe — paper, USB drive, password manager.",
+			confirmLabel = "Export",
+			requireConfirmField = true,
+			onConfirm = { passphrase ->
+				exportTarget = null
+				scope.launch {
+					try {
+						val envelope = withContext(Dispatchers.Default) {
+							frostExportBackupEnvelope(wallet.walletId, passphrase)
+						}
+						pendingEnvelope = envelope
+						pendingFilename = "frost-backup-${sanitizeLabel(wallet.label)}-${ymdToday()}.json"
+						saveLauncher.launch(pendingFilename)
+					} catch (e: Exception) {
+						Timber.e(e, "[frost-backup] export failed")
+						error = e.message ?: "export failed"
+					}
+				}
+			},
+			onCancel = { exportTarget = null },
+		)
+	}
+
+	// ── Import passphrase dialog ──
+	importEnvelopeJson?.let { json ->
+		FrostBackupDialog(
+			title = "Restore backup",
+			subtitle = "Enter the passphrase used when this file was exported.",
+			confirmLabel = "Restore",
+			requireConfirmField = false,
+			onConfirm = { passphrase ->
+				importEnvelopeJson = null
+				scope.launch {
+					try {
+						val newId = withContext(Dispatchers.Default) {
+							frostImportBackupEnvelope(json, passphrase)
+						}
+						toast = "wallet restored"
+						loadWallets()
+						Timber.d("[frost-backup] imported wallet=$newId")
+					} catch (e: Exception) {
+						Timber.e(e, "[frost-backup] import failed")
+						error = e.message ?: "import failed"
+					}
+				}
+			},
+			onCancel = { importEnvelopeJson = null },
+		)
 	}
 }
 
@@ -137,6 +268,7 @@ private fun FrostWalletRow(
 	onDeleteTap: Callback,
 	onDeleteConfirm: Callback,
 	onDeleteCancel: Callback,
+	onExportBackup: Callback = {},
 ) {
 	Column(
 		modifier = Modifier
@@ -207,13 +339,52 @@ private fun FrostWalletRow(
 				)
 			}
 		} else {
-			SecondaryButtonWide(
-				label = "Delete",
+			Row(
 				modifier = Modifier.fillMaxWidth(),
-				onClicked = onDeleteTap,
-			)
+				horizontalArrangement = Arrangement.spacedBy(12.dp),
+			) {
+				SecondaryButtonWide(
+					label = "Backup",
+					modifier = Modifier.weight(1f),
+					onClicked = onExportBackup,
+				)
+				SecondaryButtonWide(
+					label = "Delete",
+					modifier = Modifier.weight(1f),
+					onClicked = onDeleteTap,
+				)
+			}
 		}
 	}
+}
+
+// ── helpers ──
+
+/** sanitize wallet label for filename use ([A-Za-z0-9_-] only). */
+private fun sanitizeLabel(label: String): String {
+	val cleaned = label.replace(Regex("[^A-Za-z0-9_-]+"), "-").trim('-')
+	return if (cleaned.isEmpty()) "multisig" else cleaned
+}
+
+/** YYYYMMDD in local time. */
+private fun ymdToday(): String {
+	val cal = java.util.Calendar.getInstance()
+	val y = cal.get(java.util.Calendar.YEAR)
+	val m = cal.get(java.util.Calendar.MONTH) + 1
+	val d = cal.get(java.util.Calendar.DAY_OF_MONTH)
+	return "%04d%02d%02d".format(y, m, d)
+}
+
+private fun writeFile(ctx: Context, uri: Uri, text: String) {
+	ctx.contentResolver.openOutputStream(uri)?.use { os ->
+		os.write(text.toByteArray(Charsets.UTF_8))
+	} ?: throw IllegalStateException("could not open output stream for $uri")
+}
+
+private fun readFile(ctx: Context, uri: Uri): String {
+	return ctx.contentResolver.openInputStream(uri)?.use { input ->
+		input.readBytes().toString(Charsets.UTF_8)
+	} ?: throw IllegalStateException("could not open input stream for $uri")
 }
 
 @Preview(

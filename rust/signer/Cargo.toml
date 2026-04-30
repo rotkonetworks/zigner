@@ -28,6 +28,12 @@ zcash_address = "0.4"
 # Auth identity derivation (HMAC-SHA512 KDF) and backup encryption
 hmac = "0.12"
 hkdf = "0.12"
+# FROST multisig backup: PBKDF2-SHA512 + AES-GCM-256 (matches zafu @repo/encryption).
+pbkdf2 = "0.12"
+aes-gcm = "0.10"
+base64 = { version = "0.22", default-features = false, features = ["std"] }
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
 # BIP39 mnemonic for hot wallet derivation
 bip39 = { package = "tiny-bip39", version = "1.0.0", default-features = false }
 chacha20poly1305 = "0.10"
