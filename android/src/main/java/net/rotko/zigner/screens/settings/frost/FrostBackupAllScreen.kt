@@ -6,8 +6,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,7 +38,7 @@ fun FrostBackupAllScreen(onBack: Callback) {
 	var walletCount by remember { mutableStateOf(0) }
 	var loaded by remember { mutableStateOf(false) }
 	var error by remember { mutableStateOf<String?>(null) }
-	var toast by remember { mutableStateOf<String?>(null) }
+	var success by remember { mutableStateOf(false) }
 	var showDialog by remember { mutableStateOf(false) }
 	var pendingEnvelope by remember { mutableStateOf<String?>(null) }
 
@@ -60,7 +63,7 @@ fun FrostBackupAllScreen(onBack: Callback) {
 			scope.launch {
 				try {
 					withContext(Dispatchers.IO) { writeBackupFile(ctx, uri, envelope) }
-					toast = "backup saved"
+					success = true
 				} catch (e: Exception) {
 					Timber.e(e, "[frost-backup-all] save failed")
 					error = e.message ?: "save failed"
@@ -77,58 +80,69 @@ fun FrostBackupAllScreen(onBack: Callback) {
 	) {
 		ScreenHeaderClose(title = "Backup all multisig", onClose = onBack)
 
-		Column(
+		Box(
 			modifier = Modifier
 				.weight(1f)
+				.fillMaxWidth()
 				.padding(horizontal = 24.dp, vertical = 16.dp),
+			contentAlignment = Alignment.Center,
 		) {
-			when {
-				!loaded -> Text(
-					"Loading…",
-					style = SignerTypeface.BodyL,
-					color = MaterialTheme.colors.textSecondary,
-				)
-				walletCount == 0 -> Text(
-					"No multisig wallets to backup.",
-					style = SignerTypeface.BodyL,
-					color = MaterialTheme.colors.textTertiary,
-				)
-				else -> {
-					Text(
-						text = "$walletCount multisig wallet${if (walletCount == 1) "" else "s"}",
-						style = SignerTypeface.TitleS,
-						color = MaterialTheme.colors.primary,
-					)
-					Spacer(modifier = Modifier.height(8.dp))
-					Text(
-						text = "Encrypts every wallet's FROST share into one .json file. Pick a save location after entering a passphrase.",
-						style = SignerTypeface.CaptionM,
-						color = MaterialTheme.colors.textTertiary,
-					)
-					Spacer(modifier = Modifier.height(16.dp))
-					Text(
-						text = "⚠ this passphrase cannot be reset. losing it means the backup is unusable.",
-						style = SignerTypeface.CaptionM,
-						color = MaterialTheme.colors.red400,
-					)
-				}
-			}
-
-			error?.let {
-				Spacer(modifier = Modifier.height(12.dp))
-				Text(it, style = SignerTypeface.BodyL, color = MaterialTheme.colors.red500)
-			}
-			toast?.let {
-				Spacer(modifier = Modifier.height(12.dp))
-				Text(it, style = SignerTypeface.BodyL, color = MaterialTheme.colors.accentGreen)
-				LaunchedEffect(it) {
+			if (success) {
+				AnimatedSuccessBadge(visible = true, message = "backup saved")
+				LaunchedEffect(Unit) {
 					kotlinx.coroutines.delay(2500)
-					toast = null
+					success = false
+				}
+			} else {
+				Column(horizontalAlignment = Alignment.CenterHorizontally) {
+					when {
+						!loaded -> Text(
+							"Loading…",
+							style = SignerTypeface.BodyL,
+							color = MaterialTheme.colors.textSecondary,
+						)
+						walletCount == 0 -> Text(
+							"No multisig wallets to backup.",
+							style = SignerTypeface.BodyL,
+							color = MaterialTheme.colors.textTertiary,
+						)
+						else -> {
+							Icon(
+								imageVector = Icons.Outlined.Archive,
+								contentDescription = null,
+								tint = MaterialTheme.colors.primary,
+								modifier = Modifier.size(48.dp),
+							)
+							Spacer(modifier = Modifier.height(12.dp))
+							Text(
+								text = "$walletCount multisig wallet${if (walletCount == 1) "" else "s"}",
+								style = SignerTypeface.TitleS,
+								color = MaterialTheme.colors.primary,
+							)
+							Spacer(modifier = Modifier.height(8.dp))
+							Text(
+								text = "Encrypts every wallet's FROST share into one .json file. Pick a save location after entering a passphrase.",
+								style = SignerTypeface.CaptionM,
+								color = MaterialTheme.colors.textTertiary,
+							)
+							Spacer(modifier = Modifier.height(16.dp))
+							Text(
+								text = "⚠ this passphrase cannot be reset. losing it means the backup is unusable.",
+								style = SignerTypeface.CaptionM,
+								color = MaterialTheme.colors.red400,
+							)
+						}
+					}
+
+					error?.let {
+						Spacer(modifier = Modifier.height(12.dp))
+						Text(it, style = SignerTypeface.BodyL, color = MaterialTheme.colors.red500)
+					}
 				}
 			}
 		}
 
-		if (loaded && walletCount > 0) {
+		if (loaded && walletCount > 0 && !success) {
 			SecondaryButtonWide(
 				label = "Export all backup",
 				modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
