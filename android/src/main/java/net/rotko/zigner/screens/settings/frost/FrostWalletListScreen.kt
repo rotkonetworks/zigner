@@ -12,6 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -342,27 +346,30 @@ private fun FrostWalletRow(
 				)
 			}
 		} else {
-			Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-				SecondaryButtonWide(
+			// Compact icon-button row. Long-press any icon for a Toast tooltip.
+			Row(
+				modifier = Modifier.fillMaxWidth(),
+				horizontalArrangement = Arrangement.spacedBy(8.dp),
+			) {
+				IconActionButton(
+					icon = Icons.Outlined.QrCode2,
 					label = "Send to zafu",
-					modifier = Modifier.fillMaxWidth(),
-					onClicked = onSendToZafu,
+					onClick = onSendToZafu,
+					modifier = Modifier.weight(1f),
 				)
-				Row(
-					modifier = Modifier.fillMaxWidth(),
-					horizontalArrangement = Arrangement.spacedBy(12.dp),
-				) {
-					SecondaryButtonWide(
-						label = "Backup",
-						modifier = Modifier.weight(1f),
-						onClicked = onExportBackup,
-					)
-					SecondaryButtonWide(
-						label = "Delete",
-						modifier = Modifier.weight(1f),
-						onClicked = onDeleteTap,
-					)
-				}
+				IconActionButton(
+					icon = Icons.Outlined.FileDownload,
+					label = "Backup",
+					onClick = onExportBackup,
+					modifier = Modifier.weight(1f),
+				)
+				IconActionButton(
+					icon = Icons.Outlined.Delete,
+					label = "Delete",
+					onClick = onDeleteTap,
+					tint = MaterialTheme.colors.red400,
+					modifier = Modifier.weight(1f),
+				)
 			}
 		}
 	}
