@@ -60,11 +60,16 @@ fun KeyDetailsMenuGeneral(
 			.padding(start = sidePadding, end = sidePadding, top = 8.dp),
 	) {
 
-		MenuItemForBottomSheet(
-			Icons.Outlined.FileUpload,
-			label = stringResource(R.string.menu_option_export_keys),
-			onclick = onSelectKeysClicked
-		)
+		// Export Keys — parity-signer SCALE-encoded multipart QR (magic prefix
+		// 0x53 0xff 0xde) for Substrate address discovery in hot wallets like
+		// Polkadot.js. Substrate-only: address encoding only handles SS58 /
+		// eth-pubkey, no Zcash/Penumbra support. No current zafu/zcli consumer.
+		// Hidden until substrate use returns or protocol extends upstream.
+		// MenuItemForBottomSheet(
+		// 	Icons.Outlined.FileUpload,
+		// 	label = stringResource(R.string.menu_option_export_keys),
+		// 	onclick = onSelectKeysClicked
+		// )
 
 		MenuItemForBottomSheet(
 			iconId = R.drawable.ic_settings_backup_restore_28,
