@@ -38,6 +38,7 @@ import timber.log.Timber
 @Composable
 fun FrostWalletListScreen(
 	onBack: Callback,
+	onSendWalletToZafu: (walletId: String) -> Unit = {},
 ) {
 	val ctx = LocalContext.current
 	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
@@ -192,6 +193,7 @@ fun FrostWalletListScreen(
 							confirmDeleteId = null
 						},
 						onExportBackup = { exportTarget = wallet },
+						onSendToZafu = { onSendWalletToZafu(wallet.walletId) },
 					)
 					SignerDivider()
 				}
@@ -269,6 +271,7 @@ private fun FrostWalletRow(
 	onDeleteConfirm: Callback,
 	onDeleteCancel: Callback,
 	onExportBackup: Callback = {},
+	onSendToZafu: Callback = {},
 ) {
 	Column(
 		modifier = Modifier
@@ -339,20 +342,27 @@ private fun FrostWalletRow(
 				)
 			}
 		} else {
-			Row(
-				modifier = Modifier.fillMaxWidth(),
-				horizontalArrangement = Arrangement.spacedBy(12.dp),
-			) {
+			Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 				SecondaryButtonWide(
-					label = "Backup",
-					modifier = Modifier.weight(1f),
-					onClicked = onExportBackup,
+					label = "Send to zafu",
+					modifier = Modifier.fillMaxWidth(),
+					onClicked = onSendToZafu,
 				)
-				SecondaryButtonWide(
-					label = "Delete",
-					modifier = Modifier.weight(1f),
-					onClicked = onDeleteTap,
-				)
+				Row(
+					modifier = Modifier.fillMaxWidth(),
+					horizontalArrangement = Arrangement.spacedBy(12.dp),
+				) {
+					SecondaryButtonWide(
+						label = "Backup",
+						modifier = Modifier.weight(1f),
+						onClicked = onExportBackup,
+					)
+					SecondaryButtonWide(
+						label = "Delete",
+						modifier = Modifier.weight(1f),
+						onClicked = onDeleteTap,
+					)
+				}
 			}
 		}
 	}
@@ -361,13 +371,13 @@ private fun FrostWalletRow(
 // ── helpers ──
 
 /** sanitize wallet label for filename use ([A-Za-z0-9_-] only). */
-private fun sanitizeLabel(label: String): String {
+internal fun sanitizeLabel(label: String): String {
 	val cleaned = label.replace(Regex("[^A-Za-z0-9_-]+"), "-").trim('-')
 	return if (cleaned.isEmpty()) "multisig" else cleaned
 }
 
 /** YYYYMMDD in local time. */
-private fun ymdToday(): String {
+internal fun ymdToday(): String {
 	val cal = java.util.Calendar.getInstance()
 	val y = cal.get(java.util.Calendar.YEAR)
 	val m = cal.get(java.util.Calendar.MONTH) + 1

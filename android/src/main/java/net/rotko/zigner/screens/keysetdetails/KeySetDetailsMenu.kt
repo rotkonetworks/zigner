@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.QrCode
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +51,8 @@ fun KeyDetailsMenuGeneral(
 	onSelectKeysClicked: Callback,
 	onBackupSeedClicked: Callback,
 	onExportToDeviceClicked: Callback,
+	onBackupMultisigClicked: Callback,
+	onSendMultisigToZafuClicked: Callback,
 	onDeleteClicked: Callback,
 	exposeConfirmAction: Callback,//also called shield
 	onCancel: Callback,
@@ -89,6 +93,18 @@ fun KeyDetailsMenuGeneral(
 		)
 
 		MenuItemForBottomSheet(
+			Icons.Outlined.FileDownload,
+			label = stringResource(R.string.key_set_menu_option_backup_multisig),
+			onclick = onBackupMultisigClicked,
+		)
+
+		MenuItemForBottomSheet(
+			Icons.Outlined.QrCode2,
+			label = stringResource(R.string.key_set_menu_option_send_multisig_to_zafu),
+			onclick = onSendMultisigToZafuClicked,
+		)
+
+		MenuItemForBottomSheet(
 			iconId = R.drawable.ic_backspace_28,
 			label = stringResource(R.string.menu_option_forget_delete_key),
 			tint = MaterialTheme.colors.red400,
@@ -118,7 +134,7 @@ private fun PreviewKeyDetailsMenu() {
 	SignerNewTheme {
 		val state = remember { mutableStateOf(NetworkState.None) }
 		KeyDetailsMenuGeneral(
-			state, {}, {}, {}, {}, {}, {},
+			state, {}, {}, {}, {}, {}, {}, {}, {},
 		)
 	}
 }
