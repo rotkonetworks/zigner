@@ -19,6 +19,8 @@ import net.rotko.zigner.screens.keysets.restore.KeysetRecoverSubgraph
 import net.rotko.zigner.screens.scan.ScanNavSubgraph
 import net.rotko.zigner.screens.scan.bananasplitcreate.bananaSplitCreateDestination
 import net.rotko.zigner.screens.settings.backupexport.BackupExportSubgraph
+import net.rotko.zigner.screens.settings.frost.FrostBackupAllScreen
+import net.rotko.zigner.screens.settings.frost.FrostSendToZafuScreen
 import net.rotko.zigner.screens.settings.frost.FrostWalletListScreen
 import net.rotko.zigner.screens.settings.networks.helper.networkHelpersCoreSubgraph
 import net.rotko.zigner.screens.settings.settingsFullSubgraph
@@ -160,6 +162,34 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 		composable(CoreUnlockedNavSubgraph.frostWalletList) {
 			FrostWalletListScreen(
 				onBack = { navController.popBackStack() },
+				onSendWalletToZafu = { walletId ->
+					navController.navigate(
+						CoreUnlockedNavSubgraph.FrostSendToZafu.destination(walletId)
+					)
+				},
+			)
+		}
+		composable(CoreUnlockedNavSubgraph.frostBackupAll) {
+			FrostBackupAllScreen(
+				onBack = { navController.popBackStack() },
+			)
+		}
+		composable(
+			route = CoreUnlockedNavSubgraph.FrostSendToZafu.route,
+			arguments = listOf(
+				navArgument(CoreUnlockedNavSubgraph.FrostSendToZafu.walletIdArg) {
+					type = NavType.StringType
+					nullable = true
+					defaultValue = null
+				},
+			),
+		) { entry ->
+			val walletId = entry.arguments
+				?.getString(CoreUnlockedNavSubgraph.FrostSendToZafu.walletIdArg)
+				?.takeIf { it.isNotEmpty() }
+			FrostSendToZafuScreen(
+				walletIdFilter = walletId,
+				onBack = { navController.popBackStack() },
 			)
 		}
 		settingsFullSubgraph(
@@ -250,4 +280,15 @@ object CoreUnlockedNavSubgraph {
 	const val settings = "core_settings_flow"
 	const val networkHelpers = "network_helpers_path"
 	const val frostWalletList = "frost_wallet_list"
+	const val frostBackupAll = "frost_backup_all"
+
+	/** Send airgap multisig metadata to zafu via QR. With no walletId, sends
+	 *  every multisig wallet on the device. With one, sends just that wallet. */
+	object FrostSendToZafu {
+		internal const val walletIdArg = "wallet_id"
+		private const val baseRoute = "frost_send_to_zafu"
+		const val route = "$baseRoute?$walletIdArg={$walletIdArg}"
+		fun destination(walletId: String? = null): String =
+			if (walletId == null) baseRoute else "$baseRoute?$walletIdArg=$walletId"
+	}
 }

@@ -166,6 +166,16 @@ fun KeySetDetailsScreenSubgraph(
 									)
 								}
 							},
+							onBackupMultisigClicked = {
+								menuNavController.popBackStack()
+								coreNavController.navigate(CoreUnlockedNavSubgraph.frostBackupAll)
+							},
+							onSendMultisigToZafuClicked = {
+								menuNavController.popBackStack()
+								coreNavController.navigate(
+									CoreUnlockedNavSubgraph.FrostSendToZafu.destination()
+								)
+							},
 							onCancel = {
 								menuNavController.popBackStack()
 							},

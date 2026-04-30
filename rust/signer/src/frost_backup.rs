@@ -105,8 +105,16 @@ fn derive_key(passphrase: &str, salt: &[u8]) -> [u8; KEY_LEN] {
     key
 }
 
-/// Seal a plaintext payload into an envelope JSON string.
-pub fn seal_envelope(payload: &PlaintextPayload, passphrase: &str) -> Result<String, String> {
+/// Generic seal: encrypt arbitrary plaintext bytes under a passphrase and
+/// wrap them in the standard envelope. `kind` distinguishes single vs batch
+/// (e.g. "frost-share-backup" vs "frost-share-batch-backup").
+pub fn seal_envelope_bytes(
+    plaintext: &[u8],
+    passphrase: &str,
+    kind: &str,
+    label: &str,
+    public_key_package: Option<&str>,
+) -> Result<String, String> {
     let mut salt = [0u8; SALT_LEN];
     let mut nonce_bytes = [0u8; NONCE_LEN];
     rand::thread_rng().fill_bytes(&mut salt);
@@ -114,18 +122,17 @@ pub fn seal_envelope(payload: &PlaintextPayload, passphrase: &str) -> Result<Str
 
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new(&key.into());
-    let plaintext = serde_json::to_vec(payload).map_err(|e| format!("serialize payload: {e}"))?;
     let cipher_text = cipher
-        .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_ref())
+        .encrypt(Nonce::from_slice(&nonce_bytes), plaintext)
         .map_err(|e| format!("aes-gcm seal: {e}"))?;
 
     let key_hash = Sha256::digest(key);
 
     let envelope = Envelope {
         version: 1,
-        kind: "frost-share-backup".into(),
-        label: payload.label.clone(),
-        public_key_package: Some(payload.public_key_package.clone()),
+        kind: kind.to_string(),
+        label: label.to_string(),
+        public_key_package: public_key_package.map(|s| s.to_string()),
         exported_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -143,17 +150,17 @@ pub fn seal_envelope(payload: &PlaintextPayload, passphrase: &str) -> Result<Str
     serde_json::to_string(&envelope).map_err(|e| format!("serialize envelope: {e}"))
 }
 
-/// Open an envelope JSON string. Returns the plaintext payload, or an error
-/// for wrong passphrase / corrupted ciphertext / malformed envelope.
-pub fn open_envelope(envelope_json: &str, passphrase: &str) -> Result<PlaintextPayload, String> {
+/// Generic open: decrypt the envelope and return (kind, plaintext_bytes).
+/// Caller parses plaintext as the matching shape.
+pub fn open_envelope_bytes(
+    envelope_json: &str,
+    passphrase: &str,
+) -> Result<(String, Vec<u8>), String> {
     let envelope: Envelope =
         serde_json::from_str(envelope_json).map_err(|e| format!("parse envelope: {e}"))?;
 
     if envelope.version != 1 {
         return Err(format!("unsupported envelope version {}", envelope.version));
-    }
-    if envelope.kind != "frost-share-backup" {
-        return Err(format!("unexpected envelope type '{}'", envelope.kind));
     }
 
     let salt = b64()
@@ -171,7 +178,6 @@ pub fn open_envelope(envelope_json: &str, passphrase: &str) -> Result<PlaintextP
 
     let key = derive_key(passphrase, &salt);
     let key_hash = Sha256::digest(key);
-    // Constant-time compare so a wrong passphrase doesn't leak via timing.
     if !constant_time_eq(&key_hash, &expected_hash) {
         return Err("wrong passphrase".to_string());
     }
@@ -184,12 +190,99 @@ pub fn open_envelope(envelope_json: &str, passphrase: &str) -> Result<PlaintextP
         )
         .map_err(|_| "wrong passphrase or corrupted backup".to_string())?;
 
+    Ok((envelope.kind, plaintext))
+}
+
+/// Seal a single FROST share. Thin wrapper over `seal_envelope_bytes`.
+pub fn seal_envelope(payload: &PlaintextPayload, passphrase: &str) -> Result<String, String> {
+    let bytes = serde_json::to_vec(payload).map_err(|e| format!("serialize payload: {e}"))?;
+    seal_envelope_bytes(
+        &bytes,
+        passphrase,
+        "frost-share-backup",
+        &payload.label,
+        Some(&payload.public_key_package),
+    )
+}
+
+/// Open a single-share envelope. Errors if the envelope is a batch backup.
+pub fn open_envelope(envelope_json: &str, passphrase: &str) -> Result<PlaintextPayload, String> {
+    let (kind, bytes) = open_envelope_bytes(envelope_json, passphrase)?;
+    if kind != "frost-share-backup" {
+        return Err(format!("expected frost-share-backup, got '{kind}'"));
+    }
     let payload: PlaintextPayload =
-        serde_json::from_slice(&plaintext).map_err(|e| format!("parse payload: {e}"))?;
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse payload: {e}"))?;
     if payload.version != 1 || payload.kind != "frost-share" {
         return Err("unsupported plaintext payload format".to_string());
     }
     Ok(payload)
+}
+
+/// Plaintext for a batch backup. `shares` reuses the single-share fields
+/// minus `version`/`type` (those live on the parent payload).
+#[derive(Serialize, Deserialize)]
+pub struct PlaintextBatch {
+    pub version: u32,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub shares: Vec<ShareEntry>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ShareEntry {
+    pub label: String,
+    #[serde(rename = "publicKeyPackage")]
+    pub public_key_package: String,
+    #[serde(rename = "keyPackage")]
+    pub key_package: String,
+    #[serde(rename = "ephemeralSeed")]
+    pub ephemeral_seed: String,
+    pub threshold: u16,
+    #[serde(rename = "maxSigners")]
+    pub max_signers: u16,
+    pub mainnet: bool,
+    #[serde(rename = "orchardFvk", default, skip_serializing_if = "Option::is_none")]
+    pub orchard_fvk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    #[serde(rename = "relayUrl", default, skip_serializing_if = "Option::is_none")]
+    pub relay_url: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: u64,
+}
+
+/// Seal a batch of FROST shares into one envelope.
+pub fn seal_batch_envelope(shares: &[ShareEntry], passphrase: &str) -> Result<String, String> {
+    let payload = PlaintextBatch {
+        version: 1,
+        kind: "frost-share-batch".into(),
+        shares: shares.to_vec(),
+    };
+    let bytes = serde_json::to_vec(&payload).map_err(|e| format!("serialize batch: {e}"))?;
+    let label = format!("{} multisig wallet{}", shares.len(), if shares.len() == 1 { "" } else { "s" });
+    seal_envelope_bytes(
+        &bytes,
+        passphrase,
+        "frost-share-batch-backup",
+        &label,
+        None,
+    )
+}
+
+/// Open a batch envelope, returning the share list. Errors if the envelope
+/// is a single-share backup.
+pub fn open_batch_envelope(envelope_json: &str, passphrase: &str) -> Result<Vec<ShareEntry>, String> {
+    let (kind, bytes) = open_envelope_bytes(envelope_json, passphrase)?;
+    if kind != "frost-share-batch-backup" {
+        return Err(format!("expected frost-share-batch-backup, got '{kind}'"));
+    }
+    let payload: PlaintextBatch =
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse batch payload: {e}"))?;
+    if payload.version != 1 || payload.kind != "frost-share-batch" {
+        return Err("unsupported plaintext batch format".to_string());
+    }
+    Ok(payload.shares)
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -248,5 +341,49 @@ mod tests {
         let tampered = env.replacen("cipherText\":\"", "cipherText\":\"A", 1);
         let result = open_envelope(&tampered, "p");
         assert!(result.is_err());
+    }
+
+    fn fixture_share(suffix: &str) -> ShareEntry {
+        ShareEntry {
+            label: format!("wallet-{suffix}"),
+            public_key_package: format!("ccdd{suffix}"),
+            key_package: format!("aabb{suffix}"),
+            ephemeral_seed: format!("eeff{suffix}"),
+            threshold: 2,
+            max_signers: 3,
+            mainnet: true,
+            orchard_fvk: Some(format!("uview1{suffix}")),
+            address: Some(format!("u1{suffix}")),
+            relay_url: Some("ws://localhost:50053".into()),
+            created_at: 1700000000,
+        }
+    }
+
+    #[test]
+    fn batch_round_trip() {
+        let shares = vec![fixture_share("a"), fixture_share("b"), fixture_share("c")];
+        let env = seal_batch_envelope(&shares, "passphrase123").unwrap();
+        let opened = open_batch_envelope(&env, "passphrase123").unwrap();
+        assert_eq!(opened.len(), 3);
+        assert_eq!(opened[0].label, "wallet-a");
+        assert_eq!(opened[2].address, Some("u1c".into()));
+    }
+
+    #[test]
+    fn batch_wrong_passphrase_rejected() {
+        let shares = vec![fixture_share("a")];
+        let env = seal_batch_envelope(&shares, "right").unwrap();
+        assert!(open_batch_envelope(&env, "wrong").is_err());
+    }
+
+    #[test]
+    fn cross_format_rejected() {
+        let single = seal_envelope(&fixture_payload(), "p").unwrap();
+        // single envelope must not parse as batch
+        assert!(open_batch_envelope(&single, "p").is_err());
+
+        let batch = seal_batch_envelope(&[fixture_share("x")], "p").unwrap();
+        // batch envelope must not parse as single
+        assert!(open_envelope(&batch, "p").is_err());
     }
 }

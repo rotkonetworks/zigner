@@ -3396,10 +3396,20 @@ fn frost_load_wallet(wallet_id: &str) -> Result<String, ErrorDisplayed> {
             s: format!("FROST wallet not found: {wallet_id}"),
         })?;
 
+    // Include the optional public-derived metadata fields so callers building
+    // backup payloads or "send to zafu" QRs don't need a separate FFI.
     serde_json::to_string(&serde_json::json!({
         "key_package": data.key_package_hex,
         "ephemeral_seed": data.ephemeral_seed_hex,
         "public_key_package": data.public_key_package_hex,
+        "label": data.label,
+        "min_signers": data.min_signers,
+        "max_signers": data.max_signers,
+        "mainnet": data.mainnet,
+        "created_at": data.created_at,
+        "orchard_fvk_uview": data.orchard_fvk_uview,
+        "address": data.address,
+        "relay_url": data.relay_url,
     }))
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("Serialize: {e}"),
@@ -3522,6 +3532,101 @@ fn frost_import_backup_envelope(
     db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
         s: format!("store imported wallet: {e}"),
     })
+}
+
+/// Encrypt every FROST wallet on this device into a single envelope.
+/// Returns the envelope JSON string. Caller writes to a `.json` file.
+fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let summaries =
+        db_handling::frost::list_frost_wallets(database).map_err(|e| ErrorDisplayed::Str {
+            s: format!("list FROST wallets: {e}"),
+        })?;
+
+    if summaries.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "no FROST wallets to backup".into(),
+        });
+    }
+
+    let mut shares = Vec::with_capacity(summaries.len());
+    for s in summaries {
+        let data = db_handling::frost::get_frost_wallet(database, &s.wallet_id)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("load FROST wallet {}: {}", s.wallet_id, e),
+            })?
+            .ok_or_else(|| ErrorDisplayed::Str {
+                s: format!("FROST wallet not found: {}", s.wallet_id),
+            })?;
+        shares.push(frost_backup::ShareEntry {
+            label: data.label,
+            public_key_package: data.public_key_package_hex,
+            key_package: data.key_package_hex,
+            ephemeral_seed: data.ephemeral_seed_hex,
+            threshold: data.min_signers,
+            max_signers: data.max_signers,
+            mainnet: data.mainnet,
+            orchard_fvk: data.orchard_fvk_uview,
+            address: data.address,
+            relay_url: data.relay_url,
+            created_at: data.created_at,
+        });
+    }
+
+    frost_backup::seal_batch_envelope(&shares, passphrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Decrypt a batch envelope and import every share inside. Returns JSON
+/// `{ "imported": N, "skipped": M }` so the caller can show a summary.
+/// Skipped = wallets whose publicKeyPackage already exists locally.
+fn frost_import_all_backup_envelope(
+    envelope_json: &str,
+    passphrase: &str,
+) -> Result<String, ErrorDisplayed> {
+    let shares = frost_backup::open_batch_envelope(envelope_json, passphrase)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let mut imported = 0u32;
+    let mut skipped = 0u32;
+    for share in shares {
+        let id = db_handling::frost::wallet_id_hex(&share.public_key_package);
+        let already = db_handling::frost::get_frost_wallet(database, &id)
+            .map_err(|e| ErrorDisplayed::Str { s: format!("lookup: {e}") })?
+            .is_some();
+        if already {
+            skipped += 1;
+            continue;
+        }
+        let data = db_handling::frost::FrostWalletData {
+            key_package_hex: share.key_package,
+            public_key_package_hex: share.public_key_package,
+            ephemeral_seed_hex: share.ephemeral_seed,
+            label: share.label,
+            min_signers: share.threshold,
+            max_signers: share.max_signers,
+            mainnet: share.mainnet,
+            created_at: share.created_at,
+            orchard_fvk_uview: share.orchard_fvk,
+            address: share.address,
+            relay_url: share.relay_url,
+        };
+        db_handling::frost::store_frost_wallet(database, &data).map_err(|e| {
+            ErrorDisplayed::Str { s: format!("store imported wallet: {e}") }
+        })?;
+        imported += 1;
+    }
+
+    serde_json::to_string(&serde_json::json!({
+        "imported": imported,
+        "skipped": skipped,
+    }))
+    .map_err(|e| ErrorDisplayed::Str { s: format!("serialize result: {e}") })
 }
 
 ffi_support::define_string_destructor!(signer_destroy_string);

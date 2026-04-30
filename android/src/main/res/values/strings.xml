@@ -502,6 +502,8 @@
 	<string name="backup_export_description">Scan this animated QR code on another device to restore your account derivations. The seed phrase must be imported separately.</string>
 	<string name="backup_export_warning">This QR contains account metadata only (no seed phrase). Restore the seed phrase first on the target device.</string>
 	<string name="key_set_menu_option_export_wallet">Export to New Device</string>
+	<string name="key_set_menu_option_backup_multisig">Backup Multisig Wallets</string>
+	<string name="key_set_menu_option_send_multisig_to_zafu">Send Multisig to Zafu</string>
 
 </resources>
 

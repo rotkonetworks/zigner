@@ -1068,6 +1068,20 @@ namespace signer {
         [ByRef] string envelope_json,
         [ByRef] string passphrase
     );
+
+    // Encrypt every FROST wallet on this device into a single batch envelope.
+    // Caller writes the returned JSON to a `.json` file.
+    [Throws=ErrorDisplayed]
+    string frost_export_all_backup_envelope([ByRef] string passphrase);
+
+    // Decrypt a batch envelope and import every share inside.
+    // Skips wallets whose publicKeyPackage already exists.
+    // Returns JSON {"imported": N, "skipped": M}.
+    [Throws=ErrorDisplayed]
+    string frost_import_all_backup_envelope(
+        [ByRef] string envelope_json,
+        [ByRef] string passphrase
+    );
 };
 
 dictionary MKeysNew {
