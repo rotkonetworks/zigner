@@ -6,14 +6,17 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.runtime.*
@@ -28,6 +31,7 @@ import io.parity.signer.uniffi.frostDeleteWallet
 import io.parity.signer.uniffi.frostExportBackupEnvelope
 import io.parity.signer.uniffi.frostImportBackupEnvelope
 import io.parity.signer.uniffi.frostListWallets
+import io.parity.signer.uniffi.frostRenameWallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,6 +53,7 @@ fun FrostWalletListScreen(
 	var error by remember { mutableStateOf<String?>(null) }
 	var toast by remember { mutableStateOf<String?>(null) }
 	var confirmDeleteId by remember { mutableStateOf<String?>(null) }
+	var renameTarget by remember { mutableStateOf<FrostWalletSummaryFfi?>(null) }
 	val scope = rememberCoroutineScope()
 
 	// Backup-export flow: passphrase entry → SAF write
@@ -198,6 +203,7 @@ fun FrostWalletListScreen(
 						},
 						onExportBackup = { exportTarget = wallet },
 						onSendToZafu = { onSendWalletToZafu(wallet.walletId) },
+						onRenameTap = { renameTarget = wallet },
 					)
 					SignerDivider()
 				}
@@ -239,6 +245,29 @@ fun FrostWalletListScreen(
 		)
 	}
 
+	// ── Rename dialog ──
+	renameTarget?.let { wallet ->
+		FrostRenameDialog(
+			currentLabel = wallet.label,
+			onConfirm = { newLabel ->
+				renameTarget = null
+				scope.launch {
+					try {
+						withContext(Dispatchers.Default) {
+							frostRenameWallet(wallet.walletId, newLabel)
+						}
+						toast = "renamed to \"$newLabel\""
+						loadWallets()
+					} catch (e: Exception) {
+						Timber.e(e, "[frost-rename] failed")
+						error = e.message ?: "rename failed"
+					}
+				}
+			},
+			onCancel = { renameTarget = null },
+		)
+	}
+
 	// ── Import passphrase dialog ──
 	importEnvelopeJson?.let { json ->
 		FrostBackupDialog(
@@ -276,13 +305,14 @@ private fun FrostWalletRow(
 	onDeleteCancel: Callback,
 	onExportBackup: Callback = {},
 	onSendToZafu: Callback = {},
+	onRenameTap: Callback = {},
 ) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
 			.padding(horizontal = 24.dp, vertical = 16.dp)
 	) {
-		// Label and network badge
+		// Label, inline rename pencil, network badge.
 		Row(
 			verticalAlignment = Alignment.CenterVertically,
 		) {
@@ -290,8 +320,23 @@ private fun FrostWalletRow(
 				text = wallet.label,
 				style = SignerTypeface.TitleS,
 				color = MaterialTheme.colors.primary,
-				modifier = Modifier.weight(1f),
 			)
+			Spacer(modifier = Modifier.width(6.dp))
+			Box(
+				modifier = Modifier
+					.size(28.dp)
+					.clip(RoundedCornerShape(6.dp))
+					.clickable(onClick = onRenameTap),
+				contentAlignment = Alignment.Center,
+			) {
+				Icon(
+					imageVector = Icons.Outlined.Edit,
+					contentDescription = "Rename",
+					tint = MaterialTheme.colors.textTertiary,
+					modifier = Modifier.size(14.dp),
+				)
+			}
+			Spacer(modifier = Modifier.weight(1f))
 			Text(
 				text = if (wallet.mainnet) "mainnet" else "testnet",
 				style = SignerTypeface.CaptionM,
@@ -347,6 +392,7 @@ private fun FrostWalletRow(
 			}
 		} else {
 			// Compact icon-button row. Long-press any icon for a Toast tooltip.
+			// Rename lives inline next to the wallet label, not in this row.
 			Row(
 				modifier = Modifier.fillMaxWidth(),
 				horizontalArrangement = Arrangement.spacedBy(8.dp),

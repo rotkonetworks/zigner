@@ -3425,6 +3425,18 @@ fn frost_delete_wallet(wallet_id: &str) -> Result<(), ErrorDisplayed> {
     })
 }
 
+/// Rename a FROST wallet (label only, no key material touched).
+fn frost_rename_wallet(wallet_id: &str, new_label: &str) -> Result<(), ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    db_handling::frost::rename_frost_wallet(database, wallet_id, new_label).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("Failed to rename FROST wallet: {e}"),
+        }
+    })
+}
+
 /// Derive UFVK + address from a FROST public_key_package and host-broadcast sk.
 /// Returns JSON `{"orchard_fvk_uview": "...", "address": "..."}`. Used during
 /// DKG so zigner can compute its own metadata locally instead of requiring
