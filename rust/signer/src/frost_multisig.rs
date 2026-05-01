@@ -17,24 +17,17 @@ lazy_static::lazy_static! {
     /// Track nonce hashes that have been consumed by signing.
     /// A nonce that appears here has been used and MUST NOT be reused.
     /// This prevents catastrophic key recovery from nonce reuse.
-    static ref USED_NONCES: Mutex<HashSet<[u8; 16]>> = Mutex::new(HashSet::new());
+    /// Fingerprint is SHA-256(nonces_hex) — collision-resistant; the
+    /// full 32 bytes are stored so a malicious peer cannot engineer a
+    /// fingerprint collision to bypass reuse detection.
+    static ref USED_NONCES: Mutex<HashSet<[u8; 32]>> = Mutex::new(HashSet::new());
 }
 
-/// Compute a short fingerprint of a nonce for tracking.
-/// We don't store the full nonce — just enough to detect reuse.
-fn nonce_fingerprint(nonces_hex: &str) -> [u8; 16] {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    nonces_hex.hash(&mut h);
-    let hash1 = h.finish();
-    // second round for 128 bits
-    h.write_u8(0xff);
-    let hash2 = h.finish();
-    let mut fp = [0u8; 16];
-    fp[..8].copy_from_slice(&hash1.to_le_bytes());
-    fp[8..].copy_from_slice(&hash2.to_le_bytes());
-    fp
+/// Cryptographic fingerprint of a nonce for reuse tracking.
+/// Uses SHA-256 — engineered collisions are infeasible.
+fn nonce_fingerprint(nonces_hex: &str) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(nonces_hex.as_bytes()).into()
 }
 
 /// Mark a nonce as consumed. Returns Err if already used.

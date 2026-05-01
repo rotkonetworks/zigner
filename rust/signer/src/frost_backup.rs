@@ -31,6 +31,7 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use base64::Engine as _;
+use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -117,8 +118,12 @@ pub fn seal_envelope_bytes(
 ) -> Result<String, String> {
     let mut salt = [0u8; SALT_LEN];
     let mut nonce_bytes = [0u8; NONCE_LEN];
-    rand::thread_rng().fill_bytes(&mut salt);
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    // OsRng pulls directly from /dev/urandom (or platform equivalent) — best
+    // practice for cold signing key material. thread_rng is a CSPRNG too in
+    // current rand, but OsRng removes any concern about state reuse across
+    // the thread's lifetime.
+    OsRng.fill_bytes(&mut salt);
+    OsRng.fill_bytes(&mut nonce_bytes);
 
     let key = derive_key(passphrase, &salt);
     let cipher = Aes256Gcm::new(&key.into());

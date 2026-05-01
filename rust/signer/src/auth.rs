@@ -100,6 +100,37 @@ pub fn build_auth_challenge(domain: &str, nonce: &str, timestamp: u64) -> Vec<u8
     format!("zigner-auth-v1\n{domain}\n{nonce}\n{timestamp}").into_bytes()
 }
 
+/// Maximum age (seconds) for an auth challenge. A signing request older
+/// than this is rejected: replay defense + a hint that something is wrong
+/// upstream (clock skew, queued request, attacker-controlled timestamp).
+const CHALLENGE_MAX_AGE_SECS: u64 = 300;
+/// Tolerate small clock skew where the challenge timestamp is slightly in
+/// the future.
+const CHALLENGE_FUTURE_SKEW_SECS: u64 = 60;
+
+/// Reject auth challenges with stale or future-dated timestamps. Caller
+/// should run this before any signing operation, never on verify (legitimate
+/// post-hoc verification of an old signature must succeed).
+pub fn validate_challenge_freshness(timestamp: u64) -> Result<(), String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|_| "system time before unix epoch".to_string())?;
+    let age = now.saturating_sub(timestamp);
+    if age > CHALLENGE_MAX_AGE_SECS {
+        return Err(format!(
+            "auth challenge stale: {age}s old (max {CHALLENGE_MAX_AGE_SECS}s)"
+        ));
+    }
+    let future = timestamp.saturating_sub(now);
+    if future > CHALLENGE_FUTURE_SKEW_SECS {
+        return Err(format!(
+            "auth challenge timestamp {future}s in the future (max skew {CHALLENGE_FUTURE_SKEW_SECS}s)"
+        ));
+    }
+    Ok(())
+}
+
 // ── internal derivation ──
 
 /// Base identity derivation — matches zafu's identity.ts exactly:

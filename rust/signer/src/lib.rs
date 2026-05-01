@@ -2280,11 +2280,13 @@ fn decode_and_verify_zcash_notes(
 
     // Verify anchor attestation: ed25519 signature from rotko verifier
     let anchor_verified = if let Some(attestation) = &bundle.anchor_attestation {
-        // attestation is 64 bytes: ed25519 signature over anchor digest
-        if attestation.len() < 64 {
+        // ed25519 attestation is exactly 64 bytes. Reject any other length so a
+        // 96-byte FROST attestation can't fall through this path with its first
+        // 64 bytes interpreted as ed25519 (with the randomizer silently dropped).
+        if attestation.len() != 64 {
             return Err(ErrorDisplayed::Str {
                 s: format!(
-                    "attestation too short: {} bytes, need 64",
+                    "attestation length {} bytes — expected exactly 64 (ed25519)",
                     attestation.len()
                 ),
             });
@@ -2326,6 +2328,20 @@ fn decode_and_verify_zcash_notes(
     } else {
         false // no attestation present, accept as unverified
     };
+
+    // Sticky attestation flag: once a device has participated in any FROST
+    // wallet, attestation is required for all subsequent note imports. This
+    // prevents a malicious zafu from feeding fabricated note bundles to an
+    // ex-FROST device (which would otherwise be in single-signer "trust zcli"
+    // mode after wallet deletion).
+    if db_handling::zcash::is_attestation_required(database).unwrap_or(false) && !anchor_verified {
+        return Err(ErrorDisplayed::Str {
+            s: "This device requires FROST-attested anchors. Bundle has no \
+                attestation or attestation failed verification. Refusing to \
+                import unverified notes."
+                .to_string(),
+        });
+    }
 
     // Verify each note's merkle path against anchor
     let mut verified_notes = Vec::new();
@@ -2630,6 +2646,7 @@ fn auth_sign_challenge(
     nonce: &str,
     timestamp: u64,
 ) -> Result<AuthSignResult, ErrorDisplayed> {
+    auth::validate_challenge_freshness(timestamp).map_err(|e| ErrorDisplayed::Str { s: e })?;
     let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
     let (pubkey, sig) = auth::sign_challenge(seed_phrase, index, &challenge)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
@@ -2648,6 +2665,7 @@ fn auth_sign_domain_challenge(
     nonce: &str,
     timestamp: u64,
 ) -> Result<AuthSignResult, ErrorDisplayed> {
+    auth::validate_challenge_freshness(timestamp).map_err(|e| ErrorDisplayed::Str { s: e })?;
     let challenge = auth::build_auth_challenge(domain, nonce, timestamp);
     let (pubkey, sig) = auth::sign_domain_challenge(seed_phrase, domain, index, &challenge)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;

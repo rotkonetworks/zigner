@@ -9,7 +9,7 @@
 // The seed phrase is the decryption key — both are needed for full restore.
 
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
+    aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
 use hmac::{Hmac, Mac};
@@ -19,7 +19,16 @@ use zeroize::Zeroize;
 type HmacSha512 = Hmac<Sha512>;
 
 const BACKUP_DOMAIN: &[u8] = b"zigner-backup";
-const BACKUP_VERSION: u8 = 1;
+/// Backup format versions:
+///   v1 — XChaCha20-Poly1305, empty AAD (legacy, accepted on decrypt)
+///   v2 — XChaCha20-Poly1305, AAD = BACKUP_AAD_V2 (binds version into tag)
+const BACKUP_VERSION_V1: u8 = 1;
+const BACKUP_VERSION_V2: u8 = 2;
+const BACKUP_VERSION: u8 = BACKUP_VERSION_V2;
+/// Associated data bound into v2 AEAD tags. A v2 ciphertext can't be
+/// presented as a forged v1 (or future v3) by stripping/swapping the
+/// version byte — different AAD ⇒ tag mismatch.
+const BACKUP_AAD_V2: &[u8] = b"zigner-backup\x00v2";
 /// Maximum contacts to decode from untrusted CBOR to prevent OOM.
 const MAX_DECODE_CONTACTS: usize = 10_000;
 
@@ -62,7 +71,13 @@ pub fn encrypt(key: &BackupKey, plaintext: &[u8]) -> Result<Vec<u8>, String> {
     let nonce = XNonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plaintext,
+                aad: BACKUP_AAD_V2,
+            },
+        )
         .map_err(|e| format!("encryption failed: {e}"))?;
 
     let mut out = Vec::with_capacity(1 + 24 + ciphertext.len());
@@ -79,16 +94,18 @@ pub fn decrypt(key: &BackupKey, encrypted: &[u8]) -> Result<Vec<u8>, String> {
     }
 
     let version = encrypted[0];
-    if version != BACKUP_VERSION {
-        return Err(format!("unsupported backup version: {version}"));
-    }
+    let aad: &[u8] = match version {
+        BACKUP_VERSION_V1 => &[],          // legacy, no AAD
+        BACKUP_VERSION_V2 => BACKUP_AAD_V2,
+        _ => return Err(format!("unsupported backup version: {version}")),
+    };
 
     let nonce = XNonce::from_slice(&encrypted[1..25]);
     let ciphertext = &encrypted[25..];
 
     let cipher = XChaCha20Poly1305::new(key.as_bytes().into());
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(nonce, Payload { msg: ciphertext, aad })
         .map_err(|_| "decryption failed — wrong seed phrase or corrupted data".to_string())
 }
 
@@ -279,7 +296,18 @@ fn decode_length(data: &[u8], offset: usize, additional: u8) -> Result<(u64, usi
 }
 
 /// Skip a single CBOR value.
+/// Maximum CBOR nesting depth. Hard cap defends against stack overflow
+/// from a malicious deeply-nested QR payload.
+const MAX_CBOR_DEPTH: u8 = 32;
+
 fn cbor_skip(data: &[u8], offset: usize) -> Result<usize, String> {
+    cbor_skip_depth(data, offset, 0)
+}
+
+fn cbor_skip_depth(data: &[u8], offset: usize, depth: u8) -> Result<usize, String> {
+    if depth > MAX_CBOR_DEPTH {
+        return Err(format!("CBOR nesting exceeds {MAX_CBOR_DEPTH}"));
+    }
     if offset >= data.len() {
         return Err("truncated CBOR".to_string());
     }
@@ -294,15 +322,15 @@ fn cbor_skip(data: &[u8], offset: usize) -> Result<usize, String> {
         4 => {
             let mut pos = header_end;
             for _ in 0..content_len {
-                pos = cbor_skip(data, pos)?;
+                pos = cbor_skip_depth(data, pos, depth + 1)?;
             }
             Ok(pos)
         }
         5 => {
             let mut pos = header_end;
             for _ in 0..content_len {
-                pos = cbor_skip(data, pos)?;
-                pos = cbor_skip(data, pos)?;
+                pos = cbor_skip_depth(data, pos, depth + 1)?;
+                pos = cbor_skip_depth(data, pos, depth + 1)?;
             }
             Ok(pos)
         }
