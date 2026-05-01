@@ -1,6 +1,5 @@
 package net.rotko.zigner.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
@@ -39,7 +38,7 @@ private val LightColorPaletteOld = lightColors(
 
 @Composable
 fun SignerOldTheme(
-	darkTheme: Boolean = isSystemInDarkTheme(),
+	darkTheme: Boolean = true,
 	content: @Composable () -> Unit
 ) {
 	val colors = if (darkTheme) DarkColorPaletteOld else LightColorPaletteOld
@@ -85,7 +84,7 @@ private val LightColorPaletteNew = lightColors(
 
 @Composable
 fun SignerNewTheme(
-	darkTheme: Boolean = isSystemInDarkTheme(),
+	darkTheme: Boolean = true,
 	content: @Composable () -> Unit
 ) {
 	val colors = if (darkTheme) DarkColorPaletteNew else LightColorPaletteNew

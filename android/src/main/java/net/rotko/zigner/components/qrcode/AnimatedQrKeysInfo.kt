@@ -4,8 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +42,7 @@ fun <T> AnimatedQrKeysInfo(
 	Box(
 		modifier = modifier
 			.fillMaxWidth(1f)
-			.aspectRatio(1.1f)
+			.aspectRatio(1f)
 			.background(
 				Color.White,
 				RoundedCornerShape(qrRounding)
@@ -54,7 +54,7 @@ fun <T> AnimatedQrKeysInfo(
 				bitmap = currentImage,
 				contentDescription = stringResource(R.string.qr_with_address_to_scan_description),
 				contentScale = ContentScale.Fit,
-				modifier = Modifier.size(264.dp)
+				modifier = Modifier.fillMaxSize()
 			)
 		}
 	}
