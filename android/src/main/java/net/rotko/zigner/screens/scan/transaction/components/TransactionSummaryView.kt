@@ -27,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.SignerDivider
+import net.rotko.zigner.components.base.TappableAddress
 import net.rotko.zigner.components.sharedcomponents.KeyCardSignature
 import net.rotko.zigner.screens.scan.transaction.transactionElements.TCNameValueElement
 import net.rotko.zigner.ui.theme.*
@@ -158,10 +159,14 @@ private fun ZcashSummaryRow(
 			// send details from outputs
 			for (output in summary.outputs.filter { !it.isChange }) {
 				TCNameValueElement(name = "Send", value = "${output.value} ZEC")
-				TCNameValueElement(
-					name = "To",
-					value = output.recipient.take(20) + "..."
-				)
+				Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+					Text(
+						text = "To",
+						style = SignerTypeface.BodyL,
+						color = MaterialTheme.colors.textTertiary,
+					)
+					TappableAddress(address = output.recipient)
+				}
 			}
 
 			// change

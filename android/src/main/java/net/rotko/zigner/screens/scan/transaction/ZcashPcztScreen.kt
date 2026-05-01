@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
+import net.rotko.zigner.components.base.TappableAddress
 import net.rotko.zigner.components.qrcode.AnimatedQrKeysInfo
 import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
 import net.rotko.zigner.domain.Callback
@@ -158,11 +159,7 @@ fun ZcashPcztScreen(
 										color = MaterialTheme.colors.primary
 									)
 									if (output.recipient.isNotEmpty()) {
-										Text(
-											text = output.recipient.take(20) + "..." + output.recipient.takeLast(8),
-											style = SignerTypeface.CaptionM,
-											color = MaterialTheme.colors.textTertiary
-										)
+										TappableAddress(address = output.recipient)
 									}
 								}
 							}

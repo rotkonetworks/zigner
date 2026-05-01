@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.rotko.zigner.components.base.TappableAddress
 import net.rotko.zigner.ui.theme.*
 import io.parity.signer.uniffi.*
 
@@ -135,11 +136,7 @@ fun TCPenumbraSpend(spend: PenumbraSpendAction) {
             )
         }
 
-        Text(
-            text = spend.noteAddress.take(20) + "...",
-            style = SignerTypeface.CaptionM,
-            color = MaterialTheme.colors.textSecondary
-        )
+        TappableAddress(address = spend.noteAddress)
     }
 }
 
