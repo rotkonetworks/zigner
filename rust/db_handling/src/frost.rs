@@ -126,6 +126,33 @@ pub fn delete_frost_wallet(database: &sled::Db, wallet_id_hex: &str) -> Result<(
     Ok(())
 }
 
+/// Rename a FROST wallet (changes only the user-facing label, no secret
+/// material affected). Empty `new_label` is rejected so the row stays
+/// renderable in the wallet list.
+pub fn rename_frost_wallet(
+    database: &sled::Db,
+    wallet_id_hex: &str,
+    new_label: &str,
+) -> Result<()> {
+    if new_label.trim().is_empty() {
+        return Err(Error::Other(anyhow::anyhow!("FROST rename: label cannot be empty")));
+    }
+    let tree = database.open_tree(FROST_KEYS_TREE)?;
+    let id = hex::decode(wallet_id_hex)
+        .map_err(|e| Error::Other(anyhow::anyhow!("bad wallet id hex: {e}")))?;
+    let bytes = tree
+        .get(&id)?
+        .ok_or_else(|| Error::Other(anyhow::anyhow!("FROST wallet not found: {wallet_id_hex}")))?;
+    let mut data: FrostWalletData = serde_json::from_slice(&bytes)
+        .map_err(|e| Error::Other(anyhow::anyhow!("FROST deserialize: {e}")))?;
+    data.label = new_label.to_string();
+    let json = serde_json::to_vec(&data)
+        .map_err(|e| Error::Other(anyhow::anyhow!("FROST serialize: {e}")))?;
+    tree.insert(&id, json.as_slice())?;
+    tree.flush()?;
+    Ok(())
+}
+
 /// Update the public-derived metadata fields on an existing FROST wallet.
 /// Used by the DKG metadata round-trip — zafu computes `orchardFvk + address + relayUrl`
 /// after FVK echo and hands them to zigner so the airgap re-add QR can carry them later.

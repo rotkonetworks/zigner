@@ -1030,6 +1030,14 @@ namespace signer {
     [Throws=ErrorDisplayed]
     void frost_delete_wallet([ByRef] string wallet_id);
 
+    // Rename a FROST wallet (label only, no key material touched).
+    // Empty / whitespace-only labels are rejected.
+    [Throws=ErrorDisplayed]
+    void frost_rename_wallet(
+        [ByRef] string wallet_id,
+        [ByRef] string new_label
+    );
+
     // Derive UFVK + address from a FROST public_key_package + host-broadcast sk.
     // Returns JSON {"orchard_fvk_uview": "...", "address": "..."}. Lets zigner
     // compute the metadata locally during DKG instead of round-tripping with zafu.
