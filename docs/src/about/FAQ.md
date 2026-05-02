@@ -264,18 +264,9 @@ Prevents cross-chain replay and mainnet/testnet confusion.
 
 ## Substrate
 
-### What networks are supported?
-
-Polkadot, Kusama, and Westend ship built-in. Any Substrate chain can be
-added by scanning its network specs and metadata as QR codes from
-[metadata.parity.io](https://metadata.parity.io/) or
-[metadata.rotko.net](https://metadata.rotko.net).
-
-### How do I update metadata?
-
-Scan the multipart metadata QR from the portal for your network. Zigner
-validates the metadata signature against the verifier certificate before
-accepting it.
+Polkadot, Kusama, and Westend ship built-in. Sr25519 and Ed25519
+signing. Substrate is a secondary use case for Zigner; if you need
+chain-agility tooling, use a dedicated Polkadot signer.
 
 ## Seeds and keys
 

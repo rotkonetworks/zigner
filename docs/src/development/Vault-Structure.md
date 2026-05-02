@@ -26,7 +26,6 @@ zigner/
 | `qrcode_static`      | Static QR generation                                                                  |
 | `qr_reader_phone`    | Camera frame UR decoder (multi-part reassembly)                                       |
 | `qr_reader_pc`       | Desktop dev tool (uses `opencv`; not part of mobile builds)                           |
-| `generate_message`   | Active-side tool for over-the-airgap Substrate metadata updates                       |
 | `zcash-wasm`         | Browser-compatible Orchard derivation (used by Zafu)                                  |
 | `constants`          | Pinned verifier keys, sled tree names, network defaults                               |
 | `definitions`        | Shared error / model types crossed by FFI                                             |

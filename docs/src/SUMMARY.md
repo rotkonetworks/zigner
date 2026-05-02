@@ -6,7 +6,6 @@
 
 - [User Guides](./tutorials/SUMMARY.md)
     - [Getting Started](./tutorials/Start.md)
-    - [Add New Substrate Network](./tutorials/Add-New-Network.md)
 
 - [Development]()
     - [Build](./development/Build.md)

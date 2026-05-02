@@ -4,8 +4,6 @@
 
 - [Zigner app](https://github.com/rotkonetworks/zigner) — air-gapped
   cold signer for Zcash, Penumbra, and Substrate
-- [`generate_message` tool](https://github.com/rotkonetworks/zigner/tree/master/rust/generate_message)
-  — active-side helper for over-the-airgap Substrate metadata updates
 - [`qr_reader_pc`](https://github.com/rotkonetworks/zigner/tree/master/rust/qr_reader_pc)
   — desktop QR scanner used during development
 
@@ -20,13 +18,9 @@
 - [Zashi](https://electriccoin.co/zashi/) — Zcash mobile wallet (ECC);
   imports Zigner UFVKs and signs PCZTs through the cold-signing flow
 
-## Compatible web wallets and tools
+## Compatible hot wallets
 
 - [Prax](https://prax.fyi/) — Penumbra browser wallet (FVK import,
   transaction signing)
 - [Polkadot.js Apps](https://polkadot.js.org/apps/) — Substrate
   transaction construction and broadcast
-- [metadata.parity.io](https://metadata.parity.io/) — Substrate
-  metadata QR portal
-- [metadata.rotko.net](https://metadata.rotko.net) — Rotko-operated
-  Substrate metadata mirror

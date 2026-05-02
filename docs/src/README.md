@@ -27,8 +27,7 @@ The device MUST remain offline at all times. See
 - **Encrypted backup** — `ur:zigner-backup` exports group metadata,
   contacts, labels, and FROST shares under XChaCha20-Poly1305.
 - **Multi-chain** — Penumbra (full action set), Zcash Orchard +
-  transparent, Substrate (Polkadot, Kusama, Westend, any chain via
-  metadata QR updates).
+  transparent, Substrate (Polkadot, Kusama, Westend).
 
 ## Hot wallet pairing
 
@@ -42,7 +41,6 @@ The device MUST remain offline at all times. See
 
 - [Getting Started](./tutorials/Start.md)
 - [Key Derivation](./tutorials/Hierarchical-Deterministic-Key-Derivation.md)
-- [Add New Substrate Network](./tutorials/Add-New-Network.md)
 - [FAQ](./about/FAQ.md)
 
 ## License

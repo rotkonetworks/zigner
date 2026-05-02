@@ -91,8 +91,9 @@ Cross-site correlation is prevented by domain-separated derivation
 
 ## Substrate
 
-Polkadot, Kusama, Westend built-in. Any Substrate chain addable via QR
-metadata updates. Sr25519 and Ed25519 signing.
+Polkadot, Kusama, Westend built-in. Sr25519 and Ed25519 signing.
+Substrate is a secondary use case; for chain-agility tooling use a
+dedicated Polkadot signer.
 
 ## Hot wallet pairing
 
@@ -128,7 +129,6 @@ rust/
   qrcode_static/         Static QR generation
   qr_reader_phone/       Camera frame UR decoder
   qr_reader_pc/          Desktop dev QR reader (uses opencv, not in mobile build)
-  generate_message/      Air-gap metadata update generator (active side)
   zcash-wasm/            Orchard derivation for browser wallets
   constants/             Pinned verifier keys, tree names, network defaults
   definitions/           Shared error / model types
