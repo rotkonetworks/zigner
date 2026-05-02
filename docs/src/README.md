@@ -14,7 +14,9 @@ The device MUST remain offline at all times. See
   No blind signing.
 - **FROST multisig** for Orchard — distributed key generation and
   threshold signing run entirely between Zigner and a coordinator over
-  animated QR codes. No relay server in the trust path.
+  animated QR codes. No relay server in the cryptographic path; a
+  coordinator may *deliver* QR payloads but is never trusted to
+  produce or aggregate signatures.
 - **Anchor attestation** — once a device has held FROST keys it
   permanently requires every imported note bundle to carry a verifier
   signature, defending against a compromised hot wallet fabricating a

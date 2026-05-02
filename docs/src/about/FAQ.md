@@ -120,8 +120,10 @@ QR codes:
 3. Each participant aggregates the shares into a final key package.
 
 No single participant ever sees the group spending key. Zigner stores
-its key package in encrypted sled storage; the ephemeral DKG seed is
-zeroed after round 3.
+its key package and a per-device ephemeral seed in encrypted sled
+storage. The ephemeral seed is the source of randomness for future
+signing nonces — it is retained for the lifetime of the FROST wallet
+and zeroed only when the wallet is deleted.
 
 ### How is signing coordinated?
 
@@ -135,9 +137,14 @@ with different messages would leak the spending key.
 
 ### Is there a relay server?
 
-No. DKG and signing both run end-to-end over QR codes between Zigner
-and Zafu (or any compatible coordinator). The group's QR cadence is
-matched between Zigner and Zafu so handoffs are reliable.
+Not in the cryptographic path. DKG and signing protocols never trust
+a server — every message is verified directly by the participants
+against the group's public commitments. A coordinator may *deliver*
+QR payloads (passing them between participants), but no part of the
+protocol's security depends on that delivery being trusted. Zafu
+acts purely as a delivery channel; even if it were fully compromised,
+it could only cause a denial of service, not produce forged
+signatures or extract shares.
 
 ### Can FROST shares be backed up?
 
@@ -154,7 +161,16 @@ to assert that the anchor it's about to sign against actually exists
 on the chain.
 
 The attestation digest is domain-separated:
-`SHA-256("zcash-anchor-v1" || verifier_pubkey || anchor || height || mainnet)`.
+
+```
+SHA-256(
+    "zcash-anchor-v1"   (15 bytes ASCII, no separator)
+ || verifier_pubkey     (32 bytes, ed25519 public key)
+ || anchor              (32 bytes, Orchard root)
+ || height_le           (4 bytes, block height, little-endian)
+ || mainnet             (1 byte: 0x01 = mainnet, 0x00 = testnet)
+)
+```
 
 ### Why?
 

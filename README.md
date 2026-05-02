@@ -61,9 +61,11 @@ is no blind-signing path. UR-encoded animated QR codes (Keystone wire format).
 
 Threshold spend authorization for Zcash Orchard via [`frost-spend`][frost-spend]
 (ZF FROST RedPallas). DKG (rounds 1–3) and signing (rounds 1–2) run entirely
-between Zigner and a coordinator over QR codes — no relay server in the trust
-path. Per-action randomizer α is bound to the sighash; nonces are tracked by a
-collision-resistant SHA-256 fingerprint and signing refuses any reuse.
+between Zigner and a coordinator over QR codes. No relay server is in the
+cryptographic path; a coordinator may deliver QR payloads but is never trusted
+to produce or aggregate signatures. Per-action randomizer α is bound to the
+sighash; nonces are tracked by a collision-resistant SHA-256 fingerprint and
+signing refuses any reuse.
 
 **Anchor attestation** — once a device has held FROST keys, it permanently
 requires every imported Zcash note bundle to carry an ed25519 attestation
