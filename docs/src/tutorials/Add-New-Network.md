@@ -1,11 +1,23 @@
-# Add New Network
+# Add a new Substrate network
 
-Zigner supports adding any substrate-based networks or updating an existing network via QR code.
+> **Substrate-only.** This guide is for adding new Substrate-based chains
+> (Polkadot, Kusama, parachains, custom Substrate networks). Zcash and
+> Penumbra do not use this flow — their chain configuration is built in.
 
-After you've installed [required software](#Prerequisites), you need to add *Network's Specs* to Zigner and add *Network Metadata* for this network, so that Zigner is able to decode, and you could read and verify transactions you are signing on this network.
+Zigner supports adding any Substrate-based network or updating an
+existing one via QR code.
 
-If you need to update metadata for already existing network you only need to update *Network Metadata*.
-Off-the-shelf Zigner comes with networks that you can update by scanning a multipart QR codes that contain recent metadata for these networks at [Metadata Update Portal](https://metadata.parity.io/).
+After you've installed the [required software](#prerequisites), you
+need to add the network's **specs** to Zigner and add **metadata** for
+the network, so Zigner can decode and verify the extrinsics you sign.
+
+If you only need to update metadata for an already-known network, just
+do the metadata step.
+
+Zigner ships with Polkadot, Kusama, and Westend built in. You can update
+their metadata by scanning multipart QR codes from the
+[Parity Metadata Update Portal](https://metadata.parity.io/) or the
+[Rotko mirror](https://metadata.rotko.net).
 
 *Network Specs*
 

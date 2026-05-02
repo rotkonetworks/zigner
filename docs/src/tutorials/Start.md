@@ -1,45 +1,109 @@
-# Starting with Zigner
+# Getting started
 
-This is suggested usage pattern; you should adjust it to your security protocol if you are certain you know what you are doing.
+This walks through setting up Zigner for **Zcash** as the primary use case.
+The same device handles Penumbra and Substrate too.
 
-## Installation
+## 1. Set up the device
 
-### Factory reset the phone
+Start from a phone you don't use for anything else. The strongest
+configuration is a Pixel 8 or later running GrapheneOS — see
+[Security and Privacy](../about/Security-And-Privacy.md) for why.
 
-Zigner should be installed in most secure environment possible. To achieve that, the phone should be reset to factory state.
+1. Factory reset the phone.
+2. Install your OS (GrapheneOS recommended). Verify boot chain.
+3. Set a strong device passcode. Don't rely on biometrics alone — they
+   can be compelled.
+4. Install Zigner from the [GitHub release](https://github.com/rotkonetworks/zigner/releases).
+   Verify both the SHA256 checksum and the ssh signature on `SHA256SUMS`.
+5. Enable airplane mode. Disable WiFi, Bluetooth, NFC, and cellular.
+   Physically removing wireless hardware is better if your device allows
+   it. **The user is responsible for the air gap** — Zigner's connectivity
+   detection is informational, not a guarantee.
 
-Wipe the phone to factory state. This is good time to install newer version of operating system if you like. Make sure your system is genuine by all means provided by OS vendor.
+Do all of this *before* launching the Zigner app for the first time.
 
-### Set up phone
+## 2. Create or recover a seed
 
-Before installing Zigner, you need to set up the phone. It is essential that you enable sufficient authentication method; your secret seeds in Zigner are as safe as the phone is. Seed secrets are protected with hardware encryption based on vendor authentication protocol.
+On first launch, Zigner walks through accepting terms, then prompts to
+create a key set.
 
-### Install Zigner
+- **New user**: let Zigner generate a fresh BIP-39 seed phrase using the
+  built-in randomness. Back it up on paper. Store the paper somewhere
+  physically secure. Anyone with this phrase has full control of every
+  account derived from it. If you lose the phrase, the keys are gone.
+- **Recovering**: switch to recovery mode and enter your existing seed
+  phrase. **Do not type a custom seed phrase unless it was generated
+  with proper randomness** — security depends entirely on this.
 
-Download the signed APK from [GitHub Releases](https://github.com/rotkonetworks/zigner/releases). Verify the APK signature and checksum! Install the app. Do not start the app just yet!
+When you tap *Create*, the device's secure element prompts you to
+authenticate. From this point on, every operation that touches a private
+key requires authentication.
 
-### Disable network
+## 3. Pair with Zafu (Zcash hot wallet)
 
-Before starting Zigner, you should make sure that network is disabled. Many operating systems allow only partial network monitoring; although there are network detection features in Zigner, they are limited and only have informational function. **User is responsible for maintaining airgapped state!** The simplest way to disable connectivity is setting the phone in airplane mode. Advanced users might want to use physical methods to further protect the phone from connections. Perform all preparations before starting the Zigner app!
+Zigner holds the spending key. Zafu holds only the viewing key and
+constructs transactions.
 
-## First start
+1. In Zigner, open the key set and tap *Export* on the Zcash account.
+   You'll see a UFVK QR code (ZIP-316 format, encoded as UR).
+2. In Zafu, choose *Import watch-only* and scan the QR.
+3. Zafu syncs notes against the chain via your indexer (zidecar in the
+   Rotko stack).
+4. Zafu exports the verified note bundle to Zigner as a `ur:zcash-notes`
+   QR. Zigner verifies the merkle paths and stores the anchor as the
+   trusted root for future spends.
 
-When you first launch Zigner, it prompts you to read and accept terms and conditions and privacy policy. Once that is done, the database is pre-populated with built-in networks and Zigner is ready for use. It could [import network data](./Add-New-Network.md) or [read transactions](./Kusama-tutorial.md), but to sign anything you need to create keys.
+Once paired, your day-to-day flow for sending ZEC is:
 
-### Create keys
+1. In Zafu, build the transaction. Zafu shows a PCZT as animated QR.
+2. In Zigner, scan the QR. The review screen shows recipient, amount,
+   fee, and any anchor / known-spend warnings.
+3. **Tap the recipient address to reveal the full string**. Read it
+   character by character against what you intended.
+4. Approve. Zigner signs and shows a signature QR.
+5. Zafu scans the signature QR and broadcasts.
 
-Open key manager by tapping bottom left symbol. On fresh start you will be prompted to create seed (otherwise you could always create more seeds by tapping `New seed` button in Key Manager). Enter any convenient seed name (it does not matter anything and is not used anywhere except for this particular Zigner device) and - if you would like to use custom seed phrase - switch to recovery mode and type the seed phrase. Custom seed phrase should be used only to recover or import existing key(s), do not input custom seed phrase unless it is properly random! **Security of your accounts relies on randomness of seed phrase**. If you are generating new seed phrase, use built-in random generator and do not input a custom seed phrase.
+If anything is wrong (anchor mismatch, unknown spends, value out of
+range), Zigner refuses to sign. There is no override.
 
-Once you click `create` button, you will be prompted to authenticate yourself. This will happen every time cryptographic engine of the phone is used to handle seeds - on all creations, backups, derivations and signatures and in some OS versions on starting Zigner.
+## 4. Optional: FROST multisig
 
-You will see the created secret seed. Please back it up on paper and store it in safe place. If you lose your Zigner device or it will become non-functional, you will be able to recover your keys using this seed phrase. Anyone could recover your keys with knowledge of this phrase. If you lose this seed phrase, though, **it will be impossible to recover your keys**. You can check the seed phrase anytime in Settings menu, but make sure that it is backed up at all times.
+To run Orchard spends as a *t-of-n* threshold multisig, see the
+[FROST FAQ section](../about/FAQ.md#frost-multisig). DKG and signing
+both happen between Zigner and Zafu over animated QR codes — no relay
+server needed.
 
-Once you dismiss seed phrase backup screen, the seed and some associated keys will be created. For every network known to Zigner, a network root derivation key will be generated, hard-derived from seed phrase with network name. A root key will be generated and made available in all networks. **Do not use the root key unless you know what you do!**.
+Once any device has participated in a FROST group, a sticky flag is
+set: the device permanently requires anchor attestation on every note
+import, defending against a compromised hot wallet on a future
+single-signer setup.
 
-To learn more on key generation, read [subkey specifications](https://substrate.dev/docs/en/knowledgebase/integrate/subkey) that Zigner follows tightly and [Zigner key management](./Hierarchical-Deterministic-Key-Derivation.md).
+## 5. Optional: Hot wallet for daily spending
 
-### Export public key
+Zigner can derive a 12-word BIP-39 hot wallet mnemonic from the master
+seed and export it as `ur:zafu-hot-wallet` for use in Zafu pro. Useful
+for small daily transactions where you don't want to keep pulling out
+the cold device. The hot wallet is *not* an isolated security boundary
+— if the hot device is compromised, rotate.
 
-Once you have a keypair you would like to use, you should first export it to hot wallet. Tap the key and select `Export` button. You will see the export QR code you can use with hot wallet.
+## 6. Optional: ZID auth
 
-Details on [signing with Polkadot.js Apps](./Kusama-tutorial.md)
+For OAuth-less login on services that support the ZID challenge
+protocol (Zafu pro and others), Zigner signs site-scoped ed25519
+challenges. Each origin gets a different public key — there's no
+cross-site correlation by default.
+
+## 7. Backup
+
+Once you have key sets, FROST groups, and contacts you care about,
+export an encrypted backup:
+
+1. *Settings → Backup → Export*.
+2. Zigner displays the backup as `ur:zigner-backup` animated QR.
+3. Save those frames somewhere you can read them back later (paper QR
+   booklet, second cold device, or print and store with the seed
+   phrase paper).
+
+The backup is encrypted with a key derived from your seed phrase. To
+restore, you need both the seed phrase and the backup QR. The seed
+phrase alone restores only the bare key sets.

@@ -1,40 +1,95 @@
 # Build
 
-First and foremost, make sure you have the latest [Rust](https://www.rust-lang.org/tools/install) installed in your system. Nothing will work without Rust.
+Zigner builds two native apps from one Rust core. You'll need a current
+[Rust](https://www.rust-lang.org/tools/install) toolchain. If `cargo`
+complains about missing features, run `rustup update stable`.
 
-If you get errors like `cargo: feature X is required`, it most likely means you have an old version of Rust. Update it by running `rustup update stable`.
+The mobile builds do **not** require opencv. Only the desktop dev tool
+`qr_reader_pc` pulls it in, and that crate is gated behind its own
+target — building the iOS or Android app from the workspace root skips
+it entirely.
 
-## iOS
+## Common — Rust core
 
-**1.** You probably already have [Xcode](https://developer.apple.com/xcode/) installed if you are reading this. If not, go get it. 
-
-**2.** Compile the core Rust library first:
+UniFFI bindings need the `uniffi-bindgen` binary at the project's
+exact version:
 
 ```
-cd scripts && ./build.sh ios
+cargo install uniffi_bindgen --version 0.22.0
 ```
 
-**3.** Open the `NativeSigner.xcodeproj` project from the `ios` folder in your Xcode and click Run (`Cmd+R`).
+Sanity-check that the workspace builds and tests pass before opening
+either platform IDE:
 
-**4.** The first time you start the app, you will need to put your device into Airplane Mode. In the iOS simulator, you can do this by turning off WiFi on your Mac (yes, this is an official apple-recommended way).
-
-However, we strongly recommend that you use a real device for development, as some important parts (e.g. camera) may not work in the simulator.
+```
+cd rust && cargo test --locked
+```
 
 ## Android
 
-**1.** Download [Android Studio](https://developer.android.com/studio).
+1. Install [Android Studio](https://developer.android.com/studio).
+2. Open the project root (`zigner/`) — the Android module is at the
+   top level.
+3. Install NDK `24.0.8215888` via *File → Project Structure → SDK
+   Location → Download Android NDK*.
+4. Add the Android Rust targets:
+   ```
+   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+   ```
+5. (macOS only) set the python interpreter in `local.properties`:
+   ```
+   rust.pythonCommand=python3
+   ```
+6. Run the project. Gradle invokes the Rust build first, links the
+   resulting `.so` into the APK, runs UniFFI bindgen, then compiles
+   and installs the Kotlin app.
 
-**2.** Open the project from the `android` directory.
+For a release build you can also use the workflow from the command
+line:
 
-**3.** Install NDK. Go to `File -> Project Structure -> SDK Location`. Next to the "Android NDK location" section, click "Download Android NDK" button.
+```
+./gradlew :android:installDebug   # build + install on the connected device
+./gradlew :android:assembleRelease  # produce an unsigned release APK
+```
 
-We highly recommend you to update all existing plugins and SDK's for Kotlin, Gradle, etc even if you just downloaded a fresh Android Studio. It's always a good idea to restart Android Studio after that. This can save you many hours on Stackoverflow trying to fix random errors like "NDK not found".
+The CI release workflow at `.github/workflows/android-release.yml`
+runs on `v*` tag pushes and produces a signed APK plus
+`SHA256SUMS` and `SHA256SUMS.sig`.
 
-**4.** Connect your device or create a virtual one. Open `Tools -> Device Manager` and create a new phone simulator with the latest Android.
+## iOS
 
-**5. (macOS)** Specify path to `python` in `local.properties`.
+1. Install [Xcode](https://developer.apple.com/xcode/).
+2. Build the Rust core first:
+   ```
+   cd scripts && ./build.sh ios
+   ```
+3. Open `ios/PolkadotVault.xcodeproj` in Xcode.
+4. Run on a real device (simulator's camera support is incomplete).
+   On a simulator, turn off WiFi on your Mac to put the simulated
+   device into "airplane" mode.
 
-`rust.pythonCommand=python3`
+## Releasing (Android)
 
-**6.** Run the project (`Ctrl+R`). It should build the Rust core library automatically.
+1. Bump `versionName` in `android/build.gradle`.
+2. Merge to master.
+3. Tag `v*` (e.g. `v0.4.2`) and push the tag.
 
+The release workflow runs the test job, builds + signs the APK
+(v2 + v3 + v4), computes `SHA256SUMS`, signs the checksum file with
+the release ssh ed25519 key, and uploads everything to a GitHub
+release. Tags containing `-` (e.g. `v1.0.0-rc1`) publish as
+pre-releases.
+
+To verify a downloaded APK:
+
+```
+sha256sum -c SHA256SUMS
+ssh-keygen -Y verify -f allowed_signers -I release@rotko.net -n file -s SHA256SUMS.sig < SHA256SUMS
+```
+
+## Mobile development without StrongBox
+
+The full security model assumes StrongBox (Pixel 8+) or Secure Enclave
+(iOS). On simulators or older Android devices, Zigner falls back to
+software-only key storage and flags itself as INSECURE in Settings.
+Don't use a non-secure-element device for actual key custody.
