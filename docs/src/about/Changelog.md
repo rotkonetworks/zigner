@@ -1,57 +1,62 @@
 # Changelog
 
-## 5.0.1
+For full release artifacts (signed APKs, SHA256SUMS, ssh signatures), see
+[GitHub Releases](https://github.com/rotkonetworks/zigner/releases).
 
-Android version release, minor fixes
+## v0.4.1 — 2026-05-01
 
-## New in version 5.0.0
+Security hardening pass + UI follow-up.
 
-### Architecture
+- FROST nonce reuse defense: replace `DefaultHasher` (engineerable
+  collisions) with SHA-256 over the full nonce; store the full 32-byte
+  fingerprint.
+- Sticky FROST attestation flag is now actually enforced on note import.
+  Once a device has held FROST keys it permanently refuses unattested
+  Zcash note bundles.
+- Anchor attestation length is strict (== 64 bytes for ed25519). A 96-byte
+  FROST-style attestation can no longer fall through this path with its
+  randomizer silently dropped.
+- Encrypted backup AEAD: format version is bound into the auth tag via
+  XChaCha20-Poly1305 associated data. Backups are bumped to v2; legacy v1
+  ciphertexts still decrypt.
+- CBOR parser depth-capped at 32 to defend against malicious deeply-nested
+  QR payloads (stack-overflow DoS).
+- `frost_backup` uses `OsRng` instead of `thread_rng` for salt + nonce.
+- ZID auth rejects challenges older than 5 minutes or more than 60 seconds
+  in the future.
+- Pre-sign review screens (PCZT, FROST sign, Penumbra spend) now reveal
+  the full recipient address on tap. Truncated form is the default for
+  layout, but the full address is one tap away — needed because the
+  trust model assumes the user reads the recipient before approving.
 
-No more typescript or react native. Backend is completely in Rust, frontend is in native.
+## v0.4.0 — 2026-04-30
 
-### Building
+First major Zafu-ecosystem release.
 
-#### Dependencies
+- FROST multisig: DKG (rounds 1–3) and signing (rounds 1–2) over animated
+  QR codes — no relay server in the trust path.
+- Anchor attestation: FROST groups sign a domain-separated digest of the
+  anchor; signer rejects unattested anchors once the device has held
+  FROST keys. Built on existing reddsa primitives — no custom crypto.
+- Hot wallet derivation (`ur:zafu-hot-wallet`): deterministic 12-word
+  BIP39 from the master seed for use in Zafu pro.
+- ZID identity: site-scoped ed25519 challenge signing with cross-site
+  correlation prevention via domain-separated derivation.
+- Encrypted backup (`ur:zigner-backup`): XChaCha20-Poly1305 with backup
+  key derived from the seed phrase.
+- Animated UR QR using `raptorq` fountain codes for FROST DKG/sign,
+  backups, and contacts.
+- Default dark theme; full-bleed wallet QR on the landing screen.
+- Per-multisig wallet renaming.
+- Substrate export keys path disabled by default (Zcash-first).
 
-Number of dependencies was greatly reduced; no npm/yarn/nodejs/cocoapods, etc. All dependencies are handled by:
- - Cargo (rust packages)
- - Xcode (only default iOS frameworks are used)
- - Gradle
+## v0.2.x
 
-#### Rust backend
+Penumbra cold signing, transparent + Orchard PCZT inspection,
+ZIP-316 UFVK export.
 
-Rust libraries were moved back into the repository. Crypto functions are imported from Substrate. All logic and most of storage is written in Rust. An important hack here is that `rust/signer` crate has 2 versions of Cargo.toml for android and iOS architectures, as target library features could not be adjusted by normal means.
+## v0.1.0
 
-#### Native frontend
-
-Frontend for both iOS and Android re-written in native frameworks. Thus, standard out-of-the-box build scripts could be used for building once Rust libraries are built and linked
-
-### Features
-
-#### Secure seed storage
-
-Secrets are stored in devices' encrypted storage and some effort is made to prevent them leaking in system memory. Thus, all is as safe as the phone is - the same credentials used for unlocking the phone are used to unlock seeds. User is responsible to keep them adequate.
-
-#### Transaction preview
-
-Transactions content is shown before signing; no hash signing is allowed, but signing messages is possible.
-
-#### History feature
-
-The Vault now logs all operations it performs. It is important to remember that this is not log of account operations, but log of device history. This history could be cleared if needed, but not modified by other means. Detected presence of network connection is also logged.
-
-#### N+1 derivation
-
-Much requested feature that makes Vault automatically increment numbered seeds on creation.
-
-#### Network and metadata updates
-
-All network data updates now could be performed through scanning QR codes. Whenever some update is needed, most probably you should just scan some QR video. Don't worry about skipped frames, it's fountain code so you only need enough frames.
-
-All updates could be signed, and signing key will be trusted on first use, so Vault device should be linked to single source of authority on correct metadata.
-
-#### Key re-use in different networks
-
-Keys could be used only in one network. Need to re-use key in another network? Just create key with the same derivation path in that network to allow re-use and it will work.
-
+Initial Zigner release: Penumbra and Substrate signing on the Polkadot
+Vault foundation. Zigner-branded UI; Rotko verifier key embedded for
+anchor attestation roadmap.

@@ -48,11 +48,46 @@ Full Viewing Key export (bech32m, UR) for import into [Prax](https://praxwallet.
 
 - Orchard: RedPallas signatures over shielded actions
 - Transparent: secp256k1 ECDSA for t-address inputs
-- PCZT: Partially Created Zcash Transactions for multi-party signing
+- PCZT: Partially Created Zcash Transactions, inspectable signing only
 - Key derivation: ZIP-32 (`m/32'/133'/account'`), BIP-44 transparent
 - UFVK export per ZIP-316 for Zashi/Zafu import
 
-UR-encoded animated QR codes (Keystone wire format). Mainnet and testnet.
+PCZT signing enforces, at the Rust layer, that the signer's verified-notes
+state matches the bundle's anchor, that every spend nullifier is known, and
+that the implied spend value is consistent with the verified balance. There
+is no blind-signing path. UR-encoded animated QR codes (Keystone wire format).
+
+## FROST multisig
+
+Threshold spend authorization for Zcash Orchard via [`frost-spend`][frost-spend]
+(ZF FROST RedPallas). DKG (rounds 1–3) and signing (rounds 1–2) run entirely
+between Zigner and a coordinator over QR codes — no relay server in the trust
+path. Per-action randomizer α is bound to the sighash; nonces are tracked by a
+collision-resistant SHA-256 fingerprint and signing refuses any reuse.
+
+**Anchor attestation** — once a device has held FROST keys, it permanently
+requires every imported Zcash note bundle to carry an ed25519 attestation
+signed by a pinned verifier key. Defends against a compromised hot wallet
+fabricating a note tree on a previously-multisig device.
+
+**Encrypted backup** — `ur:zigner-backup` exports group metadata, contacts,
+labels, and FROST shares under XChaCha20-Poly1305 with the seed phrase as the
+KDF input. Format version is bound into the AEAD's associated data so a v2
+ciphertext cannot be presented as v1 (or vice-versa). Wrong-passphrase
+attempts return a generic error; tampering invalidates the auth tag.
+
+[frost-spend]: https://github.com/rotkonetworks/zcli/tree/master/crates/frost-spend
+
+## ZID auth
+
+Site-scoped ed25519 identity, derived per-origin from the master seed. Used
+for OAuth-less login on web wallets and the Zafu pro tier. The Rust layer
+rejects challenges older than 5 minutes or more than 60 seconds in the
+future, so a malicious frontend cannot force the device to sign a stale
+challenge replay.
+
+Cross-site correlation is prevented by domain-separated derivation
+(`HMAC-SHA512(zid_root, "site:{origin}")`).
 
 ## Substrate
 
@@ -61,14 +96,20 @@ metadata updates. Sr25519 and Ed25519 signing.
 
 ## Hot wallet pairing
 
-| Chain | Hot wallet | Wire format |
-|-------|-----------|-------------|
-| Penumbra | [Prax](https://praxwallet.com) | UR / CBOR |
-| Zcash | [Zafu](https://github.com/rotkonetworks/zafu), Zashi | UR / PCZT / ZIP-316 |
-| Substrate | Polkadot.js | UOS |
+| Chain     | Hot wallet                                                         | Wire format        |
+|-----------|--------------------------------------------------------------------|--------------------|
+| Penumbra  | [Prax](https://praxwallet.com)                                     | UR / CBOR          |
+| Zcash     | [Zafu](https://github.com/rotkonetworks/zafu), Zashi               | UR / PCZT / ZIP-316|
+| Substrate | Polkadot.js                                                        | UOS                |
 
 The hot wallet holds only viewing keys. It constructs unsigned transactions,
 encodes them as QR, and scans back the signed response.
+
+Zigner can also derive a 12-word BIP39 *hot wallet mnemonic* from the master
+seed (HMAC chain, deterministic, recoverable from backup) and export it as
+`ur:zafu-hot-wallet` for use in Zafu pro. The hot wallet shares the seed
+family with the cold device — convenient for daily spending, not a security
+boundary.
 
 ## Architecture
 
@@ -78,15 +119,19 @@ The native layers handle UI, camera, and QR rendering.
 
 ```
 rust/
+  signer/                UniFFI bridge to native (auth, backup, FROST, hot wallet)
   transaction_signing/   Penumbra, Zcash, Substrate signers
-  transaction_parsing/   QR payload decoder
-  db_handling/           Key storage, metadata, seeds
+  transaction_parsing/   QR / UR / CBOR / PCZT decoder
+  db_handling/           Encrypted sled storage (seeds, FROST keys, contacts, anchors)
   navigator/             Screen state machine
-  signer/                UniFFI bridge to native
-  qrcode_rtx/            Animated QR encoder (fountain codes)
-  qr_reader_phone/       Camera frame QR decoder
-  generate_message/      Airgap metadata update generator
-  zcash-wasm/            Zcash Orchard derivation for browser wallets
+  qrcode_rtx/            Animated UR encoder (raptorq fountain codes)
+  qrcode_static/         Static QR generation
+  qr_reader_phone/       Camera frame UR decoder
+  qr_reader_pc/          Desktop dev QR reader (uses opencv, not in mobile build)
+  generate_message/      Air-gap metadata update generator (active side)
+  zcash-wasm/            Orchard derivation for browser wallets
+  constants/             Pinned verifier keys, tree names, network defaults
+  definitions/           Shared error / model types
 ios/                     Swift + SwiftUI
 android/                 Kotlin + Jetpack Compose
 ```
@@ -100,7 +145,9 @@ matching the project version:
 cargo install uniffi_bindgen --version 0.22.0
 ```
 
-[opencv crate dependencies](https://crates.io/crates/opencv) must be present.
+The mobile builds do **not** require opencv. Only the desktop dev tool
+`qr_reader_pc` pulls in [opencv](https://crates.io/crates/opencv) and is
+gated behind its own crate; cargo build for the app targets skips it.
 
 ### Android
 
@@ -119,11 +166,20 @@ Open `ios/PolkadotVault.xcodeproj` in Xcode. Build and run.
 
 1. Bump `versionName` in `android/build.gradle`
 2. Merge to master
-3. Tag `v*` (e.g. `v0.2.0`)
+3. Tag `v*` (e.g. `v0.4.1`) and push the tag
 
-`android-release.yml` runs: test, build in pinned container, sign (v2+v3+v4),
-checksum (SHA-256/SHA-512), SLSA provenance attestation, publish to GitHub
-Releases. Tags containing `-` (e.g. `v1.0.0-rc1`) publish as pre-releases.
+`.github/workflows/android-release.yml` then runs tests, builds + signs the
+APK (v2 + v3 + v4), computes `SHA256SUMS`, signs the checksum file with the
+release ssh ed25519 key (`SHA256SUMS.sig`), and publishes a GitHub release
+with all three artifacts. Tags containing `-` (e.g. `v1.0.0-rc1`) publish
+as pre-releases.
+
+To verify a downloaded APK:
+
+```
+sha256sum -c SHA256SUMS
+ssh-keygen -Y verify -f allowed_signers -I release@rotko.net -n file -s SHA256SUMS.sig < SHA256SUMS
+```
 
 ## Tests
 
