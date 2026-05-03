@@ -57,6 +57,8 @@ pub mod cosmos;
 #[cfg(feature = "zcash")]
 pub mod zcash;
 
+pub mod anchor_verifiers;
+
 #[cfg(feature = "zcash")]
 pub mod frost;
 

@@ -263,6 +263,21 @@ fn init_navigation(dbname: &str, seed_names: Vec<String>) -> Result<(), ErrorDis
 
     *DB.write().unwrap() = val;
     init_logging("Vault".to_string());
+
+    // Bootstrap the anchor-verifier registry with the built-in default
+    // on first run. Idempotent: skipped if the tree already has the
+    // default key, and skipped entirely if the user has populated their
+    // own verifiers (we don't override their explicit configuration).
+    if let Some(database) = DB.read().unwrap().as_ref() {
+        if constants::ROTKO_ZCASH_VERIFIER != [0u8; 32] {
+            let _ = db_handling::anchor_verifiers::bootstrap_default(
+                database,
+                &constants::ROTKO_ZCASH_VERIFIER,
+                "Rotko Networks (built-in)",
+            );
+        }
+    }
+
     Ok(navigator::init_navigation(
         DB.clone().read().unwrap().as_ref().unwrap().clone(),
         seed_names,
@@ -2287,11 +2302,11 @@ fn decode_and_verify_zcash_notes(
         }
     }
 
-    // Verify anchor attestation: ed25519 signature from rotko verifier
+    // Verify anchor attestation against ANY enabled verifier in the
+    // sled-backed registry. Bootstrapped from ROTKO_ZCASH_VERIFIER on
+    // first run, but users running their own zidecar can scan in
+    // additional verifier keys via the dedicated UR import path.
     let anchor_verified = if let Some(attestation) = &bundle.anchor_attestation {
-        // ed25519 attestation is exactly 64 bytes. Reject any other length so a
-        // 96-byte FROST attestation can't fall through this path with its first
-        // 64 bytes interpreted as ed25519 (with the randomizer silently dropped).
         if attestation.len() != 64 {
             return Err(ErrorDisplayed::Str {
                 s: format!(
@@ -2301,39 +2316,59 @@ fn decode_and_verify_zcash_notes(
             });
         }
         let signature = &attestation[..64];
-        let verifier_key = constants::ROTKO_ZCASH_VERIFIER;
+        let verifier_pubkeys =
+            db_handling::anchor_verifiers::enabled_pubkeys(database).map_err(|e| {
+                ErrorDisplayed::Str {
+                    s: format!("anchor verifier registry: {e}"),
+                }
+            })?;
 
-        // skip verification if verifier key is not set (all zeros = development mode)
-        if verifier_key == [0u8; 32] {
-            false // no verifier configured, accept without verification
-        } else {
-            // compute attestation digest: SHA-256("zcash-anchor-v1" || pubkey || anchor || height || mainnet)
+        if verifier_pubkeys.is_empty() {
+            // No enabled verifiers — refuse rather than accept silently. A
+            // device with no trusted verifier MUST NOT accept attested
+            // bundles; re-add at least the built-in verifier or scan in
+            // your own.
+            return Err(ErrorDisplayed::Str {
+                s: "No enabled anchor verifiers. Re-enable the built-in verifier \
+                    or add your own zidecar verifier key in Settings before \
+                    importing notes."
+                    .to_string(),
+            });
+        }
+
+        let sig = sp_core::ed25519::Signature::from_raw({
+            let mut s = [0u8; 64];
+            s.copy_from_slice(signature);
+            s
+        });
+
+        // Try each enabled verifier — accept on the first match.
+        // Per-verifier digest because the verifier's pubkey is bound
+        // into the digest's domain separation.
+        let mut matched = false;
+        for verifier_key in &verifier_pubkeys {
             use sha2::{Digest, Sha256};
             let mut hasher = Sha256::new();
             hasher.update(b"zcash-anchor-v1");
-            hasher.update(&verifier_key);
+            hasher.update(verifier_key);
             hasher.update(&bundle.anchor);
             hasher.update(&bundle.anchor_height.to_le_bytes());
             hasher.update(&[u8::from(bundle.mainnet)]);
             let digest: [u8; 32] = hasher.finalize().into();
-
-            // verify ed25519 signature
-            let pubkey = sp_core::ed25519::Public::from_raw(verifier_key);
-            let sig = sp_core::ed25519::Signature::from_raw({
-                let mut s = [0u8; 64];
-                s.copy_from_slice(signature);
-                s
-            });
+            let pubkey = sp_core::ed25519::Public::from_raw(*verifier_key);
             if <sp_core::ed25519::Pair as sp_core::Pair>::verify(&sig, &digest, &pubkey) {
-                true
-            } else {
-                return Err(ErrorDisplayed::Str {
-                    s: "Anchor attestation signature invalid — \
-                        not signed by rotko verifier key."
-                        .to_string(),
-                });
+                matched = true;
+                break;
             }
         }
+        if !matched {
+            return Err(ErrorDisplayed::Str {
+                s: "Anchor attestation signature invalid — not signed by any \
+                    trusted verifier. Check Settings → Anchor verifiers."
+                    .to_string(),
+            });
+        }
+        true
     } else {
         false // no attestation present, accept as unverified
     };
@@ -3666,6 +3701,271 @@ fn frost_import_all_backup_envelope(
         "skipped": skipped,
     }))
     .map_err(|e| ErrorDisplayed::Str { s: format!("serialize result: {e}") })
+}
+
+// ── anchor verifier registry FFI ──
+
+fn list_anchor_verifiers() -> Result<Vec<AnchorVerifierFFI>, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+    let entries = db_handling::anchor_verifiers::list_verifiers(database).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("list verifiers: {e}"),
+        }
+    })?;
+    Ok(entries
+        .into_iter()
+        .map(|e| AnchorVerifierFFI {
+            pubkey_hex: e.pubkey_hex,
+            label: e.label,
+            source: match e.source {
+                db_handling::anchor_verifiers::VerifierSource::BuiltIn => "built-in".to_string(),
+                db_handling::anchor_verifiers::VerifierSource::User => "user".to_string(),
+            },
+            added_at: e.added_at,
+            enabled: e.enabled,
+        })
+        .collect())
+}
+
+/// Decode a `ur:zcash-verifier-key` UR (CBOR map: 1=pubkey, 2=label) into
+/// a preview struct. Does NOT add the verifier — the native layer must
+/// show a confirmation screen with the full hex pubkey before calling
+/// add_anchor_verifier.
+fn decode_verifier_key_qr(ur_parts: Vec<String>) -> Result<AnchorVerifierImport, ErrorDisplayed> {
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "no QR parts".into(),
+        });
+    }
+    let cbor = decode_qr_payload(&ur_parts, "zcash-verifier-key")?;
+
+    // CBOR: a2 01 (bstr 32 bytes) 02 (tstr label)
+    if cbor.len() < 3 || cbor[0] != 0xa2 {
+        return Err(ErrorDisplayed::Str {
+            s: "verifier-key CBOR must be a 2-entry map".into(),
+        });
+    }
+    let mut pubkey: Option<[u8; 32]> = None;
+    let mut label: Option<String> = None;
+    let mut o = 1;
+    for _ in 0..2 {
+        let key = *cbor
+            .get(o)
+            .ok_or_else(|| ErrorDisplayed::Str { s: "truncated key".into() })?;
+        o += 1;
+        match key {
+            0x01 => {
+                // bstr 32: 0x58 0x20 || 32 bytes (or 0x40+len for short)
+                let prefix = *cbor.get(o).ok_or_else(|| ErrorDisplayed::Str {
+                    s: "truncated pubkey header".into(),
+                })?;
+                let body_start = if prefix == 0x58 {
+                    let len = *cbor.get(o + 1).ok_or_else(|| ErrorDisplayed::Str {
+                        s: "truncated pubkey length".into(),
+                    })?;
+                    if len != 32 {
+                        return Err(ErrorDisplayed::Str {
+                            s: format!("expected 32-byte pubkey, got {len}"),
+                        });
+                    }
+                    o + 2
+                } else if prefix == 0x40 + 32 {
+                    o + 1
+                } else {
+                    return Err(ErrorDisplayed::Str {
+                        s: format!("expected bstr(32), got prefix 0x{prefix:02x}"),
+                    });
+                };
+                let end = body_start
+                    .checked_add(32)
+                    .ok_or_else(|| ErrorDisplayed::Str { s: "pubkey overflow".into() })?;
+                let bytes = cbor.get(body_start..end).ok_or_else(|| ErrorDisplayed::Str {
+                    s: "pubkey truncated".into(),
+                })?;
+                let mut pk = [0u8; 32];
+                pk.copy_from_slice(bytes);
+                pubkey = Some(pk);
+                o = end;
+            }
+            0x02 => {
+                // tstr: prefix 0x60+len (short) or 0x78 len (medium)
+                let prefix = *cbor.get(o).ok_or_else(|| ErrorDisplayed::Str {
+                    s: "truncated label header".into(),
+                })?;
+                let (body_start, body_len) = if (0x60..0x78).contains(&prefix) {
+                    (o + 1, (prefix - 0x60) as usize)
+                } else if prefix == 0x78 {
+                    let len = *cbor.get(o + 1).ok_or_else(|| ErrorDisplayed::Str {
+                        s: "truncated label length".into(),
+                    })?;
+                    (o + 2, len as usize)
+                } else {
+                    return Err(ErrorDisplayed::Str {
+                        s: format!("expected tstr label, got prefix 0x{prefix:02x}"),
+                    });
+                };
+                if body_len > 128 {
+                    return Err(ErrorDisplayed::Str {
+                        s: format!("label too long ({body_len} bytes, max 128)"),
+                    });
+                }
+                let end = body_start
+                    .checked_add(body_len)
+                    .ok_or_else(|| ErrorDisplayed::Str { s: "label overflow".into() })?;
+                let bytes = cbor.get(body_start..end).ok_or_else(|| ErrorDisplayed::Str {
+                    s: "label truncated".into(),
+                })?;
+                label = Some(String::from_utf8(bytes.to_vec()).map_err(|e| ErrorDisplayed::Str {
+                    s: format!("label utf-8: {e}"),
+                })?);
+                o = end;
+            }
+            other => {
+                return Err(ErrorDisplayed::Str {
+                    s: format!("unexpected CBOR map key {other}"),
+                });
+            }
+        }
+    }
+    let pubkey = pubkey.ok_or_else(|| ErrorDisplayed::Str {
+        s: "missing pubkey field".into(),
+    })?;
+    let label = label.unwrap_or_default();
+    Ok(AnchorVerifierImport {
+        pubkey_hex: hex::encode(pubkey),
+        label,
+    })
+}
+
+fn add_anchor_verifier(pubkey_hex: &str, label: &str) -> Result<(), ErrorDisplayed> {
+    let bytes = hex::decode(pubkey_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("bad pubkey hex: {e}"),
+    })?;
+    if bytes.len() != 32 {
+        return Err(ErrorDisplayed::Str {
+            s: format!("pubkey must be 32 bytes, got {}", bytes.len()),
+        });
+    }
+    let mut pk = [0u8; 32];
+    pk.copy_from_slice(&bytes);
+
+    let trimmed = label.trim();
+    if trimmed.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "label must not be empty".into(),
+        });
+    }
+    if trimmed.len() > 128 {
+        return Err(ErrorDisplayed::Str {
+            s: format!("label too long ({} bytes, max 128)", trimmed.len()),
+        });
+    }
+
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+    db_handling::anchor_verifiers::add_verifier(
+        database,
+        &pk,
+        trimmed,
+        db_handling::anchor_verifiers::VerifierSource::User,
+    )
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("add verifier: {e}"),
+    })
+}
+
+/// Refuse the change if it would leave the device with zero enabled
+/// verifiers AND the sticky FROST attestation flag is set, unless the
+/// caller explicitly passes `force = true` (a clear user opt-in).
+fn check_lockout(
+    database: &sled::Db,
+    upcoming: Vec<[u8; 32]>,
+    force: bool,
+) -> Result<(), ErrorDisplayed> {
+    if force {
+        return Ok(());
+    }
+    let attestation_required =
+        db_handling::zcash::is_attestation_required(database).unwrap_or(false);
+    if !attestation_required {
+        return Ok(());
+    }
+    if !upcoming.is_empty() {
+        return Ok(());
+    }
+    Err(ErrorDisplayed::Str {
+        s: "Refusing to leave the device with no enabled verifiers — \
+            attestation is required (FROST history) and removing this \
+            entry would block all future note imports. Add another verifier \
+            first, or pass force=true if you understand the consequence."
+            .into(),
+    })
+}
+
+fn remove_anchor_verifier(pubkey_hex: &str, force: bool) -> Result<(), ErrorDisplayed> {
+    let bytes = hex::decode(pubkey_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("bad pubkey hex: {e}"),
+    })?;
+    if bytes.len() != 32 {
+        return Err(ErrorDisplayed::Str {
+            s: "pubkey must be 32 bytes".into(),
+        });
+    }
+    let mut pk = [0u8; 32];
+    pk.copy_from_slice(&bytes);
+
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    let remaining: Vec<[u8; 32]> = db_handling::anchor_verifiers::enabled_pubkeys(database)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("enabled list: {e}") })?
+        .into_iter()
+        .filter(|k| k != &pk)
+        .collect();
+    check_lockout(database, remaining, force)?;
+
+    db_handling::anchor_verifiers::remove_verifier(database, &pk).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("remove verifier: {e}"),
+        }
+    })
+}
+
+fn set_anchor_verifier_enabled(
+    pubkey_hex: &str,
+    enabled: bool,
+    force: bool,
+) -> Result<(), ErrorDisplayed> {
+    let bytes = hex::decode(pubkey_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("bad pubkey hex: {e}"),
+    })?;
+    if bytes.len() != 32 {
+        return Err(ErrorDisplayed::Str {
+            s: "pubkey must be 32 bytes".into(),
+        });
+    }
+    let mut pk = [0u8; 32];
+    pk.copy_from_slice(&bytes);
+
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+
+    if !enabled {
+        // Disabling: simulate post-state (drop pk from enabled list).
+        let remaining: Vec<[u8; 32]> = db_handling::anchor_verifiers::enabled_pubkeys(database)
+            .map_err(|e| ErrorDisplayed::Str { s: format!("enabled list: {e}") })?
+            .into_iter()
+            .filter(|k| k != &pk)
+            .collect();
+        check_lockout(database, remaining, force)?;
+    }
+
+    db_handling::anchor_verifiers::update_verifier(database, &pk, None, Some(enabled)).map_err(
+        |e| ErrorDisplayed::Str {
+            s: format!("update verifier: {e}"),
+        },
+    )
 }
 
 ffi_support::define_string_destructor!(signer_destroy_string);

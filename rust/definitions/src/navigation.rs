@@ -1114,6 +1114,21 @@ pub struct FrostWalletSummaryFFI {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AnchorVerifierFFI {
+    pub pubkey_hex: String,
+    pub label: String,
+    pub source: String,
+    pub added_at: u64,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AnchorVerifierImport {
+    pub pubkey_hex: String,
+    pub label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashSyncInfo {
     pub anchor_hex: String,
     pub anchor_height: u32,

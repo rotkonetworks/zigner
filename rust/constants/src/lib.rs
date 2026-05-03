@@ -107,6 +107,15 @@ pub const FROST_KEYS_TREE: &[u8] = b"frost_keys";
 /// little-endian unix timestamp.
 pub const FROST_NONCES_TREE: &[u8] = b"frost_used_nonces";
 
+/// Tree name for the tree storing trusted Zcash anchor-attestation
+/// verifier ed25519 public keys. The signer trusts ANY enabled entry to
+/// attest that an anchor matches the chain — supporting self-hosted
+/// zidecar instances alongside the built-in default. Key: 32-byte
+/// ed25519 pubkey. Value: JSON `{label, added_at, source, enabled}`.
+/// Bootstrapped from `ROTKO_ZCASH_VERIFIER` on first DB init when the
+/// tree is empty.
+pub const ANCHOR_VERIFIERS_TREE: &[u8] = b"anchor_verifiers";
+
 /// Tree name for the tree storing contacts (address book)
 /// Key: address string bytes, Value: JSON-encoded contact metadata
 pub const CONTACTS_TREE: &[u8] = b"contacts";

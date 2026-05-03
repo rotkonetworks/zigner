@@ -1090,6 +1090,46 @@ namespace signer {
         [ByRef] string envelope_json,
         [ByRef] string passphrase
     );
+
+    // List every anchor verifier the device trusts (enabled and disabled).
+    // The first call after install returns the built-in entry.
+    [Throws=ErrorDisplayed]
+    sequence<AnchorVerifierFFI> list_anchor_verifiers();
+
+    // Decode a `ur:zcash-verifier-key` UR (single or animated) into the
+    // pubkey + label, WITHOUT adding it. The native layer is expected to
+    // show a confirmation screen with the full pubkey hex before calling
+    // add_anchor_verifier.
+    [Throws=ErrorDisplayed]
+    AnchorVerifierImport decode_verifier_key_qr(sequence<string> ur_parts);
+
+    // Add a verifier to the trust list. Returns Err if a verifier with
+    // the same pubkey is already present.
+    [Throws=ErrorDisplayed]
+    void add_anchor_verifier(
+        [ByRef] string pubkey_hex,
+        [ByRef] string label
+    );
+
+    // Remove a verifier. Returns Err if doing so would leave the device
+    // with zero enabled verifiers AND attestation is required (sticky
+    // FROST flag set) — that combination would block all future note
+    // imports. Caller can pass `force = true` to override (after a clear
+    // user confirmation).
+    [Throws=ErrorDisplayed]
+    void remove_anchor_verifier(
+        [ByRef] string pubkey_hex,
+        boolean force
+    );
+
+    // Toggle a verifier's enabled flag. Same "would lock the device"
+    // protection as remove_anchor_verifier when going from on to off.
+    [Throws=ErrorDisplayed]
+    void set_anchor_verifier_enabled(
+        [ByRef] string pubkey_hex,
+        boolean enabled,
+        boolean force
+    );
 };
 
 dictionary MKeysNew {
@@ -1493,6 +1533,21 @@ dictionary FrostWalletSummaryFFI {
     u16 max_signers;
     boolean mainnet;
     u64 created_at;
+};
+
+// Anchor-attestation verifier registry entry
+dictionary AnchorVerifierFFI {
+    string pubkey_hex;       // 32-byte ed25519 pubkey, hex
+    string label;            // human-readable label
+    string source;           // "built-in" or "user"
+    u64    added_at;         // unix seconds
+    boolean enabled;
+};
+
+// Decoded ur:zcash-verifier-key payload (preview before adding)
+dictionary AnchorVerifierImport {
+    string pubkey_hex;       // 32-byte ed25519 pubkey, hex (display in full!)
+    string label;            // suggested label from the QR
 };
 
 // Zcash Orchard spend action
