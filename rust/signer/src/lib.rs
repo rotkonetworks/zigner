@@ -2115,13 +2115,22 @@ fn sign_zcash_pczt(
         }
     }
 
+    // Snapshot which actions have nullifiers that match verified notes.
+    // Unknown nullifiers are either Orchard dummies (no signature needed —
+    // they're computed under a dummy spending key) or attacker-injected
+    // fake spends (we MUST refuse to authorize). Either way, we only sign
+    // actions where `known == true`.
+    let known_action_indices: Vec<usize> = inspection
+        .spends
+        .iter()
+        .enumerate()
+        .filter_map(|(i, spend)| if spend.known { Some(i) } else { None })
+        .collect();
+
     // Parse the PCZT to get action count first
     let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to parse PCZT: {:?}", e),
     })?;
-
-    // Get number of orchard actions before creating signer
-    let action_count = pczt.orchard().actions().len();
 
     // Derive the orchard spending key from seed
     let spending_key =
@@ -2143,14 +2152,14 @@ fn sign_zcash_pczt(
         s: format!("Failed to create PCZT signer: {:?}", e),
     })?;
 
-    // Sign all orchard actions
     // The signer needs the ask (spend authorizing key) derived from sk
     let ask = orchard::keys::SpendAuthorizingKey::from(&orchard_sk);
 
-    // Sign each action
-    for action_index in 0..action_count {
+    // Sign only the actions whose nullifiers we recognize. Unknown actions
+    // are intentionally left without a spend authorization signature.
+    for action_index in &known_action_indices {
         signer
-            .sign_orchard(action_index, &ask)
+            .sign_orchard(*action_index, &ask)
             .map_err(|e| ErrorDisplayed::Str {
                 s: format!("Failed to sign orchard action {}: {:?}", action_index, e),
             })?;

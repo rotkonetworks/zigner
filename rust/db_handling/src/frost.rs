@@ -5,7 +5,7 @@
 //! Value: JSON-encoded FrostWalletData.
 
 use crate::error::{Error, Result};
-use constants::FROST_KEYS_TREE;
+use constants::{FROST_KEYS_TREE, FROST_NONCES_TREE};
 
 /// Data stored per FROST wallet.
 ///
@@ -184,6 +184,42 @@ pub fn update_wallet_metadata(
     let json = serde_json::to_vec(&data)
         .map_err(|e| Error::Other(anyhow::anyhow!("FROST serialize: {e}")))?;
     tree.insert(&id, json.as_slice())?;
+    tree.flush()?;
+    Ok(())
+}
+
+// ── FROST nonce reuse persistence ──
+//
+// Tracks fingerprints of consumed signing nonces in sled so a force-quit
+// of the app cannot drop the in-memory tracker and let an attacker replay
+// a previously-used nonce against a different message (which would leak
+// the FROST private key). Persistence is on the hot path of every signing
+// operation; tree size is bounded by signing frequency and pruned in
+// `prune_used_nonces` (caller's discretion).
+
+/// Returns true if the nonce fingerprint has already been consumed.
+pub fn is_nonce_used(database: &sled::Db, fingerprint: &[u8; 32]) -> Result<bool> {
+    let tree = database.open_tree(FROST_NONCES_TREE)?;
+    Ok(tree.get(fingerprint)?.is_some())
+}
+
+/// Mark a nonce fingerprint as consumed. Returns Err if it was already
+/// present — the caller MUST treat this as "do not sign" because
+/// proceeding would reuse a nonce.
+pub fn mark_nonce_used(database: &sled::Db, fingerprint: &[u8; 32]) -> Result<()> {
+    let tree = database.open_tree(FROST_NONCES_TREE)?;
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        .to_le_bytes();
+    // compare_and_swap with expected = None ensures atomic insert-only.
+    let prev = tree.compare_and_swap(fingerprint, None as Option<&[u8]>, Some(&now_secs[..]))?;
+    if prev.is_err() {
+        return Err(Error::Other(anyhow::anyhow!(
+            "FROST nonce reuse detected (already in persistent tracker)"
+        )));
+    }
     tree.flush()?;
     Ok(())
 }

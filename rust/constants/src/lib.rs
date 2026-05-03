@@ -99,6 +99,14 @@ pub const ZCASH_NOTES_TREE: &[u8] = b"zcash_notes";
 /// Value: JSON-encoded FrostWalletData
 pub const FROST_KEYS_TREE: &[u8] = b"frost_keys";
 
+/// Tree name for the tree storing fingerprints of consumed FROST signing
+/// nonces. Persisting these across app restarts is critical: an attacker
+/// who force-quits the app between commitment and signing could otherwise
+/// replay an already-used nonce against a different message, leaking the
+/// FROST private key. Key: SHA-256(nonces_hex) (32 bytes). Value: 8-byte
+/// little-endian unix timestamp.
+pub const FROST_NONCES_TREE: &[u8] = b"frost_used_nonces";
+
 /// Tree name for the tree storing contacts (address book)
 /// Key: address string bytes, Value: JSON-encoded contact metadata
 pub const CONTACTS_TREE: &[u8] = b"contacts";

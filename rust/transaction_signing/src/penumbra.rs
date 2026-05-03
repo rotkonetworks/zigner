@@ -715,6 +715,36 @@ impl FvkExportData {
 
     /// decode from QR code bytes
     pub fn decode_qr(data: &[u8]) -> Result<Self> {
+        // QR payloads come from a hot wallet over the camera — every offset
+        // arithmetic must use checked_add so a crafted oversized field
+        // cannot wrap usize and bypass bounds checks, and every slice must
+        // come from `data.get(..)` so an unexpected length produces a parse
+        // error rather than a panic.
+        fn read_arr<const N: usize>(
+            data: &[u8],
+            offset: &mut usize,
+            what: &str,
+        ) -> Result<[u8; N]> {
+            let end = offset
+                .checked_add(N)
+                .ok_or_else(|| Error::PenumbraKeyDerivation(format!("{what}: offset overflow")))?;
+            let slice = data
+                .get(*offset..end)
+                .ok_or_else(|| Error::PenumbraKeyDerivation(format!("{what}: truncated")))?;
+            let arr: [u8; N] = slice.try_into().map_err(|_| {
+                Error::PenumbraKeyDerivation(format!("{what}: slice/length mismatch"))
+            })?;
+            *offset = end;
+            Ok(arr)
+        }
+        fn read_byte(data: &[u8], offset: &mut usize, what: &str) -> Result<u8> {
+            let b = *data
+                .get(*offset)
+                .ok_or_else(|| Error::PenumbraKeyDerivation(format!("{what}: truncated")))?;
+            *offset += 1;
+            Ok(b)
+        }
+
         // minimum size: 3 (prelude) + 4 (account) + 1 (label len) + 64 (fvk) + 32 (wallet_id) = 104
         if data.len() < 104 {
             return Err(Error::PenumbraKeyDerivation(
@@ -732,22 +762,22 @@ impl FvkExportData {
         let mut offset = 3;
 
         // account index
-        let account_index = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-        offset += 4;
+        let account_index = u32::from_le_bytes(read_arr::<4>(data, &mut offset, "account index")?);
 
         // label
-        let label_len = data[offset] as usize;
-        offset += 1;
-
+        let label_len = read_byte(data, &mut offset, "label length")? as usize;
         let label = if label_len > 0 {
-            if offset + label_len > data.len() {
-                return Err(Error::PenumbraKeyDerivation(
-                    "label extends beyond data".to_string(),
-                ));
-            }
-            let label_bytes = &data[offset..offset + label_len];
-            offset += label_len;
-            Some(String::from_utf8(label_bytes.to_vec()).map_err(|e| {
+            let end = offset.checked_add(label_len).ok_or_else(|| {
+                Error::PenumbraKeyDerivation("label: offset overflow".to_string())
+            })?;
+            let label_bytes = data
+                .get(offset..end)
+                .ok_or_else(|| {
+                    Error::PenumbraKeyDerivation("label extends beyond data".to_string())
+                })?
+                .to_vec();
+            offset = end;
+            Some(String::from_utf8(label_bytes).map_err(|e| {
                 Error::PenumbraKeyDerivation(format!("invalid UTF-8 in label: {e}"))
             })?)
         } else {
@@ -755,31 +785,24 @@ impl FvkExportData {
         };
 
         // fvk bytes
-        if offset + 64 > data.len() {
-            return Err(Error::PenumbraKeyDerivation(
-                "FVK data too short".to_string(),
-            ));
-        }
-        let fvk_bytes: [u8; 64] = data[offset..offset + 64].try_into().unwrap();
-        offset += 64;
+        let fvk_bytes: [u8; 64] = read_arr(data, &mut offset, "fvk")?;
 
         // wallet id
-        if offset + 32 > data.len() {
-            return Err(Error::PenumbraKeyDerivation(
-                "wallet_id data too short".to_string(),
-            ));
-        }
-        let wallet_id: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-        offset += 32;
+        let wallet_id: [u8; 32] = read_arr(data, &mut offset, "wallet id")?;
 
         // optional ZID extension (v2 format): [0x01][32 bytes]
-        let zid_pubkey =
-            if offset < data.len() && data[offset] == 0x01 && offset + 1 + 32 <= data.len() {
-                let zid: [u8; 32] = data[offset + 1..offset + 1 + 32].try_into().unwrap();
-                Some(zid)
-            } else {
-                None
-            };
+        let zid_pubkey = if data.get(offset).copied() == Some(0x01) {
+            let mut zid_offset = offset + 1;
+            // read_arr will return a clean parse error if the 32 bytes
+            // aren't there — older wallets without the ZID extension
+            // simply have nothing past the wallet id, so no 0x01 marker.
+            let zid: [u8; 32] = read_arr(data, &mut zid_offset, "zid pubkey")?;
+            offset = zid_offset;
+            Some(zid)
+        } else {
+            None
+        };
+        let _ = offset; // suppress unused-assignment lint after final write
 
         Ok(Self {
             account_index,

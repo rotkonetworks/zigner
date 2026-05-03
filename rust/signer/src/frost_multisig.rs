@@ -12,6 +12,7 @@ use std::convert::TryInto;
 use std::sync::Mutex;
 
 use frost_spend::orchestrate;
+use zeroize::Zeroize;
 
 lazy_static::lazy_static! {
     /// Track nonce hashes that have been consumed by signing.
@@ -31,8 +32,32 @@ fn nonce_fingerprint(nonces_hex: &str) -> [u8; 32] {
 }
 
 /// Mark a nonce as consumed. Returns Err if already used.
+///
+/// Reuse is checked against BOTH the in-memory HashSet and the persistent
+/// sled tree. The persistent layer defeats a force-quit attack where an
+/// adversary could otherwise restart the app, drop the in-memory state,
+/// and replay an already-used nonce against a different message —
+/// which would catastrophically leak the FROST private key.
 fn consume_nonce(nonces_hex: &str) -> Result<(), String> {
     let fp = nonce_fingerprint(nonces_hex);
+
+    // Persistent check first — survives app restart.
+    let db_guard = crate::DB
+        .read()
+        .map_err(|_| "DB lock poisoned".to_string())?;
+    if let Some(database) = db_guard.as_ref() {
+        db_handling::frost::mark_nonce_used(database, &fp).map_err(|e| {
+            format!(
+                "CRITICAL: {}. Reusing a FROST nonce with a different message would \
+                 leak the private key. Generate fresh nonces with sign_round1.",
+                e
+            )
+        })?;
+    }
+    drop(db_guard);
+
+    // In-memory write-through cache (fast-path for repeated reuse within
+    // the same session — sled would catch it too but at a sled round trip).
     let mut used = USED_NONCES
         .lock()
         .map_err(|_| "nonce tracker poisoned".to_string())?;
@@ -44,7 +69,7 @@ fn consume_nonce(nonces_hex: &str) -> Result<(), String> {
                 .to_string(),
         );
     }
-    // Limit size to prevent unbounded growth (old entries are stale anyway)
+    // Bound the in-memory cache; the persistent tracker remains authoritative.
     if used.len() > 1000 {
         used.clear();
         used.insert(fp);
@@ -54,31 +79,50 @@ fn consume_nonce(nonces_hex: &str) -> Result<(), String> {
 
 /// DKG round 1: generate ephemeral identity + signed commitment.
 /// Returns JSON: { "secret": hex, "broadcast": hex }
+///
+/// The returned JSON contains secret material in the "secret" field. The
+/// FFI caller is responsible for clearing the returned String once it
+/// has been persisted (encrypted) by the native layer. We zero our own
+/// in-memory copies of the secret hex before returning.
 pub fn frost_dkg_part1(max_signers: u16, min_signers: u16) -> Result<String, String> {
-    let result = orchestrate::dkg_part1(max_signers, min_signers).map_err(|e| e.to_string())?;
-    serde_json::to_string(&serde_json::json!({
+    let mut result = orchestrate::dkg_part1(max_signers, min_signers).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string(&serde_json::json!({
         "secret": result.secret_hex,
         "broadcast": result.broadcast_hex,
     }))
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    result.secret_hex.zeroize();
+    Ok(json)
 }
 
 /// DKG round 2: process signed round1 broadcasts.
 /// peer_broadcasts_json: JSON array of hex strings.
 /// Returns JSON: { "secret": hex, "peer_packages": [hex, ...] }
+///
+/// As with round 1, the returned JSON contains secret material; the FFI
+/// caller must clear it after persistence. Round 1's `secret_hex` was
+/// already zeroized when its caller dropped the JSON string; this round
+/// zeroes its own intermediate copy.
 pub fn frost_dkg_part2(secret_hex: &str, peer_broadcasts_json: &str) -> Result<String, String> {
     let broadcasts: Vec<String> = serde_json::from_str(peer_broadcasts_json)
         .map_err(|e| format!("bad broadcasts JSON: {}", e))?;
-    let result = orchestrate::dkg_part2(secret_hex, &broadcasts).map_err(|e| e.to_string())?;
-    serde_json::to_string(&serde_json::json!({
+    let mut result = orchestrate::dkg_part2(secret_hex, &broadcasts).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string(&serde_json::json!({
         "secret": result.secret_hex,
         "peer_packages": result.peer_packages,
     }))
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    result.secret_hex.zeroize();
+    Ok(json)
 }
 
 /// DKG round 3: finalize — returns key package + public key package.
 /// Returns JSON: { "key_package": hex, "public_key_package": hex, "ephemeral_seed": hex }
+///
+/// `key_package` and `ephemeral_seed` are long-lived secrets — the FFI
+/// caller persists them encrypted as the FROST wallet record and zeroes
+/// the JSON after that. We zero our local copies of those fields once
+/// they have been serialized into the JSON return value.
 pub fn frost_dkg_part3(
     secret_hex: &str,
     round1_broadcasts_json: &str,
@@ -88,13 +132,16 @@ pub fn frost_dkg_part3(
         .map_err(|e| format!("bad round1 JSON: {}", e))?;
     let r2: Vec<String> = serde_json::from_str(round2_packages_json)
         .map_err(|e| format!("bad round2 JSON: {}", e))?;
-    let result = orchestrate::dkg_part3(secret_hex, &r1, &r2).map_err(|e| e.to_string())?;
-    serde_json::to_string(&serde_json::json!({
+    let mut result = orchestrate::dkg_part3(secret_hex, &r1, &r2).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string(&serde_json::json!({
         "key_package": result.key_package_hex,
         "public_key_package": result.public_key_package_hex,
         "ephemeral_seed": result.ephemeral_seed_hex,
     }))
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    result.key_package_hex.zeroize();
+    result.ephemeral_seed_hex.zeroize();
+    Ok(json)
 }
 
 /// signing round 1: generate nonces + signed commitments.

@@ -316,14 +316,33 @@ pub fn sign_zid_challenge(
 ///   entropy   = seed[0..16]  (128 bits = 12 words)
 ///
 /// The resulting mnemonic is deterministic and recoverable from the master seed.
+/// Equivalent to `derive_hot_wallet_mnemonic_with_rotation(seed_phrase, "default", 0)`.
 pub fn derive_hot_wallet_mnemonic(seed_phrase: &str) -> Result<String, String> {
-    derive_hot_wallet_mnemonic_for_identity(seed_phrase, "default")
+    derive_hot_wallet_mnemonic_with_rotation(seed_phrase, "default", 0)
 }
 
 /// Derive hot wallet mnemonic for a specific identity name.
+/// Equivalent to `derive_hot_wallet_mnemonic_with_rotation(seed_phrase, identity_name, 0)`.
 pub fn derive_hot_wallet_mnemonic_for_identity(
     seed_phrase: &str,
     identity_name: &str,
+) -> Result<String, String> {
+    derive_hot_wallet_mnemonic_with_rotation(seed_phrase, identity_name, 0)
+}
+
+/// Derive hot wallet mnemonic with an explicit rotation index.
+///
+/// `rotation == 0` is the default and matches `derive_hot_wallet_mnemonic_for_identity`
+/// (no rotation suffix in the HMAC tag, so existing zafu-pro hot wallets are stable).
+/// `rotation > 0` produces a fresh, deterministic mnemonic that is unlinkable to
+/// the previous one short of the master seed. Bumping the counter in zigner is
+/// the safe response when a hot-wallet device is suspected of compromise: the
+/// new mnemonic is derived offline, the user moves funds out of the old one,
+/// and the old mnemonic stops being used.
+pub fn derive_hot_wallet_mnemonic_with_rotation(
+    seed_phrase: &str,
+    identity_name: &str,
+    rotation: u32,
 ) -> Result<String, String> {
     use hmac::{Hmac, Mac};
     use sha2::Sha512;
@@ -337,9 +356,17 @@ pub fn derive_hot_wallet_mnemonic_for_identity(
     mac.update(format!("identity:{identity_name}").as_bytes());
     let identity = mac.finalize().into_bytes();
 
-    // step 4: seed = HMAC-SHA512(identity, "hot-wallet-v1")
+    // step 4: seed = HMAC-SHA512(identity, "hot-wallet-v1[:rotation]")
+    // Backward compat: rotation 0 = "hot-wallet-v1" (no suffix), so existing
+    // hot wallets in the wild keep the same mnemonic. rotation > 0 appends
+    // a colon-separated counter, producing a fresh derivation.
+    let tag = if rotation == 0 {
+        "hot-wallet-v1".to_string()
+    } else {
+        format!("hot-wallet-v1:{rotation}")
+    };
     let mut mac = HmacSha512::new_from_slice(&identity).map_err(|e| format!("hmac init: {e}"))?;
-    mac.update(b"hot-wallet-v1");
+    mac.update(tag.as_bytes());
     let seed = mac.finalize().into_bytes();
 
     // step 5: entropy = first 16 bytes (128 bits = 12-word mnemonic)

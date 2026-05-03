@@ -588,52 +588,61 @@ impl ZcashAuthorizationData {
 
     /// decode from bytes
     pub fn decode(data: &[u8]) -> Result<Self> {
-        if data.len() < 36 {
-            return Err(Error::ZcashParsing("data too short".to_string()));
+        // Helpers that use slice::get for overflow-safe bounds checking.
+        // A QR payload is attacker-controlled; offset arithmetic against
+        // usize must never wrap, and slice indexing must never panic.
+        fn read_arr<const N: usize>(data: &[u8], offset: &mut usize, what: &str) -> Result<[u8; N]> {
+            let end = offset
+                .checked_add(N)
+                .ok_or_else(|| Error::ZcashParsing(format!("{what}: offset overflow")))?;
+            let slice = data
+                .get(*offset..end)
+                .ok_or_else(|| Error::ZcashParsing(format!("{what}: truncated")))?;
+            let arr: [u8; N] = slice
+                .try_into()
+                .map_err(|_| Error::ZcashParsing(format!("{what}: slice/length mismatch")))?;
+            *offset = end;
+            Ok(arr)
+        }
+        fn read_u16(data: &[u8], offset: &mut usize, what: &str) -> Result<usize> {
+            let arr = read_arr::<2>(data, offset, what)?;
+            Ok(u16::from_le_bytes(arr) as usize)
+        }
+        fn read_vec(data: &[u8], offset: &mut usize, len: usize, what: &str) -> Result<Vec<u8>> {
+            let end = offset
+                .checked_add(len)
+                .ok_or_else(|| Error::ZcashParsing(format!("{what}: offset overflow")))?;
+            let slice = data
+                .get(*offset..end)
+                .ok_or_else(|| Error::ZcashParsing(format!("{what}: truncated")))?;
+            let v = slice.to_vec();
+            *offset = end;
+            Ok(v)
         }
 
         let mut offset = 0;
+        let sighash: [u8; 32] = read_arr(data, &mut offset, "sighash")?;
 
-        // sighash
-        let sighash: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-        offset += 32;
-
-        // transparent sigs
-        let t_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-        offset += 2;
-
+        let t_count = read_u16(data, &mut offset, "transparent count")?;
         let mut transparent_sigs = Vec::with_capacity(t_count);
-        for _ in 0..t_count {
-            if offset + 2 > data.len() {
-                return Err(Error::ZcashParsing(
-                    "transparent sig length truncated".to_string(),
-                ));
-            }
-            let sig_len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-
-            if offset + sig_len > data.len() {
-                return Err(Error::ZcashParsing("transparent sig truncated".to_string()));
-            }
-            transparent_sigs.push(data[offset..offset + sig_len].to_vec());
-            offset += sig_len;
+        for i in 0..t_count {
+            let sig_len = read_u16(data, &mut offset, &format!("transparent sig[{i}] len"))?;
+            transparent_sigs.push(read_vec(
+                data,
+                &mut offset,
+                sig_len,
+                &format!("transparent sig[{i}]"),
+            )?);
         }
 
-        // orchard sigs
-        if offset + 2 > data.len() {
-            return Err(Error::ZcashParsing("orchard count truncated".to_string()));
-        }
-        let o_count = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-        offset += 2;
-
+        let o_count = read_u16(data, &mut offset, "orchard count")?;
         let mut orchard_sigs = Vec::with_capacity(o_count);
-        for _ in 0..o_count {
-            if offset + 64 > data.len() {
-                return Err(Error::ZcashParsing("orchard sig truncated".to_string()));
-            }
-            let sig: [u8; 64] = data[offset..offset + 64].try_into().unwrap();
-            orchard_sigs.push(sig);
-            offset += 64;
+        for i in 0..o_count {
+            orchard_sigs.push(read_arr::<64>(
+                data,
+                &mut offset,
+                &format!("orchard sig[{i}]"),
+            )?);
         }
 
         Ok(Self {
@@ -1466,9 +1475,30 @@ impl ZcashSignRequest {
             shielding = false;
         }
 
+        // Helpers — every offset add uses checked_add and every slice
+        // comes from data.get(..) so a malformed QR cannot panic the signer.
+        fn read_arr<const N: usize>(data: &[u8], offset: &mut usize, what: &str) -> Result<[u8; N]> {
+            let end = offset
+                .checked_add(N)
+                .ok_or_else(|| Error::ZcashParsing(format!("{what}: offset overflow")))?;
+            let slice = data
+                .get(*offset..end)
+                .ok_or_else(|| Error::ZcashParsing(format!("{what}: truncated")))?;
+            let arr: [u8; N] = slice
+                .try_into()
+                .map_err(|_| Error::ZcashParsing(format!("{what}: slice/length mismatch")))?;
+            *offset = end;
+            Ok(arr)
+        }
+        fn read_u16(data: &[u8], offset: &mut usize, what: &str) -> Result<usize> {
+            Ok(u16::from_le_bytes(read_arr::<2>(data, offset, what)?) as usize)
+        }
+        fn read_u32(data: &[u8], offset: &mut usize, what: &str) -> Result<u32> {
+            Ok(u32::from_le_bytes(read_arr::<4>(data, offset, what)?))
+        }
+
         // Account index
-        let account_index = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-        offset += 4;
+        let account_index = read_u32(data, &mut offset, "account index")?;
 
         let sighash: [u8; 32];
         let orchard_alphas: Vec<[u8; 32]>;
@@ -1476,58 +1506,44 @@ impl ZcashSignRequest {
         let shielding_inputs;
         if shielding {
             // shielding format: [input_count: 2B][per-input: sighash(32B)+addr_index(4B)]...[action_count=0: 2B]
-            let input_count =
-                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
+            let input_count = read_u16(data, &mut offset, "shielding input count")?;
             if input_count == 0 {
                 return Err(Error::ZcashParsing("shielding: no inputs".to_string()));
             }
             let mut inputs = Vec::with_capacity(input_count);
-            sighash = data[offset..offset + 32].try_into().unwrap(); // first input's sighash for response
-            for _ in 0..input_count {
-                let sh: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-                offset += 32;
-                let addr_idx = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
-                offset += 4;
+            // Peek the first input's sighash for the response without
+            // consuming offset (the loop below re-reads it).
+            sighash = read_arr::<32>(data, &mut offset.clone(), "shielding sighash[0]")?;
+            for i in 0..input_count {
+                let sh: [u8; 32] = read_arr(data, &mut offset, &format!("shielding sighash[{i}]"))?;
+                let addr_idx = read_u32(data, &mut offset, &format!("shielding addr_idx[{i}]"))?;
                 inputs.push((sh, addr_idx));
             }
-            offset += 2; // action_count = 0
+            // action_count = 0 (2 bytes) — accept, don't fail if absent for
+            // older payloads.
+            let _ = read_u16(data, &mut offset, "shielding action_count");
             orchard_alphas = Vec::new();
             shielding_inputs = inputs;
         } else {
             // regular send: [sighash: 32B][action_count: 2B][alphas...]
-            sighash = data[offset..offset + 32].try_into().unwrap();
-            offset += 32;
-            let action_count =
-                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-
-            // Each action's alpha (32 bytes each)
+            sighash = read_arr::<32>(data, &mut offset, "sighash")?;
+            let action_count = read_u16(data, &mut offset, "action count")?;
             let mut alphas = Vec::with_capacity(action_count);
-            for _ in 0..action_count {
-                if offset + 32 > data.len() {
-                    return Err(Error::ZcashParsing("alpha truncated".to_string()));
-                }
-                let alpha: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
-                alphas.push(alpha);
-                offset += 32;
+            for i in 0..action_count {
+                alphas.push(read_arr::<32>(data, &mut offset, &format!("alpha[{i}]"))?);
             }
             orchard_alphas = alphas;
             shielding_inputs = Vec::new();
         }
 
-        // Summary (length-prefixed string)
-        let summary = if offset + 2 <= data.len() {
-            let summary_len =
-                u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
-            offset += 2;
-            if offset + summary_len <= data.len() {
-                String::from_utf8_lossy(&data[offset..offset + summary_len]).to_string()
-            } else {
-                String::new()
+        // Summary (length-prefixed string) — optional trailing field.
+        let summary = match read_u16(data, &mut offset, "summary length") {
+            Ok(summary_len) => {
+                let end = offset.checked_add(summary_len).unwrap_or(data.len());
+                let slice = data.get(offset..end).unwrap_or(&[]);
+                String::from_utf8_lossy(slice).to_string()
             }
-        } else {
-            String::new()
+            Err(_) => String::new(),
         };
 
         Ok(Self {
