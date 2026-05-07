@@ -133,13 +133,13 @@ fun ZidSignScreen(
 							.padding(12.dp),
 						verticalArrangement = Arrangement.spacedBy(6.dp)
 					) {
-						DetailRow("identity", identity)
-						DetailRow("mode", if (mode == "cross-site") "cross-site (linkable)" else "site-specific")
+						ZidDetailRow("identity", identity)
+						ZidDetailRow("mode", if (mode == "cross-site") "cross-site (linkable)" else "site-specific")
 						if (mode == "site" && rotation > 0) {
-							DetailRow("rotation", "#$rotation")
+							ZidDetailRow("rotation", "#$rotation")
 						}
-						DetailRow("algorithm", algorithm)
-						DetailRow("challenge", if (challengeHex.length > 32) challengeHex.take(32) + "..." else challengeHex)
+						ZidDetailRow("algorithm", algorithm)
+						ZidDetailRow("challenge", if (challengeHex.length > 32) challengeHex.take(32) + "..." else challengeHex)
 					}
 
 					Text(
@@ -268,7 +268,7 @@ fun ZidSignScreen(
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
+private fun ZidDetailRow(label: String, value: String) {
 	Row(
 		modifier = Modifier.fillMaxWidth(),
 		horizontalArrangement = Arrangement.SpaceBetween
