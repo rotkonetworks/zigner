@@ -1,5 +1,7 @@
 package net.rotko.zigner.screens.scan.transaction
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,34 +17,34 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
 import net.rotko.zigner.components.base.TappableAddress
-import net.rotko.zigner.components.qrcode.AnimatedQrKeysInfo
-import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
 import io.parity.signer.uniffi.ZcashPcztInspection
 import io.parity.signer.uniffi.decodeUrZcashPczt
+import io.parity.signer.uniffi.encodeToQr
 import io.parity.signer.uniffi.inspectZcashPczt
 import io.parity.signer.uniffi.signZcashPcztUr
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
-/**
- * PCZT signing screen with full transaction inspection.
- *
- * Shows spend/output breakdown, anchor match, known spend verification
- * before the user can approve signing.
- */
+// Inspect → review → sign → render signed UR back as animated QR for the
+// coordinator (zafu) to scan and broadcast.
 
 enum class PcztState {
 	INSPECTING,
 	REVIEW,
-	SEED_SELECTION,
 	SIGNING,
 	DISPLAY_SIGNATURE,
 	ERROR,
@@ -51,6 +53,7 @@ enum class PcztState {
 @Composable
 fun ZcashPcztScreen(
 	urParts: List<String>,
+	getSeedPhrase: suspend () -> String,
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
@@ -59,8 +62,9 @@ fun ZcashPcztScreen(
 	var state by remember { mutableStateOf(PcztState.INSPECTING) }
 	var errorMsg by remember { mutableStateOf("") }
 	var inspection by remember { mutableStateOf<ZcashPcztInspection?>(null) }
-	var pcztBytes by remember { mutableStateOf<List<UByte>>(emptyList()) }
 	var signedUrParts by remember { mutableStateOf<List<String>>(emptyList()) }
+	var signedQrFrames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
+	var currentFrameIdx by remember { mutableStateOf(0) }
 
 	// Auto-inspect on load
 	LaunchedEffect(Unit) {
@@ -69,7 +73,6 @@ fun ZcashPcztScreen(
 				val bytes = withContext(Dispatchers.Default) {
 					decodeUrZcashPczt(urParts)
 				}
-				pcztBytes = bytes
 				val result = withContext(Dispatchers.Default) {
 					inspectZcashPczt(bytes)
 				}
@@ -79,6 +82,18 @@ fun ZcashPcztScreen(
 				errorMsg = e.message ?: "Failed to inspect PCZT"
 				state = PcztState.ERROR
 			}
+		}
+	}
+
+	// 4 fps cycle — fast enough that 100 frames at 2× redundancy finish in
+	// ~25s, slow enough that a webcam can autofocus per frame.
+	LaunchedEffect(signedQrFrames) {
+		if (signedQrFrames.isEmpty()) return@LaunchedEffect
+		var idx = 0
+		while (true) {
+			currentFrameIdx = idx
+			delay(250.milliseconds)
+			idx = (idx + 1) % signedQrFrames.size
 		}
 	}
 
@@ -194,9 +209,40 @@ fun ZcashPcztScreen(
 					PrimaryButtonWide(
 						label = "Approve & Sign",
 						onClicked = {
-							state = PcztState.SEED_SELECTION
-							// TODO: proper seed selection; for now use first seed
-							// This will be wired when integrating with ScanViewModel
+							state = PcztState.SIGNING
+							scope.launch {
+								try {
+									val seedPhrase = getSeedPhrase()
+									if (seedPhrase.isEmpty()) {
+										errorMsg = "No seed phrase available"
+										state = PcztState.ERROR
+										return@launch
+									}
+
+									val signed = withContext(Dispatchers.Default) {
+										// 200-byte fragments give ~v15-20 QRs (webcam-friendly).
+										// Bumping past 300 makes desktop webcams fail to lock.
+										signZcashPcztUr(seedPhrase, 0u, urParts, 200u)
+									}
+									signedUrParts = signed
+
+									// Pre-render so the ticker just swaps bitmaps without
+									// per-frame compute, keeping the animation smooth.
+									val bitmaps = withContext(Dispatchers.Default) {
+										signed.map { urString ->
+											val bytes = urString.toByteArray(Charsets.UTF_8).map { it.toUByte() }
+											val pngBytes = encodeToQr(bytes, false)
+											val byteArray = pngBytes.map { it.toByte() }.toByteArray()
+											BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size).asImageBitmap()
+										}
+									}
+									signedQrFrames = bitmaps
+									state = PcztState.DISPLAY_SIGNATURE
+								} catch (e: Exception) {
+									errorMsg = e.message ?: "Signing failed"
+									state = PcztState.ERROR
+								}
+							}
 						}
 					)
 					SecondaryButtonWide(
@@ -224,35 +270,59 @@ fun ZcashPcztScreen(
 
 			PcztState.DISPLAY_SIGNATURE -> {
 				Text(
-					text = "Signed. Show this to the coordinator.",
+					text = "Show this QR to zafu",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)
 				)
-				// Display signed PCZT UR parts as animated QR
-				// TODO: implement animated QR for UR parts
-				Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-					Text(
-						text = "${signedUrParts.size} UR part(s) ready",
-						style = SignerTypeface.BodyL,
-						color = MaterialTheme.colors.primary
-					)
+				Box(
+					modifier = Modifier
+						.weight(1f)
+						.fillMaxWidth(),
+					contentAlignment = Alignment.Center
+				) {
+					signedQrFrames.getOrNull(currentFrameIdx)?.let { bitmap ->
+						Box(
+							modifier = Modifier
+								.fillMaxWidth()
+								.aspectRatio(1f)
+								.clip(RoundedCornerShape(12.dp))
+								.background(Color.White),
+							contentAlignment = Alignment.Center,
+						) {
+							Image(
+								bitmap = bitmap,
+								contentDescription = "Signed PCZT QR frame",
+								contentScale = ContentScale.Fit,
+								modifier = Modifier.fillMaxSize()
+							)
+						}
+					}
 				}
+				Text(
+					text = if (signedQrFrames.size > 1)
+						"frame ${currentFrameIdx + 1} / ${signedQrFrames.size}"
+					else
+						"single frame",
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textTertiary,
+					modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally)
+				)
 				SignerDivider()
 				Spacer(modifier = Modifier.height(16.dp))
 				PrimaryButtonWide(label = "Done", onClicked = onDone)
 			}
 
-			PcztState.SEED_SELECTION, PcztState.ERROR -> {
+			PcztState.ERROR -> {
 				Box(
 					modifier = Modifier.weight(1f).fillMaxWidth(),
 					contentAlignment = Alignment.Center
 				) {
 					Column(horizontalAlignment = Alignment.CenterHorizontally) {
 						Text(
-							text = if (state == PcztState.ERROR) "Error" else "Signing",
+							text = "Error",
 							style = SignerTypeface.TitleS,
-							color = if (state == PcztState.ERROR) MaterialTheme.colors.red500 else MaterialTheme.colors.primary
+							color = MaterialTheme.colors.red500
 						)
 						Spacer(modifier = Modifier.height(8.dp))
 						Text(

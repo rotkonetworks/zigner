@@ -2208,8 +2208,9 @@ fn encode_signed_pczt_ur(
             })?;
 
         let mut parts = Vec::new();
-        // Generate enough parts to reconstruct (with some redundancy)
-        let total_parts = encoder.fragment_count() * 2; // 2x for fountain code redundancy
+        // 2× redundancy: receiver typically converges around 1.05–1.20× but
+        // camera misses on dense frames need extra margin to recover.
+        let total_parts = encoder.fragment_count() * 2;
 
         for _ in 0..total_parts {
             let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {
