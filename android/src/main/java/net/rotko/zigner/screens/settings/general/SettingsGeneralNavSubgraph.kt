@@ -35,6 +35,7 @@ internal fun SettingsGeneralNavSubgraph(
 	val shieldState = vm.networkState.collectAsStateWithLifecycle()
 	val onlineModeEnabled = vm.onlineModeEnabled.collectAsStateWithLifecycle()
 	val onlineModeWasEverEnabled = vm.onlineModeWasEverEnabled.collectAsStateWithLifecycle()
+	val lightThemeEnabled = vm.lightThemeEnabled.collectAsStateWithLifecycle()
 
 	val menuNavController = rememberNavController()
 
@@ -67,9 +68,11 @@ internal fun SettingsGeneralNavSubgraph(
 					menuNavController.navigate(SettingsGeneralMenu.online_mode_confirm)
 				}
 			},
+			onLightThemeToggle = { vm.toggleLightTheme() },
 			isStrongBoxProtected = vm.isStrongBoxProtected,
 			isOnlineModeEnabled = onlineModeEnabled.value,
 			wasOnlineModeEverEnabled = onlineModeWasEverEnabled.value,
+			isLightThemeEnabled = lightThemeEnabled.value,
 			securitySummary = securitySummary,
 			appVersion = appVersion,
 			networkState = shieldState,

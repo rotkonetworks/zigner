@@ -82,14 +82,15 @@ fun ZcashPcztScreen(
 		}
 	}
 
-	// 4 fps cycle — fast enough that 100 frames at 2× redundancy finish in
-	// ~25s, slow enough that a webcam can autofocus per frame.
+	// 1.4 fps cycle — webcams without macro need ~600-800ms to autofocus on a
+	// changing subject. Faster than this and focus hunts indefinitely on the
+	// rapidly-changing pattern, so the camera reads zero successful QRs.
 	LaunchedEffect(signedQrFrames) {
 		if (signedQrFrames.isEmpty()) return@LaunchedEffect
 		var idx = 0
 		while (true) {
 			currentFrameIdx = idx
-			delay(250.milliseconds)
+			delay(700.milliseconds)
 			idx = (idx + 1) % signedQrFrames.size
 		}
 	}

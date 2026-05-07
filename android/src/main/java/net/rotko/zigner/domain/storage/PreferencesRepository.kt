@@ -21,6 +21,7 @@ class PreferencesRepository(private val context: Context) {
 	private val lastSelectedKeySet = stringPreferencesKey("last_selected_seed_name")
 	private val onlineModeEnabledKey = booleanPreferencesKey("online_mode_enabled")
 	private val onlineModeWasEverEnabledKey = booleanPreferencesKey("online_mode_was_ever_enabled")
+	private val lightThemeEnabledKey = booleanPreferencesKey("light_theme_enabled")
 
 	val networksFilter = context.dataStore.data
 		.map { preferences ->
@@ -93,5 +94,14 @@ class PreferencesRepository(private val context: Context) {
 	 */
 	suspend fun wasOnlineModeEverEnabled(): Boolean {
 		return context.dataStore.data.first()[onlineModeWasEverEnabledKey] ?: false
+	}
+
+	// Light theme toggle. Default off (= dark theme). Light gives black-on-white
+	// QR codes that webcams scan more reliably than the inverted dark theme.
+	val lightThemeEnabled: Flow<Boolean> = context.dataStore.data
+		.map { preferences -> preferences[lightThemeEnabledKey] ?: false }
+
+	suspend fun setLightThemeEnabled(enabled: Boolean) {
+		context.dataStore.edit { settings -> settings[lightThemeEnabledKey] = enabled }
 	}
 }

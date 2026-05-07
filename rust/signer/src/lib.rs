@@ -2208,9 +2208,10 @@ fn encode_signed_pczt_ur(
             })?;
 
         let mut parts = Vec::new();
-        // 2× redundancy: receiver typically converges around 1.05–1.20× but
-        // camera misses on dense frames need extra margin to recover.
-        let total_parts = encoder.fragment_count() * 2;
+        // 1.3× redundancy: with the slowed (~700ms/frame) display each frame
+        // should land cleanly, so we only need a slim margin over the 1.05–1.20×
+        // BC-UR convergence threshold.
+        let total_parts = (encoder.fragment_count() * 13).div_ceil(10);
 
         for _ in 0..total_parts {
             let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {
