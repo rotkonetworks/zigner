@@ -10,6 +10,7 @@ import net.rotko.zigner.domain.encodeHex
 import net.rotko.zigner.domain.submitErrorState
 import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
+import io.parity.signer.uniffi.decodeUrZcashPczt
 import io.parity.signer.uniffi.qrparserGetPacketsTotal
 import io.parity.signer.uniffi.qrparserTryDecodeQrSequence
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 import timber.log.Timber
 
+
+private const val PROBE_EVERY_N = 4
 
 class CameraViewModel() : ViewModel() {
 
@@ -371,13 +374,53 @@ class CameraViewModel() : ViewModel() {
 				}
 			}
 			normalizedUr.startsWith("ur:zcash-pczt") -> {
-				processUrFrameForType(urString, normalizedUr, "ur:zcash-pczt", _zcashPcztFrames) { frames ->
+				processUrFountainFrame(urString, normalizedUr, "ur:zcash-pczt", _zcashPcztFrames,
+					tryDecode = { frames ->
+						try { decodeUrZcashPczt(frames); true } catch (_: Exception) { false }
+					},
+				) { frames ->
 					_zcashPcztComplete.value = frames
 				}
 			}
 			else -> {
 				Timber.d("Ignoring unknown UR type: $normalizedUr")
 			}
+		}
+	}
+
+	// BC-UR fountain: probe decoder past seqLen threshold (typical convergence
+	// 1.05–1.20×); captured stays uncapped so the counter keeps moving.
+	private fun processUrFountainFrame(
+		urString: String,
+		normalizedUr: String,
+		urPrefix: String,
+		framesFlow: MutableStateFlow<List<String>>,
+		tryDecode: (List<String>) -> Boolean,
+		onComplete: (List<String>) -> Unit,
+	) {
+		val currentFrames = framesFlow.value
+		if (currentFrames.any { it.lowercase() == normalizedUr }) return
+
+		val updatedFrames = currentFrames + urString
+		framesFlow.value = updatedFrames
+
+		val sequenceMatch = Regex("$urPrefix/(\\d+)-(\\d+)/").find(normalizedUr)
+		if (sequenceMatch == null) {
+			// Single-part UR — decode immediately.
+			resetScanValues()
+			onComplete(listOf(urString))
+			return
+		}
+
+		val seqLen = sequenceMatch.groupValues[2].toIntOrNull() ?: 1
+		_total.value = seqLen
+		_captured.value = updatedFrames.size
+
+		val framesPastThreshold = updatedFrames.size - seqLen
+		val probeNow = framesPastThreshold >= 0 && framesPastThreshold % PROBE_EVERY_N == 0
+		if (probeNow && tryDecode(updatedFrames)) {
+			resetScanValues()
+			onComplete(updatedFrames)
 		}
 	}
 

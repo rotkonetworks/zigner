@@ -2203,8 +2203,10 @@ fn encode_signed_pczt_ur(
             })?;
 
         let mut parts = Vec::new();
-        // Generate enough parts to reconstruct (with some redundancy)
-        let total_parts = encoder.fragment_count() * 2; // 2x for fountain code redundancy
+        // 1.3× redundancy: with the slowed (~700ms/frame) display each frame
+        // should land cleanly, so we only need a slim margin over the 1.05–1.20×
+        // BC-UR convergence threshold.
+        let total_parts = (encoder.fragment_count() * 13).div_ceil(10);
 
         for _ in 0..total_parts {
             let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {

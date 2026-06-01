@@ -364,7 +364,7 @@ private fun ZcashSimpleContent(req: SignRequest.ZcashSimple) {
 }
 
 @Composable
-private fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
+internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 	val inspection = req.inspection
 	if (inspection == null) {
 		Text(
@@ -518,7 +518,7 @@ private fun AdvancedTabContent(signRequest: SignRequest) {
 
 /** Prominent card for the main action (amount + recipient) */
 @Composable
-private fun HighlightCard(title: String, subtitle: String, color: Color) {
+internal fun HighlightCard(title: String, subtitle: String, color: Color) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -544,7 +544,7 @@ private fun HighlightCard(title: String, subtitle: String, color: Color) {
 
 /** Simple label: value row */
 @Composable
-private fun DetailRow(label: String, value: String) {
+internal fun DetailRow(label: String, value: String) {
 	Row(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -571,7 +571,7 @@ private fun DetailRow(label: String, value: String) {
 
 /** Warning card with red background */
 @Composable
-private fun WarningCard(message: String) {
+internal fun WarningCard(message: String) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()

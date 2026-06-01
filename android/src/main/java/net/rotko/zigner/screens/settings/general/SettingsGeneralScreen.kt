@@ -58,9 +58,11 @@ internal fun SettingsScreenGeneralView(
 	onExposedClicked: Callback,
 	onOnlineModeToggle: Callback,
 	onZcashTestQr: Callback = {},
+	onLightThemeToggle: Callback,
 	isStrongBoxProtected: Boolean,
 	isOnlineModeEnabled: Boolean,
 	wasOnlineModeEverEnabled: Boolean,
+	isLightThemeEnabled: Boolean,
 	securitySummary: String,
 	appVersion: String,
 	networkState: State<NetworkState?>,
@@ -106,6 +108,12 @@ internal fun SettingsScreenGeneralView(
 					isChecked = isOnlineModeEnabled,
 					showWarning = wasOnlineModeEverEnabled && !isOnlineModeEnabled,
 					onClick = onOnlineModeToggle,
+				)
+				SettingsToggleElement(
+					name = "Light Theme",
+					description = "Black-on-white QR codes scan better on webcams",
+					isChecked = isLightThemeEnabled,
+					onClick = onLightThemeToggle,
 				)
 				SettingsElement(
 					name = "Zcash Test QR",
@@ -249,9 +257,11 @@ private fun PreviewSettingsScreen() {
 			onExposedClicked = {},
 			onOnlineModeToggle = {},
 			onZcashTestQr = {},
+			onLightThemeToggle = {},
 			isStrongBoxProtected = false,
 			isOnlineModeEnabled = false,
 			wasOnlineModeEverEnabled = true,
+			isLightThemeEnabled = false,
 			securitySummary = "StrongBox + MTE",
 			appVersion = "0.6.1",
 			networkState = state,

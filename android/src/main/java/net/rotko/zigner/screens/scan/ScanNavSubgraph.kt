@@ -103,6 +103,7 @@ fun ScanNavSubgraph(
 	if (zcashPcztParts.value != null) {
 		ZcashPcztScreen(
 			urParts = zcashPcztParts.value!!,
+			getSeedPhrase = { scanViewModel.getFirstSeedPhrase() },
 			modifier = Modifier.statusBarsPadding(),
 			onDone = { scanViewModel.zcashPcztUrParts.value = null },
 		)
