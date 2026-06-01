@@ -1961,15 +1961,48 @@ fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
 }
 
 /// Inspect a PCZT: extract spend/output details, cross-reference against verified notes.
+/// Defense-in-depth caps on PCZT parsing. The pczt crate uses postcard for
+/// deserialization, which doesn't bound declared collection lengths against
+/// remaining slice length — a hostile PCZT can claim a Vec<Action> of 2^32
+/// items and trigger allocation-driven OOM. We reject obviously-bogus inputs
+/// upfront. Real Orchard bundles top out in the low tens of actions.
+const MAX_PCZT_BYTES: usize = 1024 * 1024; // 1 MiB — far above any real PCZT
+const MAX_ORCHARD_ACTIONS: usize = 4096; // far above any real bundle (~tens)
+
 fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorDisplayed> {
     use pczt::Pczt;
 
-    let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
-        s: format!("Failed to parse PCZT: {:?}", e),
-    })?;
+    if pczt_bytes.len() > MAX_PCZT_BYTES {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "PCZT too large: {} B (max {MAX_PCZT_BYTES})",
+                pczt_bytes.len()
+            ),
+        });
+    }
+
+    // The pczt parse + every subsequent access can panic on adversarial input
+    // (declared collection lengths > remaining slice, integer overflow on
+    // count fields). Catch the panic so the UDL surface returns a clean
+    // ErrorDisplayed instead of unwinding into the Kotlin/Swift FFI boundary.
+    let pczt = std::panic::catch_unwind(|| Pczt::parse(&pczt_bytes))
+        .map_err(|_| ErrorDisplayed::Str {
+            s: "Panic during PCZT parse — input is malformed".to_string(),
+        })?
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to parse PCZT: {:?}", e),
+        })?;
 
     let orchard = pczt.orchard();
-    let action_count = orchard.actions().len() as u32;
+    let action_count_raw = orchard.actions().len();
+    if action_count_raw > MAX_ORCHARD_ACTIONS {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Orchard bundle has {action_count_raw} actions, exceeds cap {MAX_ORCHARD_ACTIONS}"
+            ),
+        });
+    }
+    let action_count = action_count_raw as u32;
 
     // Load verified notes for cross-reference. Used by the known_spends warning
     // (zigner's distinguishing safety guard over a Keystone-equivalent signer —
