@@ -120,8 +120,12 @@ fun ZcashPcztScreen(
 						.verticalScroll(rememberScrollState()),
 					verticalArrangement = Arrangement.spacedBy(12.dp)
 				) {
-					// Anchor verification
-					AnchorCard(insp)
+					// Verified-notes context (known-spends ratio + local balance).
+					// Anchor is intentionally not displayed or validated —
+					// Keystone doesn't and equality-checking against our local
+					// anchor was the rotko-invented gate behind the constant
+					// "re-sync first" friction.
+					VerificationCard(insp)
 
 					// Spends
 					if (insp.spends.isNotEmpty()) {
@@ -177,9 +181,6 @@ fun ZcashPcztScreen(
 					}
 
 					// Warnings
-					if (!insp.anchorMatches) {
-						WarningCard("Anchor does not match verified state. Transaction may reference a different chain state.")
-					}
 					if (insp.knownSpends < insp.actionCount) {
 						WarningCard("${insp.actionCount - insp.knownSpends} spend(s) not in verified notes. These may be unknown or dummy actions.")
 					}
@@ -271,7 +272,7 @@ fun ZcashPcztScreen(
 }
 
 @Composable
-private fun AnchorCard(insp: ZcashPcztInspection) {
+private fun VerificationCard(insp: ZcashPcztInspection) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -280,17 +281,6 @@ private fun AnchorCard(insp: ZcashPcztInspection) {
 			.padding(16.dp),
 		verticalArrangement = Arrangement.spacedBy(4.dp)
 	) {
-		Row(
-			modifier = Modifier.fillMaxWidth(),
-			horizontalArrangement = Arrangement.SpaceBetween
-		) {
-			Text("Anchor", style = SignerTypeface.LabelM, color = MaterialTheme.colors.textTertiary)
-			Text(
-				text = if (insp.anchorMatches) "matches" else "MISMATCH",
-				style = SignerTypeface.LabelM,
-				color = if (insp.anchorMatches) MaterialTheme.colors.primary else MaterialTheme.colors.red500
-			)
-		}
 		Text(
 			text = "${insp.knownSpends}/${insp.actionCount} spends verified",
 			style = SignerTypeface.CaptionM,

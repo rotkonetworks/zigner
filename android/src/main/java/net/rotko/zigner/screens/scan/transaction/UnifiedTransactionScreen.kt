@@ -415,11 +415,6 @@ private fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 	// Fee
 	val feeZec = "%.8f".format(inspection.netValue / 100_000_000.0)
 	DetailRow(label = "Fee", value = "$feeZec ZEC")
-
-	// Warnings
-	if (!inspection.anchorMatches) {
-		WarningCard("Anchor mismatch — the transaction may reference an outdated state.")
-	}
 }
 
 // =============================================================================

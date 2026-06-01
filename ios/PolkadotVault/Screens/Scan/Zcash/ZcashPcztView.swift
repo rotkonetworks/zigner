@@ -54,7 +54,7 @@ struct ZcashPcztView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.small) {
                     // Anchor status
-                    anchorCard(inspection: inspection)
+                    verificationCard(inspection: inspection)
 
                     // Spends
                     if !inspection.spends.isEmpty {
@@ -108,9 +108,6 @@ struct ZcashPcztView: View {
                     }
 
                     // Warnings
-                    if !inspection.anchorMatches {
-                        warningCard("Anchor does not match verified state. Transaction may reference a different chain state.")
-                    }
                     if inspection.knownSpends < inspection.actionCount {
                         warningCard("\(inspection.actionCount - inspection.knownSpends) spend(s) not in verified notes.")
                     }
@@ -188,17 +185,8 @@ struct ZcashPcztView: View {
 
     // MARK: - Card Components
 
-    private func anchorCard(inspection: ZcashPcztInspection) -> some View {
+    private func verificationCard(inspection: ZcashPcztInspection) -> some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            HStack {
-                Text("Anchor")
-                    .font(PrimaryFont.labelM.font)
-                    .foregroundColor(.textAndIconsTertiary)
-                Spacer()
-                Text(inspection.anchorMatches ? "matches" : "MISMATCH")
-                    .font(PrimaryFont.labelM.font)
-                    .foregroundColor(inspection.anchorMatches ? .textAndIconsPrimary : .accentRed300)
-            }
             Text("\(inspection.knownSpends)/\(inspection.actionCount) spends verified")
                 .font(PrimaryFont.captionM.font)
                 .foregroundColor(inspection.knownSpends == inspection.actionCount ? .textAndIconsSecondary : .accentRed300)
@@ -206,7 +194,7 @@ struct ZcashPcztView: View {
             Text(String(format: "Verified balance: %.8f ZEC", balZec))
                 .font(PrimaryFont.captionM.font)
                 .foregroundColor(.textAndIconsSecondary)
-        }
+}
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Spacing.medium)
         .containerBackground()

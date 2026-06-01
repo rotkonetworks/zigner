@@ -1970,17 +1970,28 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
 
     let orchard = pczt.orchard();
     let action_count = orchard.actions().len() as u32;
-    let pczt_anchor = orchard.anchor();
-    let pczt_anchor_hex = hex::encode(pczt_anchor);
 
-    // Load verified notes for cross-reference
-    let (verified_balance, verified_anchor, verified_nullifiers, verified_notes_values) = {
+    // Load verified notes for cross-reference. Used by the known_spends warning
+    // (zigner's distinguishing safety guard over a Keystone-equivalent signer —
+    // we can warn when the PCZT spends notes we haven't verified) and to derive
+    // the network for recipient-address encoding.
+    //
+    // The verified_anchor was previously used for byte-equality matching against
+    // the PCZT's anchor; that check was rotko-invented and doesn't exist in the
+    // canonical Zashi → Keystone flow, so it's gone. The DB still stores the
+    // anchor for the note-sync UI on a separate screen; the PCZT path doesn't
+    // consult it for signing decisions.
+    let (verified_balance, verified_nullifiers, verified_notes_values, is_mainnet) = {
         let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
         if let Some(database) = db_guard.as_ref() {
             let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
-            let anchor = db_handling::zcash::get_verified_anchor(database)
+            // Anchor is read only to recover the network flag; the bytes are
+            // discarded. Defaults to mainnet when no notes have been synced.
+            let mainnet = db_handling::zcash::get_verified_anchor(database)
                 .ok()
-                .flatten();
+                .flatten()
+                .map(|(_, _, m, _)| m)
+                .unwrap_or(true);
             let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
             let nullifiers: std::collections::HashSet<String> = notes
                 .iter()
@@ -1991,22 +2002,16 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
                 .iter()
                 .map(|(val, nf_hex, _, _, _)| (nf_hex.clone(), *val))
                 .collect();
-            (balance, anchor, nullifiers, values)
+            (balance, nullifiers, values, mainnet)
         } else {
             (
                 0,
-                None,
                 std::collections::HashSet::new(),
                 std::collections::HashMap::new(),
+                true,
             )
         }
     };
-
-    // Check anchor match
-    let anchor_matches = verified_anchor
-        .as_ref()
-        .map(|(a, _, _, _)| hex::encode(a) == pczt_anchor_hex)
-        .unwrap_or(false);
 
     // Extract spend details (value may be redacted in PCZT, use nullifier for cross-ref)
     let mut spends = Vec::new();
@@ -2031,12 +2036,6 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
             known,
         });
     }
-
-    // Determine network for address encoding
-    let is_mainnet = verified_anchor
-        .as_ref()
-        .map(|(_, _, mainnet, _)| *mainnet)
-        .unwrap_or(true);
 
     // Extract output details with human-readable addresses
     let mut outputs = Vec::new();
@@ -2069,10 +2068,8 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         spends,
         outputs,
         net_value,
-        anchor_matches,
         verified_balance,
         known_spends,
-        anchor_hex: pczt_anchor_hex,
     })
 }
 
@@ -2089,23 +2086,21 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
-    // Run inspection and enforce verification gates before signing
+    // Run inspection and enforce verification gates before signing.
+    //
+    // The previous anchor-equality and "no verified notes" gates were
+    // rotko-invented and don't appear in the canonical Zashi → Keystone PCZT
+    // flow — Keystone's firmware signs whatever passes user review of
+    // recipient + amount + fee, without inspecting the PCZT anchor at all
+    // (verified at /steam/rotko/keystone3-firmware/rust/apps/zcash/src/pczt/
+    // {sign,check}.rs). We mirror that.
+    //
+    // The only zigner-specific guard kept: refuse to sign when zero PCZT
+    // spend nullifiers match the locally verified note set, since the
+    // verified-notes store is zigner's distinguishing value over a
+    // canonical Keystone-shape signer. A blind-signing footgun that
+    // Keystone cannot detect.
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
-
-    if inspection.verified_balance == 0 && !inspection.anchor_matches {
-        return Err(ErrorDisplayed::Str {
-            s: "No verified notes. Sync notes from zcli before signing (zcli export-notes → scan QR).".to_string(),
-        });
-    }
-
-    if !inspection.anchor_matches {
-        return Err(ErrorDisplayed::Str {
-            s: format!(
-                "PCZT anchor does not match verified anchor. Sync notes to current state first. PCZT anchor: {}",
-                inspection.anchor_hex
-            ),
-        });
-    }
 
     if inspection.known_spends == 0 && inspection.action_count > 0 {
         return Err(ErrorDisplayed::Str {
