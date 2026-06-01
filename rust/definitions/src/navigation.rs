@@ -1084,10 +1084,8 @@ pub struct ZcashPcztInspection {
     pub spends: Vec<ZcashPcztSpend>,
     pub outputs: Vec<ZcashPcztOutput>,
     pub net_value: i64,
-    pub anchor_matches: bool,
     pub verified_balance: u64,
     pub known_spends: u32,
-    pub anchor_hex: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
