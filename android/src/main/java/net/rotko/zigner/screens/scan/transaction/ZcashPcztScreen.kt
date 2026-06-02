@@ -56,6 +56,7 @@ enum class PcztState {
 fun ZcashPcztScreen(
 	urParts: List<String>,
 	getSeedPhrase: suspend () -> String,
+	getSeedName: suspend () -> String,
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
@@ -67,6 +68,11 @@ fun ZcashPcztScreen(
 	var selectedTab by remember { mutableStateOf(0) }
 	var signedQrFrames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
 	var currentFrameIdx by remember { mutableStateOf(0) }
+	// Captured at inspect time so the on-screen identity matches the seed
+	// that will sign (vs. re-fetching at click time and risking a different
+	// map-iteration first value if seeds change between review and sign).
+	var signingSeedName by remember { mutableStateOf("") }
+	val accountIndex: UInt = 0u
 
 	LaunchedEffect(Unit) {
 		scope.launch {
@@ -74,6 +80,7 @@ fun ZcashPcztScreen(
 				val bytes = withContext(Dispatchers.Default) { decodeUrZcashPczt(urParts) }
 				val result = withContext(Dispatchers.Default) { inspectZcashPczt(bytes) }
 				inspection = result
+				signingSeedName = getSeedName()
 				state = PcztState.REVIEW
 			} catch (e: Exception) {
 				errorMsg = e.message ?: "Failed to inspect PCZT"
@@ -114,6 +121,16 @@ fun ZcashPcztScreen(
 			PcztState.REVIEW -> {
 				val insp = inspection ?: return@Column
 				val signRequest = SignRequest.ZcashPczt(urParts = urParts, inspection = insp)
+
+				// Identity header — make explicit which seed + account is
+				// about to sign. Account index is currently hardcoded; this
+				// row at least surfaces "what you're authorizing with."
+				Text(
+					text = "Signing as: ${signingSeedName.ifEmpty { "(no seed available)" }} · account $accountIndex",
+					style = SignerTypeface.LabelM,
+					color = MaterialTheme.colors.textTertiary,
+					modifier = Modifier.padding(bottom = 8.dp),
+				)
 
 				val tabs = listOf("Basic", "Advanced")
 				TabRow(
@@ -183,7 +200,7 @@ fun ZcashPcztScreen(
 									val signed = withContext(Dispatchers.Default) {
 										// 200-byte fragments give ~v15-20 QRs (webcam-friendly).
 										// Bumping past 300 makes desktop webcams fail to lock.
-										signZcashPcztUr(seedPhrase, 0u, urParts, 200u)
+										signZcashPcztUr(seedPhrase, accountIndex, urParts, 200u)
 									}
 									// Pre-render so the ticker just swaps bitmaps without
 									// per-frame compute, keeping the animation smooth.
@@ -348,6 +365,9 @@ private fun PcztGlossaryNote(insp: ZcashPcztInspection) {
 @Composable
 private fun PcztAdvancedContent(insp: ZcashPcztInspection, urParts: List<String>) {
 	DetailRow(label = "Actions", value = "${insp.actionCount}")
+	DetailRow(label = "Tx version", value = "v${insp.txVersion}")
+	DetailRow(label = "Branch ID", value = "0x${insp.consensusBranchIdHex}")
+	DetailRow(label = "Expiry height", value = "${insp.expiryHeight}")
 	DetailRow(label = "UR parts", value = "${urParts.size}")
 
 	if (insp.spends.isNotEmpty()) {

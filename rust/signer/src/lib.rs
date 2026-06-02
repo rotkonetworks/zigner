@@ -2088,21 +2088,59 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         });
     }
 
-    // Net value from bundle's value_sum (authoritative)
+    // Orchard's value_sum = (total spent − total output) in zatoshis.
+    // Sign-extend into i64 for fee math.
     let &(value_sum_magnitude, value_sum_is_negative) = orchard.value_sum();
-    let net_value = if value_sum_is_negative {
+    let orchard_net_value: i64 = if value_sum_is_negative {
         -(value_sum_magnitude as i64)
     } else {
         value_sum_magnitude as i64
     };
 
+    // True fee = Σ over all three bundles of (in − out).
+    // - transparent: explicit input.value − output.value sum
+    // - sapling: bundle exposes value_sum (i128) — same sign convention
+    // - orchard: orchard_net_value above
+    //
+    // For shielded-only txs the transparent + sapling terms are zero and the
+    // fee equals orchard_net_value, so the old code accidentally worked.
+    // For shielding / deshielding it didn't.
+    let transparent = pczt.transparent();
+    let transparent_in: u64 = transparent.inputs().iter().map(|i| *i.value()).sum();
+    let transparent_out: u64 = transparent.outputs().iter().map(|o| *o.value()).sum();
+    let transparent_balance: i64 =
+        (transparent_in as i64).saturating_sub(transparent_out as i64);
+    // value_sum is i128 because intermediate arithmetic during PCZT
+    // construction can exceed i64. A complete PCZT's value_sum always fits
+    // in i64; clamp on overflow for safety.
+    let sapling_v: i128 = *pczt.sapling().value_sum();
+    let sapling_balance: i64 = if (i64::MIN as i128..=i64::MAX as i128).contains(&sapling_v) {
+        sapling_v as i64
+    } else {
+        0
+    };
+    let fee_zat: i64 = transparent_balance
+        .saturating_add(sapling_balance)
+        .saturating_add(orchard_net_value);
+
+    // Global tx metadata. Cold device displays these so the user knows
+    // which consensus fork + expiry window they're authorizing.
+    let global = pczt.global();
+    let tx_version: u32 = *global.tx_version();
+    let consensus_branch_id_hex: String = format!("{:08x}", global.consensus_branch_id());
+    let expiry_height: u32 = *global.expiry_height();
+
     Ok(ZcashPcztInspection {
         action_count,
         spends,
         outputs,
-        net_value,
+        fee_zat,
+        orchard_net_value,
         verified_balance,
         known_spends,
+        tx_version,
+        consensus_branch_id_hex,
+        expiry_height,
     })
 }
 
@@ -2141,12 +2179,14 @@ fn sign_zcash_pczt(
         });
     }
 
-    // Value consistency: implied total spend (net_value + output_total) must not exceed verified balance.
-    // net_value = total_spend - total_output (from value_sum), so total_spend = net_value + total_output.
-    // If net_value is negative, the orchard bundle is receiving value (from transparent), skip this check.
-    if inspection.net_value > 0 {
+    // Value consistency: implied total Orchard spend (orchard_net_value
+    // + output_total) must not exceed verified balance. Uses
+    // orchard_net_value rather than fee_zat because the check is about
+    // whether our Orchard notes can cover the implied Orchard spend —
+    // transparent + sapling legs of the fee are out of scope here.
+    if inspection.orchard_net_value > 0 {
         let output_total: i64 = inspection.outputs.iter().map(|o| o.value as i64).sum();
-        let implied_spend = inspection.net_value + output_total;
+        let implied_spend = inspection.orchard_net_value + output_total;
         if implied_spend > inspection.verified_balance as i64 {
             return Err(ErrorDisplayed::Str {
                 s: format!(

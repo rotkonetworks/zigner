@@ -412,8 +412,8 @@ internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 		}
 	}
 
-	// Fee
-	val feeZec = "%.8f".format(inspection.netValue / 100_000_000.0)
+	// Fee (true fee across all bundles, not just Orchard value_sum)
+	val feeZec = "%.8f".format(inspection.feeZat / 100_000_000.0)
 	DetailRow(label = "Fee", value = "$feeZec ZEC")
 }
 

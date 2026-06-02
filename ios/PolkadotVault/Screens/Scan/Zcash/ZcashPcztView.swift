@@ -101,7 +101,7 @@ struct ZcashPcztView: View {
 
                     // Fee
                     sectionCard(title: "Fee") {
-                        let feeZec = Double(inspection.netValue) / 100_000_000.0
+                        let feeZec = Double(inspection.feeZat) / 100_000_000.0
                         Text(String(format: "%.8f ZEC", feeZec))
                             .font(PrimaryFont.bodyL.font)
                             .foregroundColor(.textAndIconsPrimary)
