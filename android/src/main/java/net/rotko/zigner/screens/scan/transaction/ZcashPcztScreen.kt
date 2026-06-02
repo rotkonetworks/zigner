@@ -228,7 +228,7 @@ fun ZcashPcztScreen(
 
 			PcztState.DISPLAY_SIGNATURE -> {
 				Text(
-					text = "Show this QR to zafu",
+					text = "Show this QR to your wallet (zafu / zodl / vizor)",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp),
