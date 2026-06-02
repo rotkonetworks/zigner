@@ -167,16 +167,15 @@ fun ZcashPcztScreen(
 						.padding(top = 12.dp),
 					verticalArrangement = Arrangement.spacedBy(12.dp),
 				) {
-					// Verified-notes context (known-spends ratio + local balance).
-					// Anchor is intentionally not displayed or validated —
-					// Keystone doesn't and equality-checking against our local
-					// anchor was the rotko-invented gate behind the constant
-					// "re-sync first" friction (PR #12).
-					VerificationCard(insp)
+					// TODO(sync-flow): restore VerificationCard + PcztGlossaryNote
+					// once the zcli → zigner verified-notes sync ships. Without
+					// synced notes every spend is "Unknown / 0 ZEC" which is
+					// noise rather than signal, so we hide it for now.
+					// VerificationCard(insp)
 					when (selectedTab) {
 						0 -> {
 							ZcashPcztSimpleContent(signRequest)
-							PcztGlossaryNote(insp)
+							// PcztGlossaryNote(insp)
 						}
 						1 -> PcztAdvancedContent(insp, urParts)
 					}

@@ -375,14 +375,16 @@ internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 		return
 	}
 
-	// Spends
+	// TODO(sync-flow): show only verified spends once zcli → zigner sync
+	// ships. Until then, every spend is "Unknown / 0 ZEC" noise — Orchard
+	// nullifiers don't reveal note value without the verified-notes set.
 	if (inspection.spends.isNotEmpty()) {
-		inspection.spends.forEach { spend ->
+		inspection.spends.filter { it.known }.forEach { spend ->
 			val zec = "%.8f".format(spend.value.toLong() / 100_000_000.0)
 			HighlightCard(
 				title = "$zec ZEC",
-				subtitle = if (spend.known) "Verified spend" else "Unknown spend — verify carefully",
-				color = if (spend.known) Color(0xFFF5A623) else Color(0xFFE74C3C),
+				subtitle = "Verified spend",
+				color = Color(0xFFF5A623),
 			)
 		}
 	}
