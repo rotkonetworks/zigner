@@ -28,7 +28,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
@@ -169,6 +171,9 @@ fun KeySetDetailsScreenView(
 				MultisigSection(
 					onManage = {
 						navController.navigate(CoreUnlockedNavSubgraph.frostWalletList)
+					},
+					onDetail = { walletId ->
+						navController.navigate(CoreUnlockedNavSubgraph.FrostWalletDetail.destination(walletId))
 					},
 				)
 
@@ -352,9 +357,11 @@ private fun KeySetDetailsEmptyList(onAdd: Callback) {
 	}
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MultisigSection(
 	onManage: Callback,
+	onDetail: (String) -> Unit,
 ) {
 	val scope = rememberCoroutineScope()
 	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
@@ -386,7 +393,10 @@ private fun MultisigSection(
 		Row(
 			modifier = Modifier
 				.fillMaxWidth()
-				.clickable { expanded = !expanded }
+				.combinedClickable(
+					onClick = { expanded = !expanded },
+					onLongClick = onManage,
+				)
 				.padding(horizontal = 16.dp, vertical = 14.dp),
 			verticalAlignment = Alignment.CenterVertically,
 		) {
@@ -420,7 +430,10 @@ private fun MultisigSection(
 		) {
 			Column {
 				for (wallet in wallets) {
-					MultisigWalletRow(wallet = wallet, onClick = onManage)
+					MultisigWalletRow(
+						wallet = wallet,
+						onClick = { onDetail(wallet.walletId) },
+					)
 				}
 			}
 		}
