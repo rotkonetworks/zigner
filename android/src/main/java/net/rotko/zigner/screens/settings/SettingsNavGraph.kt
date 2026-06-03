@@ -17,6 +17,7 @@ import net.rotko.zigner.components.documents.TosScreen
 import net.rotko.zigner.screens.settings.backup.SeedBackupIntegratedScreen
 import net.rotko.zigner.screens.settings.frost.FrostBackupSelectionScreen
 import net.rotko.zigner.screens.settings.frost.FrostSettingsScreen
+import net.rotko.zigner.screens.settings.general.SettingsAdvancedNavSubgraph
 import net.rotko.zigner.screens.settings.general.SettingsGeneralNavSubgraph
 import net.rotko.zigner.screens.settings.logs.logsNavigationSubgraph
 import net.rotko.zigner.screens.settings.networks.details.NetworkDetailsSubgraph
@@ -95,6 +96,9 @@ fun NavGraphBuilder.settingsFullSubgraph(
 				onBack = { coreNavController.popBackStack() },
 			)
 		}
+		composable(SettingsNavSubgraph.advanced) {
+			SettingsAdvancedNavSubgraph(coreNavController = coreNavController)
+		}
 	}
 }
 
@@ -103,6 +107,7 @@ internal object SettingsNavSubgraph {
 	const val terms = "settings_terms_of_service"
 	const val privacyPolicy = "settings_privacy_polcy"
 	const val backup = "settings_backup"
+	const val advanced = "settings_advanced"
 	const val logs = "settings_logs"
 	const val networkList = "settings_manage_networks"
 	const val generalVerifier = "settings_general_verifier"
