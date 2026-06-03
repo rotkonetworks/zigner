@@ -16,15 +16,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.Composable
@@ -112,8 +115,8 @@ fun KeyDetailsPublicKeyScreen(
 ) {
 	val isFvkNetwork = isFvkNetwork(model.networkInfo.networkLogo)
 	val isZcash = model.networkInfo.networkLogo.lowercase().contains("zcash")
-	// Toggle between FVK (for wallet import) and Address (for receiving)
 	var showFvk by remember { mutableStateOf(true) }
+	var showFvkCompatInfo by remember { mutableStateOf(false) }
 	// Zcash diversified address state
 	var diversifierIndex by remember { mutableIntStateOf(0) }
 	var showTransparent by remember { mutableStateOf(false) }
@@ -348,19 +351,66 @@ fun KeyDetailsPublicKeyScreen(
 						)
 					}
 					// Info text
-					Text(
-						text = if (showFvk) {
-							"Scan with Zafu to import as watch-only wallet"
-						} else {
-							"Scan to send funds to this cold wallet"
-						},
-						style = SignerTypeface.CaptionM,
-						color = MaterialTheme.colors.textTertiary,
-						textAlign = TextAlign.Center,
+					Row(
 						modifier = Modifier
 							.fillMaxWidth()
-							.padding(horizontal = 24.dp, vertical = 4.dp)
-					)
+							.padding(horizontal = 24.dp, vertical = 4.dp),
+						verticalAlignment = Alignment.CenterVertically,
+					) {
+						Text(
+							text = if (showFvk) {
+								"scan with Zafu or any Keystone-compatible wallet to import as watch-only"
+							} else {
+								"scan to send funds to this cold wallet"
+							},
+							style = SignerTypeface.CaptionM,
+							color = MaterialTheme.colors.textTertiary,
+							textAlign = TextAlign.Center,
+							modifier = Modifier.weight(1f),
+						)
+						if (showFvk) {
+							Icon(
+								imageVector = Icons.Outlined.Info,
+								contentDescription = "Compatibility info",
+								tint = MaterialTheme.colors.primary,
+								modifier = Modifier
+									.padding(start = 6.dp)
+									.size(16.dp)
+									.clickable { showFvkCompatInfo = true }
+							)
+						}
+					}
+
+					val fvkCompatMessage = when {
+						isZcash -> "Tested with Zafu and Zodl."
+						isCosmosNetwork(model.networkInfo.networkLogo) -> "Tested with Zafu."
+						else -> "Tested with Zafu." // Penumbra
+					}
+					if (showFvkCompatInfo) {
+						AlertDialog(
+							onDismissRequest = { showFvkCompatInfo = false },
+							title = {
+								Text(
+									text = "Watch-only wallet compatibility",
+									style = SignerTypeface.TitleS,
+									color = MaterialTheme.colors.primary,
+								)
+							},
+							text = {
+								Text(
+									text = fvkCompatMessage,
+									style = SignerTypeface.BodyM,
+									color = MaterialTheme.colors.textTertiary,
+								)
+							},
+							confirmButton = {
+								TextButton(onClick = { showFvkCompatInfo = false }) {
+									Text("OK", color = MaterialTheme.colors.primary)
+								}
+							},
+							backgroundColor = MaterialTheme.colors.background,
+						)
+					}
 				}
 
 				// Zcash Receive mode: New Address button + Transparent toggle

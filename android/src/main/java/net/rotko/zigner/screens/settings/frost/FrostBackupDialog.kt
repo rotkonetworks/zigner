@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +74,14 @@ fun FrostBackupDialog(
 				keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
 				singleLine = true,
 				modifier = Modifier.fillMaxWidth(),
+				colors = TextFieldDefaults.outlinedTextFieldColors(
+					textColor = MaterialTheme.colors.primary,
+					cursorColor = MaterialTheme.colors.primary,
+					focusedBorderColor = MaterialTheme.colors.primary,
+					unfocusedBorderColor = MaterialTheme.colors.textTertiary,
+					focusedLabelColor = MaterialTheme.colors.primary,
+					unfocusedLabelColor = MaterialTheme.colors.textTertiary,
+				),
 			)
 			if (passphrase.isNotEmpty() && passphrase.length < 8) {
 				Text(
@@ -93,6 +102,14 @@ fun FrostBackupDialog(
 					keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
 					singleLine = true,
 					modifier = Modifier.fillMaxWidth(),
+					colors = TextFieldDefaults.outlinedTextFieldColors(
+						textColor = MaterialTheme.colors.primary,
+						cursorColor = MaterialTheme.colors.primary,
+						focusedBorderColor = MaterialTheme.colors.primary,
+						unfocusedBorderColor = MaterialTheme.colors.textTertiary,
+						focusedLabelColor = MaterialTheme.colors.primary,
+						unfocusedLabelColor = MaterialTheme.colors.textTertiary,
+					),
 				)
 				if (confirm.isNotEmpty() && passphrase != confirm) {
 					Text(
