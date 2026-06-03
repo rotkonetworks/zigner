@@ -53,6 +53,7 @@ internal fun SettingsScreenGeneralView(
 	onShowTerms: Callback,
 	onShowPrivacyPolicy: Callback,
 	onBackup: Callback,
+	onMultisigSettings: Callback,
 	onManageNetworks: Callback,
 	onGeneralVerifier: Callback,
 	onExposedClicked: Callback,
@@ -78,10 +79,12 @@ internal fun SettingsScreenGeneralView(
 					name = stringResource(R.string.settings_logs),
 					onClick = onOpenLogs
 				)
+				/*
 				SettingsElement(
 					name = stringResource(R.string.settings_networks),
 					onClick = onManageNetworks,
 				)
+				*/
 				SettingsElement(
 					name = stringResource(R.string.settings_verifier_certificate),
 					onClick = onGeneralVerifier,
@@ -89,6 +92,10 @@ internal fun SettingsScreenGeneralView(
 				SettingsElement(
 					name = stringResource(R.string.settings_backup),
 					onClick = onBackup,
+				)
+				SettingsElement(
+					name = "Multisig",
+					onClick = onMultisigSettings,
 				)
 				SettingsElement(
 					name = stringResource(R.string.documents_privacy_policy),
@@ -252,6 +259,7 @@ private fun PreviewSettingsScreen() {
 			onShowTerms = {},
 			onShowPrivacyPolicy = {},
 			onBackup = {},
+			onMultisigSettings = {},
 			onManageNetworks = {},
 			onGeneralVerifier = {},
 			onExposedClicked = {},

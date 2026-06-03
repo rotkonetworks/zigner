@@ -51,6 +51,7 @@ internal fun SettingsGeneralNavSubgraph(
 				coreNavController.navigate(SettingsNavSubgraph.privacyPolicy)
 			},
 			onBackup = { coreNavController.navigate(SettingsNavSubgraph.backup) },
+			onMultisigSettings = { coreNavController.navigate(SettingsNavSubgraph.multisig) },
 			onManageNetworks = {
 				coreNavController.navigate(SettingsNavSubgraph.networkList)
 			},

@@ -15,6 +15,8 @@ import androidx.navigation.navigation
 import net.rotko.zigner.components.documents.PpScreen
 import net.rotko.zigner.components.documents.TosScreen
 import net.rotko.zigner.screens.settings.backup.SeedBackupIntegratedScreen
+import net.rotko.zigner.screens.settings.frost.FrostBackupSelectionScreen
+import net.rotko.zigner.screens.settings.frost.FrostSettingsScreen
 import net.rotko.zigner.screens.settings.general.SettingsGeneralNavSubgraph
 import net.rotko.zigner.screens.settings.logs.logsNavigationSubgraph
 import net.rotko.zigner.screens.settings.networks.details.NetworkDetailsSubgraph
@@ -82,6 +84,17 @@ fun NavGraphBuilder.settingsFullSubgraph(
 			)
 		}
 		signSpecsDestination(coreNavController)
+		composable(SettingsNavSubgraph.multisig) {
+			FrostSettingsScreen(
+				onBack = { coreNavController.popBackStack() },
+				onBackup = { coreNavController.navigate(SettingsNavSubgraph.multisigBackup) },
+			)
+		}
+		composable(SettingsNavSubgraph.multisigBackup) {
+			FrostBackupSelectionScreen(
+				onBack = { coreNavController.popBackStack() },
+			)
+		}
 	}
 }
 
@@ -94,6 +107,8 @@ internal object SettingsNavSubgraph {
 	const val networkList = "settings_manage_networks"
 	const val generalVerifier = "settings_general_verifier"
 	const val zcashTestQr = "settings_zcash_test_qr"
+	const val multisig = "settings_multisig"
+	const val multisigBackup = "settings_multisig_backup"
 	object NetworkDetails {
 		internal const val networkKey = "network_key"
 		private const val baseRoute = "settings_network_details"
