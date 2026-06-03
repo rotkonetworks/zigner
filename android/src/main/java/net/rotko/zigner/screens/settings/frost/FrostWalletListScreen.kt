@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.FrostWalletSummaryFfi
 import io.parity.signer.uniffi.frostDeleteWallet
 import io.parity.signer.uniffi.frostExportBackupEnvelope
+import io.parity.signer.uniffi.frostImportAllBackupEnvelope
 import io.parity.signer.uniffi.frostImportBackupEnvelope
 import io.parity.signer.uniffi.frostListWallets
 import io.parity.signer.uniffi.frostRenameWallet
@@ -279,12 +280,27 @@ fun FrostWalletListScreen(
 				importEnvelopeJson = null
 				scope.launch {
 					try {
-						val newId = withContext(Dispatchers.Default) {
-							frostImportBackupEnvelope(json, passphrase)
+						val envelopeType = org.json.JSONObject(json).optString("type", "")
+						if (envelopeType == "frost-share-batch-backup") {
+							val resultJson = withContext(Dispatchers.Default) {
+								frostImportAllBackupEnvelope(json, passphrase)
+							}
+							val result = org.json.JSONObject(resultJson)
+							val imported = result.optInt("imported", 0)
+							val skipped = result.optInt("skipped", 0)
+							toast = buildString {
+								append("$imported wallet${if (imported == 1) "" else "s"} restored")
+								if (skipped > 0) append(" ($skipped already present)")
+							}
+							Timber.d("[frost-backup] batch import: imported=$imported skipped=$skipped")
+						} else {
+							val newId = withContext(Dispatchers.Default) {
+								frostImportBackupEnvelope(json, passphrase)
+							}
+							toast = "wallet restored"
+							Timber.d("[frost-backup] imported wallet=$newId")
 						}
-						toast = "wallet restored"
 						loadWallets()
-						Timber.d("[frost-backup] imported wallet=$newId")
 					} catch (e: Exception) {
 						Timber.e(e, "[frost-backup] import failed")
 						error = e.message ?: "import failed"
