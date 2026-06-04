@@ -63,6 +63,7 @@ import kotlinx.coroutines.withContext
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.ui.theme.SignerNewTheme
 import net.rotko.zigner.ui.theme.SignerTypeface
 import net.rotko.zigner.ui.theme.accentGreen
@@ -100,6 +101,10 @@ fun FrostWalletDetailScreen(
 	onSendToZafu: Callback,
 	onDeleted: Callback,
 ) {
+	// FVK appears revealed on this screen; block screenshots, screen-recorders,
+	// and the Android recents thumbnail.
+	DisableScreenshots()
+
 	val ctx = LocalContext.current
 	val scope = rememberCoroutineScope()
 

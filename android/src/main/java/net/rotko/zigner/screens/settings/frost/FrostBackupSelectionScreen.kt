@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.ui.theme.SignerTypeface
 import net.rotko.zigner.ui.theme.accentPink
 import net.rotko.zigner.ui.theme.textSecondary
@@ -31,6 +32,8 @@ import timber.log.Timber
 
 @Composable
 fun FrostBackupSelectionScreen(onBack: Callback) {
+	// Lists wallet labels alongside passphrase entry; keep both out of recents.
+	DisableScreenshots()
 	val ctx = LocalContext.current
 	val scope = rememberCoroutineScope()
 
