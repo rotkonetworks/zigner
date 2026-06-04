@@ -1947,7 +1947,7 @@ fn get_zcash_sign_context() -> Result<ZcashSignContext, ErrorDisplayed> {
 /// Encode a raw 43-byte Orchard address as a unified address string (u1...).
 fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
     use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
-    use zcash_address::Network;
+    use zcash_protocol::consensus::NetworkType as Network;
 
     let receiver = Receiver::Orchard(*raw);
     let network = if mainnet {
