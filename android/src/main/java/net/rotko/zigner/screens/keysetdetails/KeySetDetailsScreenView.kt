@@ -21,10 +21,22 @@ import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -52,10 +64,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.rotko.zigner.R
-import net.rotko.zigner.components.base.ScanIconComponent
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SettingsIcon
-import net.rotko.zigner.components.exposesecurity.ExposedIcon
 import net.rotko.zigner.domain.BASE58_STYLE_ABBREVIATE
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.KeyModel
@@ -64,27 +74,34 @@ import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.abbreviateString
 import net.rotko.zigner.domain.conditional
 import net.rotko.zigner.screens.keysetdetails.items.HotWalletQrSection
-import net.rotko.zigner.screens.keysetdetails.items.KeyDerivedItem
-import net.rotko.zigner.screens.keysetdetails.items.SeedKeyDetails
+import net.rotko.zigner.screens.keysetdetails.items.KeySetBottomBar
+import net.rotko.zigner.screens.keysetdetails.items.NetworkKeysSection
+import net.rotko.zigner.screens.keysetdetails.items.WalletHeaderCard
+import net.rotko.zigner.screens.keysetdetails.items.groupKeysByNetwork
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
 import net.rotko.zigner.ui.theme.SignerNewTheme
 import net.rotko.zigner.ui.theme.SignerTypeface
+import net.rotko.zigner.ui.theme.appliedStroke
 import net.rotko.zigner.ui.theme.fill6
-import net.rotko.zigner.ui.theme.pink300
 import net.rotko.zigner.ui.theme.textDisabled
 import net.rotko.zigner.ui.theme.textSecondary
 import net.rotko.zigner.ui.theme.textTertiary
 
 /**
- * Single Seed/Key set is selected is it's details
- * For non-multiselect state,
- * For multiselec screen KeyManager is still used
+ * Home screen for the selected wallet.
+ *
+ * Layout (Zafu-style identity-first hierarchy):
+ *   1. Thin neutral chrome (Settings | Menu)
+ *   2. WalletHeaderCard — wallet name, "Air-gapped cold signer", network badges
+ *   3. Per-network grouped key sections with chain accent stripes
+ *   4. Hot wallet QR + multisig sections (secondary)
+ *   5. Bottom action bar (Scan | Add key) — labelled, not floating
  */
 @Composable
 fun KeySetDetailsScreenView(
 	model: KeySetDetailsModel,
 	navController: NavController,
-	networkState: State<NetworkState?>, //for shield icon
+	networkState: State<NetworkState?>,
 	fullModelWasEmpty: Boolean,
 	onExposedClicked: Callback,
 	onFilterClicked: Callback,
@@ -95,149 +112,126 @@ fun KeySetDetailsScreenView(
 	onOpenKey: (keyAddr: String, keySpecs: String) -> Unit,
 	getSeedPhrase: suspend (String) -> String? = { null },
 ) {
-	Column {
+	Column(modifier = Modifier.fillMaxHeight()) {
 		KeySetDetailsHeader(
-			onAddKey = onAddNewDerivation,
-			onSettings = {
-				navController.navigate(CoreUnlockedNavSubgraph.settings)
-			},
+			onSettings = { navController.navigate(CoreUnlockedNavSubgraph.settings) },
 			onMenu = onMenu,
 		)
+
 		Box(modifier = Modifier.weight(1f)) {
-			if (model.keysAndNetwork.isNotEmpty()) {
-				Column(
-					modifier = Modifier
-						.verticalScroll(rememberScrollState()),
-					verticalArrangement = Arrangement.spacedBy(4.dp),
-				) {
-					SeedKeyItemElement(
-						model = model,
-						onSeedSelect = onSeedSelect,
-						onShowRoot = onShowRoot
-					)
+			Column(
+				modifier = Modifier
+					.fillMaxHeight()
+					.verticalScroll(rememberScrollState()),
+				verticalArrangement = Arrangement.spacedBy(12.dp),
+			) {
+				WalletHeaderCard(
+					model = model,
+					networkState = networkState,
+					onSeedSelect = onSeedSelect,
+					onShowRoot = onShowRoot,
+					onExposedClicked = onExposedClicked,
+					modifier = Modifier.padding(top = 8.dp),
+				)
 
-					HotWalletQrSection(
-						seedName = model.root.seedName,
-						getSeedPhrase = getSeedPhrase,
-					)
-
+				if (model.keysAndNetwork.isNotEmpty()) {
 					FilterRow(onFilterClicked)
-
-					for (networkAndKeys in model.keysAndNetwork) {
-						KeyDerivedItem(
-							model = networkAndKeys.key,
-							networkLogo = networkAndKeys.network.networkLogo,
-						) {
-							onOpenKey(
-								networkAndKeys.key.addressKey,
-								networkAndKeys.network.networkSpecsKey
-							)
-						}
+					val groups = remember(model.keysAndNetwork) {
+						groupKeysByNetwork(model.keysAndNetwork)
 					}
-
-					MultisigSection(
-						onManage = {
-							navController.navigate(CoreUnlockedNavSubgraph.frostWalletList)
-						},
-					)
-				}
-			} else if (fullModelWasEmpty) {
-				//no derived keys at all
-				Column() {
-					//seed
-					SeedKeyItemElement(
-						model = model,
-						onSeedSelect = onSeedSelect,
-						onShowRoot = onShowRoot
-					)
+					groups.forEach { (network, keys) ->
+						NetworkKeysSection(
+							network = network,
+							keys = keys,
+							onKeyClick = onOpenKey,
+						)
+					}
+					AddDerivedKeyInlineButton(onClick = onAddNewDerivation)
+				} else if (fullModelWasEmpty) {
 					KeySetDetailsEmptyList(onAdd = onAddNewDerivation)
-					MultisigSection(
-						onManage = {
-							navController.navigate(CoreUnlockedNavSubgraph.frostWalletList)
-						},
-					)
-				}
-			} else {
-				//nothing to show but filter enabled
-				Column() {
-					SeedKeyItemElement(
-						model = model,
-						onSeedSelect = onSeedSelect,
-						onShowRoot = onShowRoot
-					)          //no keys because filtered
+				} else {
 					FilterRow(onFilterClicked)
-					Spacer(modifier = Modifier.weight(0.5f))
+					Spacer(modifier = Modifier.padding(top = 32.dp))
 					Text(
 						text = stringResource(R.string.key_set_details_all_filtered_keys_title),
 						color = MaterialTheme.colors.primary,
 						style = SignerTypeface.TitleM,
 						textAlign = TextAlign.Center,
-						modifier = Modifier.padding(horizontal = 40.dp)
+						modifier = Modifier
+							.fillMaxWidth()
+							.padding(horizontal = 40.dp),
 					)
-					Spacer(modifier = Modifier.weight(0.5f))
 				}
+
+				HotWalletQrSection(
+					seedName = model.root.seedName,
+					getSeedPhrase = getSeedPhrase,
+				)
+
+				MultisigSection(
+					onManage = {
+						navController.navigate(CoreUnlockedNavSubgraph.frostWalletList)
+					},
+					onDetail = { walletId ->
+						navController.navigate(CoreUnlockedNavSubgraph.FrostWalletDetail.destination(walletId))
+					},
+				)
+
+				Spacer(modifier = Modifier.padding(bottom = 8.dp))
 			}
-
-			ExposedIcon(
-				networkState = networkState,
-				onClick = onExposedClicked,
-				Modifier
-					.align(Alignment.BottomEnd)
-					.padding(end = 16.dp, bottom = 24.dp)
-			)
-			ScanIconComponent(
-				onClick = {
-					navController.navigate(CoreUnlockedNavSubgraph.Camera.destination(null))
-				},
-				Modifier
-					.align(Alignment.BottomCenter)
-					.padding(bottom = 24.dp)
-			)
 		}
-	}
-}
 
-/**
- * Check if the keyset has any substrate networks (to determine if root QR should be shown)
- */
-private fun hasSubstrateNetworks(model: KeySetDetailsModel): Boolean {
-	return model.keysAndNetwork.any { keyAndNetwork ->
-		val logo = keyAndNetwork.network.networkLogo.lowercase()
-		!logo.contains("zcash") && !logo.contains("penumbra") &&
-			!logo.contains("noble") && !logo.contains("osmosis") &&
-			!logo.contains("celestia") && !logo.contains("cosmos") &&
-			!logo.contains("bitcoin") && !logo.contains("nostr") &&
-			!logo.contains("atprotocol") && !logo.contains("ethereum")
+		KeySetBottomBar(
+			onScan = {
+				navController.navigate(CoreUnlockedNavSubgraph.Camera.destination(null))
+			},
+		)
 	}
 }
 
 @Composable
-private fun SeedKeyItemElement(
-	model: KeySetDetailsModel,
-	onSeedSelect: Callback,
-	onShowRoot: Callback,
-) {
-	SeedKeyDetails(
-		model = model.root,
-		onSeedSelect = onSeedSelect,
-		onShowRoot = onShowRoot,
-		showRootQr = hasSubstrateNetworks(model),
+private fun AddDerivedKeyInlineButton(onClick: Callback) {
+	val shape = RoundedCornerShape(14.dp)
+	Row(
 		modifier = Modifier
-			.padding(horizontal = 24.dp, vertical = 8.dp)
-			.padding(bottom = 16.dp)
-	)
+			.fillMaxWidth()
+			.padding(horizontal = 16.dp)
+			.clip(shape)
+			.border(
+				width = 1.dp,
+				color = MaterialTheme.colors.appliedStroke,
+				shape = shape,
+			)
+			.clickable(onClick = onClick)
+			.padding(vertical = 14.dp),
+		verticalAlignment = Alignment.CenterVertically,
+		horizontalArrangement = Arrangement.Center,
+	) {
+		Icon(
+			imageVector = Icons.Filled.Add,
+			contentDescription = null,
+			tint = MaterialTheme.colors.textSecondary,
+			modifier = Modifier.size(18.dp),
+		)
+		Spacer(modifier = Modifier.size(8.dp))
+		Text(
+			text = stringResource(R.string.key_sets_details_screem_create_derived_button),
+			color = MaterialTheme.colors.textSecondary,
+			style = SignerTypeface.LabelM,
+		)
+	}
 }
 
 @Composable
 private fun FilterRow(onFilterClicked: Callback) {
 	Row(
-		modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-		verticalAlignment = Alignment.CenterVertically
+		modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+		verticalAlignment = Alignment.CenterVertically,
 	) {
 		Text(
-			text = stringResource(R.string.key_sets_details_screem_derived_subtitle),
-			color = MaterialTheme.colors.textTertiary,
-			style = SignerTypeface.BodyM,
+			text = "Networks",
+			color = MaterialTheme.colors.textSecondary,
+			style = SignerTypeface.LabelS,
 			modifier = Modifier.weight(1f),
 		)
 		Icon(
@@ -245,64 +239,47 @@ private fun FilterRow(onFilterClicked: Callback) {
 			contentDescription = stringResource(R.string.key_sets_details_screem_filter_icon_description),
 			modifier = Modifier
 				.clickable(onClick = onFilterClicked)
-				.size(28.dp),
-			tint = MaterialTheme.colors.pink300,
+				.size(24.dp),
+			tint = MaterialTheme.colors.textSecondary,
 		)
 	}
 }
 
-
 @Composable
 fun KeySetDetailsHeader(
-	onAddKey: Callback,
 	onSettings: Callback,
 	onMenu: Callback,
 ) {
 	Row(
 		modifier = Modifier
 			.fillMaxWidth(1f)
-			.defaultMinSize(minHeight = 56.dp),
+			.defaultMinSize(minHeight = 56.dp)
+			.padding(horizontal = 8.dp),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
-		//start
 		SettingsIcon(
 			onClick = onSettings,
 			noBackground = true,
 			modifier = Modifier
-				.padding(horizontal = 8.dp)
 				.size(40.dp)
-				.padding(8.dp)
-				.align(Alignment.CenterVertically),
+				.padding(8.dp),
 		)
-		//center
 		Spacer(modifier = Modifier.weight(1f))
-		//end
-		Image(
-			imageVector = Icons.Default.Add,
-			contentDescription = stringResource(R.string.key_sets_details_screem_create_derived_button),
-			colorFilter = ColorFilter.tint(MaterialTheme.colors.primary),
-			modifier = Modifier
-				.clickable(onClick = onAddKey)
-				.padding(8.dp)
-				.size(24.dp)
-				.align(Alignment.CenterVertically)
-		)
 		Image(
 			imageVector = Icons.Filled.MoreHoriz,
 			contentDescription = stringResource(R.string.description_menu_button),
 			colorFilter = ColorFilter.tint(MaterialTheme.colors.primary),
 			modifier = Modifier
-				.padding(end = 8.dp)
 				.clickable(onClick = onMenu)
 				.padding(8.dp)
-				.size(24.dp)
-				.align(Alignment.CenterVertically)
+				.size(24.dp),
 		)
 	}
 }
 
 /**
- * Not clickable item - disabled automatically
+ * Not clickable item - disabled automatically.
+ * Kept for callers outside of the home screen.
  */
 @Composable
 fun SeedKeyViewItem(
@@ -315,8 +292,7 @@ fun SeedKeyViewItem(
 				clickable(onClick = onClick!!)
 			},
 		color = Color.Transparent,
-	)
-	{
+	) {
 		Row(
 			modifier = Modifier
 				.padding(top = 16.dp, bottom = 16.dp, start = 24.dp),
@@ -341,7 +317,7 @@ fun SeedKeyViewItem(
 					colorFilter = ColorFilter.tint(MaterialTheme.colors.textDisabled),
 					modifier = Modifier
 						.padding(end = 16.dp)
-						.size(28.dp)
+						.size(28.dp),
 				)
 			}
 		}
@@ -352,21 +328,18 @@ fun SeedKeyViewItem(
 private fun KeySetDetailsEmptyList(onAdd: Callback) {
 	Column(
 		modifier = Modifier
-			.fillMaxHeight(1f)
-			.padding(horizontal = 16.dp),
-		horizontalAlignment = Alignment.CenterHorizontally
+			.fillMaxWidth()
+			.padding(horizontal = 16.dp, vertical = 24.dp),
+		horizontalAlignment = Alignment.CenterHorizontally,
 	) {
-		Spacer(modifier = Modifier.weight(0.5f))
-
 		Column(
 			modifier = Modifier
-				.background(
-					color = MaterialTheme.colors.pink300.copy(alpha = 0.12f),
-					shape = RoundedCornerShape(dimensionResource(id = R.dimen.bigCornerRadius)),
-				)
-				.padding(24.dp)
-		)
-		{
+				.fillMaxWidth()
+				.clip(RoundedCornerShape(dimensionResource(id = R.dimen.bigCornerRadius)))
+				.background(MaterialTheme.colors.fill6)
+				.padding(24.dp),
+			horizontalAlignment = Alignment.CenterHorizontally,
+		) {
 			Text(
 				text = stringResource(R.string.key_set_details_no_keys_title),
 				color = MaterialTheme.colors.primary,
@@ -377,20 +350,22 @@ private fun KeySetDetailsEmptyList(onAdd: Callback) {
 				label = stringResource(R.string.key_sets_details_screem_create_derived_button),
 				withBackground = true,
 				modifier = Modifier
-					.padding(top = 16.dp, bottom = 24.dp, start = 24.dp, end = 24.dp),
-				onClicked = onAdd
+					.padding(top = 16.dp, start = 8.dp, end = 8.dp),
+				onClicked = onAdd,
 			)
 		}
-		Spacer(modifier = Modifier.weight(0.5f))
 	}
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MultisigSection(
 	onManage: Callback,
+	onDetail: (String) -> Unit,
 ) {
 	val scope = rememberCoroutineScope()
 	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
+	var expanded by remember { mutableStateOf(false) }
 
 	LaunchedEffect(Unit) {
 		scope.launch {
@@ -402,26 +377,66 @@ private fun MultisigSection(
 
 	if (wallets.isEmpty()) return
 
-	Row(
+	val shape = RoundedCornerShape(16.dp)
+	val chevronRotation by animateFloatAsState(
+		targetValue = if (expanded) 180f else 0f,
+		animationSpec = tween(durationMillis = 220),
+		label = "multisig-chevron-rotation",
+	)
+
+	Column(
 		modifier = Modifier
-			.clickable(onClick = onManage)
-			.padding(horizontal = 24.dp, vertical = 8.dp),
-		verticalAlignment = Alignment.CenterVertically,
+			.padding(horizontal = 16.dp)
+			.clip(shape)
+			.background(MaterialTheme.colors.fill6),
 	) {
-		Text(
-			text = "Multisig Wallets",
-			color = MaterialTheme.colors.textTertiary,
-			style = SignerTypeface.BodyM,
-			modifier = Modifier.weight(1f),
-		)
-		Text(
-			text = "Manage",
-			color = MaterialTheme.colors.pink300,
-			style = SignerTypeface.CaptionM,
-		)
-	}
-	for (wallet in wallets) {
-		MultisigWalletRow(wallet = wallet, onClick = onManage)
+		Row(
+			modifier = Modifier
+				.fillMaxWidth()
+				.combinedClickable(
+					onClick = { expanded = !expanded },
+					onLongClick = onManage,
+				)
+				.padding(horizontal = 16.dp, vertical = 14.dp),
+			verticalAlignment = Alignment.CenterVertically,
+		) {
+			Column(modifier = Modifier.weight(1f)) {
+				Text(
+					text = "Multisig",
+					color = MaterialTheme.colors.primary,
+					style = SignerTypeface.TitleS,
+				)
+				Text(
+					text = if (wallets.size == 1) "1 wallet" else "${wallets.size} wallets",
+					color = MaterialTheme.colors.textSecondary,
+					style = SignerTypeface.CaptionM,
+				)
+			}
+			Icon(
+				imageVector = Icons.Outlined.ExpandMore,
+				contentDescription = null,
+				tint = MaterialTheme.colors.textSecondary,
+				modifier = Modifier
+					.size(20.dp)
+					.rotate(chevronRotation),
+			)
+		}
+		AnimatedVisibility(
+			visible = expanded,
+			enter = expandVertically(animationSpec = tween(durationMillis = 220)) +
+				fadeIn(animationSpec = tween(durationMillis = 220)),
+			exit = shrinkVertically(animationSpec = tween(durationMillis = 180)) +
+				fadeOut(animationSpec = tween(durationMillis = 120)),
+		) {
+			Column {
+				for (wallet in wallets) {
+					MultisigWalletRow(
+						wallet = wallet,
+						onClick = { onDetail(wallet.walletId) },
+					)
+				}
+			}
+		}
 	}
 }
 
@@ -434,7 +449,7 @@ private fun MultisigWalletRow(
 		modifier = Modifier
 			.fillMaxWidth()
 			.clickable(onClick = onClick)
-			.padding(horizontal = 24.dp, vertical = 12.dp),
+			.padding(horizontal = 16.dp, vertical = 12.dp),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
 		Column(modifier = Modifier.weight(1f)) {
@@ -452,7 +467,7 @@ private fun MultisigWalletRow(
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier
 						.clip(RoundedCornerShape(4.dp))
-						.background(MaterialTheme.colors.fill6)
+						.background(MaterialTheme.colors.appliedStroke)
 						.padding(horizontal = 6.dp, vertical = 2.dp),
 				)
 			}
@@ -478,15 +493,15 @@ private fun MultisigWalletRow(
 @Preview(
 	name = "dark", group = "general",
 	uiMode = Configuration.UI_MODE_NIGHT_YES,
-	showBackground = true, backgroundColor = 0xFF000000,
+	showBackground = true, backgroundColor = 0xFF0D0D12,
 )
 @Composable
 private fun PreviewKeySetDetailsScreen() {
-	val state = remember { mutableStateOf(NetworkState.Active) }
+	val state = remember { mutableStateOf<NetworkState?>(NetworkState.None) }
 	val mockModel = KeySetDetailsModel.createStub()
 	val navController = rememberNavController()
 	SignerNewTheme {
-		Box(modifier = Modifier.size(350.dp, 550.dp)) {
+		Box(modifier = Modifier.size(360.dp, 720.dp)) {
 			KeySetDetailsScreenView(
 				model = mockModel,
 				navController = navController,
@@ -511,16 +526,16 @@ private fun PreviewKeySetDetailsScreen() {
 @Preview(
 	name = "dark", group = "general",
 	uiMode = Configuration.UI_MODE_NIGHT_YES,
-	showBackground = true, backgroundColor = 0xFF000000,
+	showBackground = true, backgroundColor = 0xFF0D0D12,
 )
 @Composable
 private fun PreviewKeySetDetailsScreenEmpty() {
-	val state = remember { mutableStateOf(NetworkState.Active) }
+	val state = remember { mutableStateOf<NetworkState?>(NetworkState.None) }
 	val mockModel =
 		KeySetDetailsModel.createStub().copy(keysAndNetwork = emptyList())
 	val navController = rememberNavController()
 	SignerNewTheme {
-		Box(modifier = Modifier.size(350.dp, 550.dp)) {
+		Box(modifier = Modifier.size(360.dp, 720.dp)) {
 			KeySetDetailsScreenView(
 				model = mockModel,
 				navController = navController,
@@ -545,16 +560,16 @@ private fun PreviewKeySetDetailsScreenEmpty() {
 @Preview(
 	name = "dark", group = "general",
 	uiMode = Configuration.UI_MODE_NIGHT_YES,
-	showBackground = true, backgroundColor = 0xFF000000,
+	showBackground = true, backgroundColor = 0xFF0D0D12,
 )
 @Composable
 private fun PreviewKeySetDetailsScreenFiltered() {
-	val state = remember { mutableStateOf(NetworkState.Active) }
+	val state = remember { mutableStateOf<NetworkState?>(NetworkState.None) }
 	val mockModel =
 		KeySetDetailsModel.createStub().copy(keysAndNetwork = emptyList())
 	val navController = rememberNavController()
 	SignerNewTheme {
-		Box(modifier = Modifier.size(350.dp, 550.dp)) {
+		Box(modifier = Modifier.size(360.dp, 720.dp)) {
 			KeySetDetailsScreenView(
 				model = mockModel,
 				navController = navController,

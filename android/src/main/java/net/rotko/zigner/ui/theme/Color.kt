@@ -126,3 +126,50 @@ val Colors.primaryButtonDisabledBackground: Color
 
 val Colors.primaryButtonDisabledText: Color
 	get() = if (isLight) Color(0xFFF0E0C0) else Color(0xFF5A4A30)
+
+
+/**
+ * Per-network accent colors. Used as section accents on the home screen and
+ * anywhere a chain's identity should be visible. Chrome (top bar, scan button,
+ * wallet card) stays neutral so these can carry the visual weight.
+ *
+ * Lookup is by [NetworkInfoModel.networkLogo] (lower-case logo slug), so the
+ * same matching logic as [NetworkIcon.getResourceIdForNetwork] applies.
+ */
+private val NetworkAccentZcash = Color(0xFFF4B73B)     // warm gold
+private val NetworkAccentPenumbra = Color(0xFFBD1212)  // protocol red
+private val NetworkAccentPolkadot = Color(0xFFE6007A)  // brand pink
+private val NetworkAccentKusama = Color(0xFFE0E0E4)    // bright neutral
+private val NetworkAccentCosmos = Color(0xFF5064FB)    // ATOM blue
+private val NetworkAccentNoble = Color(0xFF7B61FF)
+private val NetworkAccentOsmosis = Color(0xFF8E5BFF)
+private val NetworkAccentCelestia = Color(0xFF7B2BF9)
+private val NetworkAccentBitcoin = Color(0xFFF7931A)
+private val NetworkAccentNostr = Color(0xFF8A2BE2)
+private val NetworkAccentEthereum = Color(0xFF8A92B2)
+private val NetworkAccentAtproto = Color(0xFF1185FE)
+private val NetworkAccentSubstrate = Color(0xFFE6007A) // Polkadot pink fallback
+
+fun networkAccent(networkLogo: String): Color =
+	when (networkLogo.lowercase()) {
+		"zcash" -> NetworkAccentZcash
+		"penumbra" -> NetworkAccentPenumbra
+		"polkadot", "statemint" -> NetworkAccentPolkadot
+		"kusama", "statemine" -> NetworkAccentKusama
+		"cosmos", "cosmoshub", "atom" -> NetworkAccentCosmos
+		"noble" -> NetworkAccentNoble
+		"osmosis" -> NetworkAccentOsmosis
+		"celestia" -> NetworkAccentCelestia
+		"bitcoin", "btc" -> NetworkAccentBitcoin
+		"nostr" -> NetworkAccentNostr
+		"ethereum", "eth" -> NetworkAccentEthereum
+		"atprotocol", "atproto", "bluesky" -> NetworkAccentAtproto
+		"westend", "rococo", "westmint" -> NetworkAccentKusama
+		else -> NetworkAccentSubstrate
+	}
+
+/**
+ * 12% alpha tint of the network accent — for soft fills (chip backgrounds,
+ * section card backgrounds) that should still let surrounding text read clearly.
+ */
+fun networkAccentTint(networkLogo: String): Color = networkAccent(networkLogo).copy(alpha = 0.12f)

@@ -6,9 +6,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Icon
@@ -18,12 +20,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.GroupWork
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.FrostWalletSummaryFfi
@@ -36,10 +40,8 @@ import io.parity.signer.uniffi.frostRenameWallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
-import net.rotko.zigner.components.base.SignerDivider
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
 import timber.log.Timber
@@ -48,6 +50,7 @@ import timber.log.Timber
 fun FrostWalletListScreen(
 	onBack: Callback,
 	onSendWalletToZafu: (walletId: String) -> Unit = {},
+	onWalletTap: (walletId: String) -> Unit = {},
 ) {
 	val ctx = LocalContext.current
 	var wallets by remember { mutableStateOf<List<FrostWalletSummaryFfi>>(emptyList()) }
@@ -115,109 +118,33 @@ fun FrostWalletListScreen(
 		loadWallets()
 	}
 
-	Column(
-		modifier = Modifier
-			.fillMaxSize()
-			.background(MaterialTheme.colors.background)
-			.statusBarsPadding()
-	) {
-		ScreenHeaderClose(
-			title = "FROST Multisig Wallets",
-			onClose = onBack,
-		)
-
-		if (error != null) {
-			Text(
-				text = error!!,
-				style = SignerTypeface.BodyL,
-				color = MaterialTheme.colors.red500,
-				modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
-			)
-		}
-		if (toast != null) {
-			Text(
-				text = toast!!,
-				style = SignerTypeface.CaptionM,
-				color = MaterialTheme.colors.accentGreen,
-				modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-			)
-			LaunchedEffect(toast) {
-				kotlinx.coroutines.delay(3000)
-				toast = null
-			}
-		}
-
-		if (wallets.isEmpty() && error == null) {
-			Column(
-				modifier = Modifier
-					.fillMaxSize()
-					.padding(horizontal = 24.dp),
-				horizontalAlignment = Alignment.CenterHorizontally,
-				verticalArrangement = Arrangement.Center,
-			) {
-				Text(
-					text = "No multisig wallets",
-					style = SignerTypeface.TitleS,
-					color = MaterialTheme.colors.textTertiary,
-				)
-				Spacer(modifier = Modifier.height(8.dp))
-				Text(
-					text = "Complete a FROST DKG ceremony to create one,\nor restore from an encrypted backup.",
-					style = SignerTypeface.CaptionM,
-					color = MaterialTheme.colors.textTertiary,
-				)
-				Spacer(modifier = Modifier.height(24.dp))
-				SecondaryButtonWide(
-					label = "Restore from file",
-					modifier = Modifier.padding(horizontal = 24.dp),
-					onClicked = { openLauncher.launch(arrayOf("application/json")) },
-				)
-			}
-		} else {
-			Column(
-				modifier = Modifier
-					.weight(1f)
-					.verticalScroll(rememberScrollState())
-			) {
-				wallets.forEach { wallet ->
-					FrostWalletRow(
-						wallet = wallet,
-						isConfirmingDelete = confirmDeleteId == wallet.walletId,
-						onDeleteTap = {
-							confirmDeleteId = wallet.walletId
-						},
-						onDeleteConfirm = {
-							scope.launch {
-								try {
-									withContext(Dispatchers.Default) {
-										frostDeleteWallet(wallet.walletId)
-									}
-									confirmDeleteId = null
-									loadWallets()
-								} catch (e: Exception) {
-									error = e.message ?: "Failed to delete wallet"
-								}
-							}
-						},
-						onDeleteCancel = {
-							confirmDeleteId = null
-						},
-						onExportBackup = { exportTarget = wallet },
-						onSendToZafu = { onSendWalletToZafu(wallet.walletId) },
-						onRenameTap = { renameTarget = wallet },
-					)
-					SignerDivider()
+	FrostWalletListContent(
+		wallets = wallets,
+		error = error,
+		toast = toast,
+		onToastShown = { toast = null },
+		confirmDeleteId = confirmDeleteId,
+		onDeleteTap = { id -> confirmDeleteId = id },
+		onDeleteConfirm = {
+			val id = confirmDeleteId ?: return@FrostWalletListContent
+			scope.launch {
+				try {
+					withContext(Dispatchers.Default) { frostDeleteWallet(id) }
+					confirmDeleteId = null
+					loadWallets()
+				} catch (e: Exception) {
+					error = e.message ?: "Failed to delete wallet"
 				}
-				Spacer(modifier = Modifier.height(16.dp))
-				SecondaryButtonWide(
-					label = "Restore from file",
-					modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-					onClicked = { openLauncher.launch(arrayOf("application/json")) },
-				)
-				Spacer(modifier = Modifier.height(24.dp))
 			}
-		}
-	}
+		},
+		onDeleteCancel = { confirmDeleteId = null },
+		onExportBackup = { wallet -> exportTarget = wallet },
+		onSendToZafu = { wallet -> onSendWalletToZafu(wallet.walletId) },
+		onRenameTap = { wallet -> renameTarget = wallet },
+		onWalletTap = { wallet -> onWalletTap(wallet.walletId) },
+		onRestoreFromFile = { openLauncher.launch(arrayOf("application/json")) },
+		onBack = onBack,
+	)
 
 	// ── Export passphrase dialog ──
 	exportTarget?.let { wallet ->
@@ -312,110 +239,294 @@ fun FrostWalletListScreen(
 	}
 }
 
+/**
+ * Stateless layout. All side effects live in [FrostWalletListScreen]; this
+ * composable just renders the current state. Used by both the live screen and
+ * the @Preview functions so both code paths share the same render code.
+ */
 @Composable
-private fun FrostWalletRow(
+private fun FrostWalletListContent(
+	wallets: List<FrostWalletSummaryFfi>,
+	error: String?,
+	toast: String?,
+	onToastShown: Callback,
+	confirmDeleteId: String?,
+	onDeleteTap: (String) -> Unit,
+	onDeleteConfirm: Callback,
+	onDeleteCancel: Callback,
+	onExportBackup: (FrostWalletSummaryFfi) -> Unit,
+	onSendToZafu: (FrostWalletSummaryFfi) -> Unit,
+	onRenameTap: (FrostWalletSummaryFfi) -> Unit,
+	onWalletTap: (FrostWalletSummaryFfi) -> Unit,
+	onRestoreFromFile: Callback,
+	onBack: Callback,
+) {
+	Column(
+		modifier = Modifier
+			.fillMaxSize()
+			.background(MaterialTheme.colors.background)
+			.statusBarsPadding(),
+	) {
+		ScreenHeaderClose(
+			title = "Multisig Wallets",
+			onClose = onBack,
+		)
+
+		if (error != null) {
+			Text(
+				text = error,
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.red500,
+				modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+			)
+		}
+		if (toast != null) {
+			Text(
+				text = toast,
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.accentGreen,
+				modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+			)
+			LaunchedEffect(toast) {
+				kotlinx.coroutines.delay(3000)
+				onToastShown()
+			}
+		}
+
+		if (wallets.isEmpty() && error == null) {
+			FrostEmptyState(
+				modifier = Modifier
+					.weight(1f)
+					.fillMaxWidth(),
+				onRestoreFromFile = onRestoreFromFile,
+			)
+		} else {
+			Column(
+				modifier = Modifier
+					.weight(1f)
+					.verticalScroll(rememberScrollState()),
+				verticalArrangement = Arrangement.spacedBy(12.dp),
+			) {
+				Spacer(modifier = Modifier.height(4.dp))
+				wallets.forEach { wallet ->
+					FrostWalletCard(
+						wallet = wallet,
+						isConfirmingDelete = confirmDeleteId == wallet.walletId,
+						onDeleteTap = { onDeleteTap(wallet.walletId) },
+						onDeleteConfirm = onDeleteConfirm,
+						onDeleteCancel = onDeleteCancel,
+						onExportBackup = { onExportBackup(wallet) },
+						onSendToZafu = { onSendToZafu(wallet) },
+						onRenameTap = { onRenameTap(wallet) },
+						onClick = { onWalletTap(wallet) },
+					)
+				}
+				SecondaryButtonWide(
+					label = "Restore from file",
+					modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+					onClicked = onRestoreFromFile,
+				)
+				Spacer(modifier = Modifier.height(24.dp))
+			}
+		}
+	}
+}
+
+/**
+ * Empty-state card for the multisig list. Big neutral icon, clear identity,
+ * single CTA. Mirrors the empty state on the home screen.
+ */
+@Composable
+private fun FrostEmptyState(
+	modifier: Modifier = Modifier,
+	onRestoreFromFile: Callback,
+) {
+	val accent = networkAccent("zcash")
+	Column(
+		modifier = modifier.padding(horizontal = 16.dp),
+		horizontalAlignment = Alignment.CenterHorizontally,
+		verticalArrangement = Arrangement.Center,
+	) {
+		Box(
+			modifier = Modifier
+				.size(72.dp)
+				.clip(CircleShape)
+				.background(networkAccentTint("zcash")),
+			contentAlignment = Alignment.Center,
+		) {
+			Icon(
+				imageVector = Icons.Outlined.GroupWork,
+				contentDescription = null,
+				tint = accent,
+				modifier = Modifier.size(36.dp),
+			)
+		}
+		Spacer(modifier = Modifier.height(16.dp))
+		Text(
+			text = "No multisig wallets",
+			style = SignerTypeface.TitleM,
+			color = MaterialTheme.colors.primary,
+			textAlign = TextAlign.Center,
+		)
+		Spacer(modifier = Modifier.height(8.dp))
+		Text(
+			text = "Run a FROST DKG ceremony with your co-signers to create one, or restore from an encrypted backup file.",
+			style = SignerTypeface.BodyM,
+			color = MaterialTheme.colors.textSecondary,
+			textAlign = TextAlign.Center,
+			modifier = Modifier.padding(horizontal = 24.dp),
+		)
+		Spacer(modifier = Modifier.height(24.dp))
+		SecondaryButtonWide(
+			label = "Restore from file",
+			modifier = Modifier.padding(horizontal = 24.dp),
+			onClicked = onRestoreFromFile,
+		)
+	}
+}
+
+/**
+ * Per-wallet card. Gold accent stripe (FROST is Zcash-only today), label with
+ * inline rename, threshold + network pill, truncated wallet ID, and an action
+ * row at the bottom that flips to a confirm prompt during a destructive op.
+ */
+@Composable
+private fun FrostWalletCard(
 	wallet: FrostWalletSummaryFfi,
 	isConfirmingDelete: Boolean,
 	onDeleteTap: Callback,
 	onDeleteConfirm: Callback,
 	onDeleteCancel: Callback,
-	onExportBackup: Callback = {},
-	onSendToZafu: Callback = {},
-	onRenameTap: Callback = {},
+	onExportBackup: Callback,
+	onSendToZafu: Callback,
+	onRenameTap: Callback,
+	onClick: Callback,
 ) {
+	val accent = networkAccent("zcash")
+	val shape = RoundedCornerShape(16.dp)
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
-			.padding(horizontal = 24.dp, vertical = 16.dp)
+			.padding(horizontal = 16.dp)
+			.clip(shape)
+			.background(MaterialTheme.colors.backgroundSecondary)
+			.border(
+				width = 1.dp,
+				color = MaterialTheme.colors.appliedStroke,
+				shape = shape,
+			),
 	) {
-		// Label, inline rename pencil, network badge.
 		Row(
-			verticalAlignment = Alignment.CenterVertically,
+			modifier = Modifier
+				.fillMaxWidth()
+				.height(IntrinsicSize.Min)
+				.clickable(onClick = onClick),
 		) {
-			Text(
-				text = wallet.label,
-				style = SignerTypeface.TitleS,
-				color = MaterialTheme.colors.primary,
-			)
-			Spacer(modifier = Modifier.width(6.dp))
 			Box(
 				modifier = Modifier
-					.size(28.dp)
-					.clip(RoundedCornerShape(6.dp))
-					.clickable(onClick = onRenameTap),
-				contentAlignment = Alignment.Center,
+					.width(3.dp)
+					.fillMaxHeight()
+					.background(accent),
+			)
+			Column(
+				modifier = Modifier
+					.weight(1f)
+					.padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
 			) {
-				Icon(
-					imageVector = Icons.Outlined.Edit,
-					contentDescription = "Rename",
-					tint = MaterialTheme.colors.textTertiary,
-					modifier = Modifier.size(14.dp),
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					Text(
+						text = wallet.label,
+						style = SignerTypeface.TitleS,
+						color = MaterialTheme.colors.primary,
+						modifier = Modifier.weight(1f, fill = false),
+					)
+					Box(
+						modifier = Modifier
+							.padding(start = 6.dp)
+							.size(28.dp)
+							.clip(RoundedCornerShape(6.dp))
+							.clickable(onClick = onRenameTap),
+						contentAlignment = Alignment.Center,
+					) {
+						Icon(
+							imageVector = Icons.Outlined.Edit,
+							contentDescription = "Rename",
+							tint = MaterialTheme.colors.textTertiary,
+							modifier = Modifier.size(14.dp),
+						)
+					}
+					Spacer(modifier = Modifier.weight(1f))
+					NetworkPill(
+						label = if (wallet.mainnet) "mainnet" else "testnet",
+						accent = if (wallet.mainnet) accent else MaterialTheme.colors.textTertiary,
+					)
+				}
+				Spacer(modifier = Modifier.height(6.dp))
+				Row(verticalAlignment = Alignment.CenterVertically) {
+					Text(
+						text = "${wallet.minSigners}-of-${wallet.maxSigners}",
+						style = SignerTypeface.LabelM,
+						color = accent,
+					)
+					Spacer(modifier = Modifier.width(6.dp))
+					Text(
+						text = "threshold",
+						style = SignerTypeface.BodyM,
+						color = MaterialTheme.colors.textSecondary,
+					)
+				}
+				Spacer(modifier = Modifier.height(2.dp))
+				Text(
+					text = wallet.walletId.take(16) + "…",
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textTertiary,
 				)
 			}
-			Spacer(modifier = Modifier.weight(1f))
-			Text(
-				text = if (wallet.mainnet) "mainnet" else "testnet",
-				style = SignerTypeface.CaptionM,
-				color = MaterialTheme.colors.textTertiary,
-				modifier = Modifier
-					.clip(RoundedCornerShape(4.dp))
-					.background(MaterialTheme.colors.fill6)
-					.padding(horizontal = 6.dp, vertical = 2.dp),
-			)
 		}
 
-		Spacer(modifier = Modifier.height(4.dp))
-
-		// Threshold
-		Text(
-			text = "${wallet.minSigners}-of-${wallet.maxSigners} threshold",
-			style = SignerTypeface.BodyL,
-			color = MaterialTheme.colors.textSecondary,
+		Spacer(modifier = Modifier.height(2.dp))
+		Box(
+			modifier = Modifier
+				.fillMaxWidth()
+				.padding(horizontal = 14.dp)
+				.height(1.dp)
+				.background(MaterialTheme.colors.appliedStroke),
 		)
-
-		Spacer(modifier = Modifier.height(4.dp))
-
-		// Wallet ID (truncated)
-		Text(
-			text = wallet.walletId.take(16) + "...",
-			style = SignerTypeface.CaptionM,
-			color = MaterialTheme.colors.textTertiary,
-		)
-
-		Spacer(modifier = Modifier.height(12.dp))
 
 		if (isConfirmingDelete) {
-			Text(
-				text = "Delete this wallet? This cannot be undone.",
-				style = SignerTypeface.CaptionM,
-				color = MaterialTheme.colors.red500,
-				modifier = Modifier.padding(bottom = 8.dp),
-			)
-			Row(
-				modifier = Modifier.fillMaxWidth(),
-				horizontalArrangement = Arrangement.spacedBy(12.dp),
-			) {
-				SecondaryButtonWide(
-					label = "Cancel",
-					modifier = Modifier.weight(1f),
-					onClicked = onDeleteCancel,
+			Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+				Text(
+					text = "Delete this wallet? This cannot be undone.",
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.red500,
 				)
-				SecondaryButtonWide(
-					label = "Delete",
-					modifier = Modifier.weight(1f),
-					onClicked = onDeleteConfirm,
-				)
+				Spacer(modifier = Modifier.height(8.dp))
+				Row(
+					modifier = Modifier.fillMaxWidth(),
+					horizontalArrangement = Arrangement.spacedBy(8.dp),
+				) {
+					SecondaryButtonWide(
+						label = "Cancel",
+						modifier = Modifier.weight(1f),
+						onClicked = onDeleteCancel,
+					)
+					SecondaryButtonWide(
+						label = "Delete",
+						modifier = Modifier.weight(1f),
+						onClicked = onDeleteConfirm,
+					)
+				}
 			}
 		} else {
-			// Compact icon-button row. Long-press any icon for a Toast tooltip.
-			// Rename lives inline next to the wallet label, not in this row.
 			Row(
-				modifier = Modifier.fillMaxWidth(),
-				horizontalArrangement = Arrangement.spacedBy(8.dp),
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(horizontal = 8.dp, vertical = 6.dp),
+				horizontalArrangement = Arrangement.spacedBy(4.dp),
 			) {
 				IconActionButton(
 					icon = Icons.Outlined.QrCode2,
-					label = "Send to zafu",
+					label = "Send to Zafu",
 					onClick = onSendToZafu,
 					modifier = Modifier.weight(1f),
 				)
@@ -437,44 +548,34 @@ private fun FrostWalletRow(
 	}
 }
 
+/**
+ * Small accent-tinted pill — mainnet uses the chain accent, anything else
+ * (testnet, etc.) gets the neutral tertiary tint so mainnet stands out.
+ */
+@Composable
+private fun NetworkPill(label: String, accent: androidx.compose.ui.graphics.Color) {
+	Text(
+		text = label,
+		style = SignerTypeface.CaptionM,
+		color = accent,
+		modifier = Modifier
+			.clip(RoundedCornerShape(6.dp))
+			.background(accent.copy(alpha = 0.12f))
+			.padding(horizontal = 8.dp, vertical = 3.dp),
+	)
+}
+
 // ── helpers ──
 
-/** sanitize wallet label for filename use ([A-Za-z0-9_-] only). */
-internal fun sanitizeLabel(label: String): String {
-	val cleaned = label.replace(Regex("[^A-Za-z0-9_-]+"), "-").trim('-')
-	return if (cleaned.isEmpty()) "multisig" else cleaned
-}
-
-/** YYYYMMDD in local time. */
-internal fun ymdToday(): String {
-	val cal = java.util.Calendar.getInstance()
-	val y = cal.get(java.util.Calendar.YEAR)
-	val m = cal.get(java.util.Calendar.MONTH) + 1
-	val d = cal.get(java.util.Calendar.DAY_OF_MONTH)
-	return "%04d%02d%02d".format(y, m, d)
-}
-
-private fun writeFile(ctx: Context, uri: Uri, text: String) {
-	ctx.contentResolver.openOutputStream(uri)?.use { os ->
-		os.write(text.toByteArray(Charsets.UTF_8))
-	} ?: throw IllegalStateException("could not open output stream for $uri")
-}
-
-private fun readFile(ctx: Context, uri: Uri): String {
-	return ctx.contentResolver.openInputStream(uri)?.use { input ->
-		input.readBytes().toString(Charsets.UTF_8)
-	} ?: throw IllegalStateException("could not open input stream for $uri")
-}
-
 @Preview(
-	name = "light", group = "themes",
+	name = "light_empty", group = "themes",
 	uiMode = Configuration.UI_MODE_NIGHT_NO,
 	showBackground = true, backgroundColor = 0xFFFFFFFF,
 )
 @Preview(
-	name = "dark", group = "themes",
+	name = "dark_empty", group = "themes",
 	uiMode = Configuration.UI_MODE_NIGHT_YES,
-	showBackground = true, backgroundColor = 0xFF000000,
+	showBackground = true, backgroundColor = 0xFF0D0D12,
 )
 @Composable
 private fun PreviewFrostWalletListEmpty() {
@@ -482,19 +583,31 @@ private fun PreviewFrostWalletListEmpty() {
 		FrostWalletListContent(
 			wallets = emptyList(),
 			error = null,
+			toast = null,
+			onToastShown = {},
 			confirmDeleteId = null,
 			onDeleteTap = {},
 			onDeleteConfirm = {},
 			onDeleteCancel = {},
+			onExportBackup = {},
+			onSendToZafu = {},
+			onRenameTap = {},
+			onWalletTap = {},
+			onRestoreFromFile = {},
 			onBack = {},
 		)
 	}
 }
 
 @Preview(
-	name = "light_with_wallets", group = "themes",
+	name = "light_populated", group = "themes",
 	uiMode = Configuration.UI_MODE_NIGHT_NO,
 	showBackground = true, backgroundColor = 0xFFFFFFFF,
+)
+@Preview(
+	name = "dark_populated", group = "themes",
+	uiMode = Configuration.UI_MODE_NIGHT_YES,
+	showBackground = true, backgroundColor = 0xFF0D0D12,
 )
 @Composable
 private fun PreviewFrostWalletListPopulated() {
@@ -519,84 +632,18 @@ private fun PreviewFrostWalletListPopulated() {
 				),
 			),
 			error = null,
+			toast = null,
+			onToastShown = {},
 			confirmDeleteId = null,
 			onDeleteTap = {},
 			onDeleteConfirm = {},
 			onDeleteCancel = {},
+			onExportBackup = {},
+			onSendToZafu = {},
+			onRenameTap = {},
+			onWalletTap = {},
+			onRestoreFromFile = {},
 			onBack = {},
 		)
-	}
-}
-
-/**
- * Stateless content composable for previews.
- */
-@Composable
-private fun FrostWalletListContent(
-	wallets: List<FrostWalletSummaryFfi>,
-	error: String?,
-	confirmDeleteId: String?,
-	onDeleteTap: (String) -> Unit,
-	onDeleteConfirm: Callback,
-	onDeleteCancel: Callback,
-	onBack: Callback,
-) {
-	Column(
-		modifier = Modifier
-			.fillMaxSize()
-			.background(MaterialTheme.colors.background)
-	) {
-		ScreenHeaderClose(
-			title = "FROST Multisig Wallets",
-			onClose = onBack,
-		)
-
-		if (error != null) {
-			Text(
-				text = error,
-				style = SignerTypeface.BodyL,
-				color = MaterialTheme.colors.red500,
-				modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
-			)
-		}
-
-		if (wallets.isEmpty() && error == null) {
-			Column(
-				modifier = Modifier
-					.fillMaxSize()
-					.padding(horizontal = 24.dp),
-				horizontalAlignment = Alignment.CenterHorizontally,
-				verticalArrangement = Arrangement.Center,
-			) {
-				Text(
-					text = "No multisig wallets",
-					style = SignerTypeface.TitleS,
-					color = MaterialTheme.colors.textTertiary,
-				)
-				Spacer(modifier = Modifier.height(8.dp))
-				Text(
-					text = "Complete a FROST DKG ceremony to create one.",
-					style = SignerTypeface.CaptionM,
-					color = MaterialTheme.colors.textTertiary,
-				)
-			}
-		} else {
-			Column(
-				modifier = Modifier
-					.weight(1f)
-					.verticalScroll(rememberScrollState())
-			) {
-				wallets.forEach { wallet ->
-					FrostWalletRow(
-						wallet = wallet,
-						isConfirmingDelete = confirmDeleteId == wallet.walletId,
-						onDeleteTap = { onDeleteTap(wallet.walletId) },
-						onDeleteConfirm = onDeleteConfirm,
-						onDeleteCancel = onDeleteCancel,
-					)
-					SignerDivider()
-				}
-			}
-		}
 	}
 }

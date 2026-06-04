@@ -21,6 +21,7 @@ import net.rotko.zigner.screens.scan.bananasplitcreate.bananaSplitCreateDestinat
 import net.rotko.zigner.screens.settings.backupexport.BackupExportSubgraph
 import net.rotko.zigner.screens.settings.frost.FrostBackupAllScreen
 import net.rotko.zigner.screens.settings.frost.FrostSendToZafuScreen
+import net.rotko.zigner.screens.settings.frost.FrostWalletDetailScreen
 import net.rotko.zigner.screens.settings.frost.FrostWalletListScreen
 import net.rotko.zigner.screens.settings.networks.helper.networkHelpersCoreSubgraph
 import net.rotko.zigner.screens.settings.settingsFullSubgraph
@@ -167,6 +168,11 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 						CoreUnlockedNavSubgraph.FrostSendToZafu.destination(walletId)
 					)
 				},
+				onWalletTap = { walletId ->
+					navController.navigate(
+						CoreUnlockedNavSubgraph.FrostWalletDetail.destination(walletId)
+					)
+				},
 			)
 		}
 		composable(CoreUnlockedNavSubgraph.frostBackupAll) {
@@ -190,6 +196,28 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 			FrostSendToZafuScreen(
 				walletIdFilter = walletId,
 				onBack = { navController.popBackStack() },
+			)
+		}
+		composable(
+			route = CoreUnlockedNavSubgraph.FrostWalletDetail.route,
+			arguments = listOf(
+				navArgument(CoreUnlockedNavSubgraph.FrostWalletDetail.walletIdArg) {
+					type = NavType.StringType
+				},
+			),
+		) { entry ->
+			val walletId = entry.arguments
+				?.getString(CoreUnlockedNavSubgraph.FrostWalletDetail.walletIdArg)
+				.orEmpty()
+			FrostWalletDetailScreen(
+				walletId = walletId,
+				onBack = { navController.popBackStack() },
+				onSendToZafu = {
+					navController.navigate(
+						CoreUnlockedNavSubgraph.FrostSendToZafu.destination(walletId)
+					)
+				},
+				onDeleted = { navController.popBackStack() },
 			)
 		}
 		settingsFullSubgraph(
@@ -290,5 +318,14 @@ object CoreUnlockedNavSubgraph {
 		const val route = "$baseRoute?$walletIdArg={$walletIdArg}"
 		fun destination(walletId: String? = null): String =
 			if (walletId == null) baseRoute else "$baseRoute?$walletIdArg=$walletId"
+	}
+
+	/** Per-wallet multisig detail screen. Short-tap from a home multisig row
+	 *  drills in here; long-press still goes to the universal [frostWalletList]. */
+	object FrostWalletDetail {
+		internal const val walletIdArg = "wallet_id"
+		private const val baseRoute = "frost_wallet_detail"
+		const val route = "$baseRoute/{$walletIdArg}"
+		fun destination(walletId: String) = "$baseRoute/$walletId"
 	}
 }
