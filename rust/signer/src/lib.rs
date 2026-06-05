@@ -3639,6 +3639,17 @@ fn frost_import_backup_envelope(
     let payload = frost_backup::open_envelope(envelope_json, passphrase)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
 
+    // Cross-check envelope-supplied threshold/participant counts against the
+    // PublicKeyPackage itself. An attacker who controls the envelope (correct
+    // PKP, lowered threshold) would otherwise downgrade the m-of-n the user
+    // originally consented to without changing the spend key.
+    let (pkp_min, pkp_max) = verify_envelope_threshold(
+        &payload.public_key_package,
+        &payload.key_package,
+        payload.threshold,
+        payload.max_signers,
+    )?;
+
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
@@ -3647,8 +3658,8 @@ fn frost_import_backup_envelope(
         public_key_package_hex: payload.public_key_package,
         ephemeral_seed_hex: payload.ephemeral_seed,
         label: payload.label,
-        min_signers: payload.threshold,
-        max_signers: payload.max_signers,
+        min_signers: pkp_min,
+        max_signers: pkp_max,
         mainnet: payload.mainnet,
         created_at: payload.created_at,
         orchard_fvk_uview: payload.orchard_fvk,
@@ -3659,6 +3670,54 @@ fn frost_import_backup_envelope(
     db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
         s: format!("store imported wallet: {e}"),
     })
+}
+
+/// Parse the KeyPackage + PublicKeyPackage hex and assert they agree with
+/// the envelope's claimed signing policy. Returns the cryptographically
+/// authoritative `(min_signers, max_signers)` for storage so future code
+/// reads canonical values, not envelope claims.
+///
+/// Threat: a hostile envelope can ship correct KeyPackage + PublicKeyPackage
+/// material with tampered envelope-level threshold/max_signers fields. The
+/// UI then displays a different m-of-n than the FROST polynomial encodes.
+/// Cross-check pins the displayed policy to the cryptographic ground truth.
+fn verify_envelope_threshold(
+    public_key_package_hex: &str,
+    key_package_hex: &str,
+    claimed_threshold: u16,
+    claimed_max_signers: u16,
+) -> Result<(u16, u16), ErrorDisplayed> {
+    use frost_spend::frost_keys::{KeyPackage, PublicKeyPackage};
+    use frost_spend::orchestrate::from_hex;
+    let pubkeys: PublicKeyPackage = from_hex(public_key_package_hex).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("parse public_key_package: {e}"),
+        }
+    })?;
+    let key_pkg: KeyPackage = from_hex(key_package_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("parse key_package: {e}"),
+    })?;
+    let pkp_max: u16 = pubkeys.verifying_shares().len().try_into().map_err(|_| {
+        ErrorDisplayed::Str {
+            s: "PublicKeyPackage participant count exceeds u16".into(),
+        }
+    })?;
+    let kp_min: u16 = *key_pkg.min_signers();
+    if kp_min != claimed_threshold {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "envelope threshold {claimed_threshold} disagrees with KeyPackage min_signers {kp_min}"
+            ),
+        });
+    }
+    if pkp_max != claimed_max_signers {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "envelope max_signers {claimed_max_signers} disagrees with PublicKeyPackage participant count {pkp_max}"
+            ),
+        });
+    }
+    Ok((kp_min, pkp_max))
 }
 
 /// Encrypt every FROST wallet on this device into a single envelope.
@@ -3722,6 +3781,13 @@ fn frost_import_all_backup_envelope(
     let mut imported = 0u32;
     let mut skipped = 0u32;
     for share in shares {
+        // Same envelope-vs-KeyPackage/PKP cross-check as single import.
+        let (pkp_min, pkp_max) = verify_envelope_threshold(
+            &share.public_key_package,
+            &share.key_package,
+            share.threshold,
+            share.max_signers,
+        )?;
         let id = db_handling::frost::wallet_id_hex(&share.public_key_package);
         let already = db_handling::frost::get_frost_wallet(database, &id)
             .map_err(|e| ErrorDisplayed::Str { s: format!("lookup: {e}") })?
@@ -3735,8 +3801,8 @@ fn frost_import_all_backup_envelope(
             public_key_package_hex: share.public_key_package,
             ephemeral_seed_hex: share.ephemeral_seed,
             label: share.label,
-            min_signers: share.threshold,
-            max_signers: share.max_signers,
+            min_signers: pkp_min,
+            max_signers: pkp_max,
             mainnet: share.mainnet,
             created_at: share.created_at,
             orchard_fvk_uview: share.orchard_fvk,
