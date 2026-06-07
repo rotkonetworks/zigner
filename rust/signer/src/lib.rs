@@ -2173,10 +2173,11 @@ fn sign_zcash_pczt(
     // Keystone cannot detect.
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
 
-    // TODO(sync-flow): re-enable the `known_spends == 0` refusal and the
-    // implied-spend-vs-verified-balance check once the zcli → zigner
-    // verified-notes sync flow ships. Currently disabled so unsynced PCZT
-    // round-trip works for testing. See git blame for the prior shape.
+    // TODO(sync-flow, rotkonetworks/zigner#16): re-enable the
+    // `known_spends == 0` refusal and the implied-spend-vs-verified-balance
+    // check once the zcli → zigner verified-notes sync flow ships. Currently
+    // disabled so unsynced PCZT round-trip works for testing. See git blame
+    // for the prior shape.
 
     // Sign every action try-and-skip. Dummy Orchard actions are spent
     // under an ephemeral key the user doesn't hold, so sign_orchard will
