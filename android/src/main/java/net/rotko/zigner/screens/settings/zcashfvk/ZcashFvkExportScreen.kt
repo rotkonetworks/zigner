@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.AlertDialog
+import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -180,6 +186,7 @@ private fun ZcashFvkExportResultView(
     val qrBitmap = remember(result.qrPng) {
         result.qrPng.intoImageBitmap()
     }
+    var showCompatInfo by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -233,11 +240,55 @@ private fun ZcashFvkExportResultView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "scan with zafu/zashi/keystone",
-                style = SignerTypeface.TitleS,
-                color = MaterialTheme.colors.primary
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "scan with Zafu or any Keystone-compatible wallet to import as watch-only",
+                    style = SignerTypeface.BodyM,
+                    color = MaterialTheme.colors.textTertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = "Compatibility info",
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(16.dp)
+                        .clickable { showCompatInfo = true }
+                )
+            }
+
+            if (showCompatInfo) {
+                AlertDialog(
+                    onDismissRequest = { showCompatInfo = false },
+                    title = {
+                        Text(
+                            text = "Zcash FVK compatibility",
+                            style = SignerTypeface.TitleS,
+                            color = MaterialTheme.colors.primary,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Tested with Zafu and Zodl. Keystone QR format — other compatible wallets should work but may vary.",
+                            style = SignerTypeface.BodyM,
+                            color = MaterialTheme.colors.textTertiary,
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showCompatInfo = false }) {
+                            Text("OK", color = MaterialTheme.colors.primary)
+                        }
+                    },
+                    backgroundColor = MaterialTheme.colors.background,
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

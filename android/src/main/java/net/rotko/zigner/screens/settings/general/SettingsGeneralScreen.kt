@@ -4,12 +4,15 @@ import android.content.res.Configuration
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +22,12 @@ import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Policy
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -48,19 +58,14 @@ import net.rotko.zigner.ui.theme.textTertiary
 @Composable
 internal fun SettingsScreenGeneralView(
 	navController: NavController,
-	onWipeData: Callback,
-	onOpenLogs: Callback,
 	onShowTerms: Callback,
 	onShowPrivacyPolicy: Callback,
 	onBackup: Callback,
-	onManageNetworks: Callback,
-	onGeneralVerifier: Callback,
+	onMultisigSettings: Callback,
+	onAdvancedSettings: Callback,
 	onExposedClicked: Callback,
-	onOnlineModeToggle: Callback,
-	onZcashTestQr: Callback = {},
-	isStrongBoxProtected: Boolean,
-	isOnlineModeEnabled: Boolean,
-	wasOnlineModeEverEnabled: Boolean,
+	onLightThemeToggle: Callback,
+	isLightThemeEnabled: Boolean,
 	securitySummary: String,
 	appVersion: String,
 	networkState: State<NetworkState?>,
@@ -71,73 +76,72 @@ internal fun SettingsScreenGeneralView(
 			onClose = { navController.popBackStack() },
 		)
 		Box(modifier = Modifier.weight(1f)) {
-			Column(Modifier.verticalScroll(rememberScrollState())) {
-				SettingsElement(
-					name = stringResource(R.string.settings_logs),
-					onClick = onOpenLogs
+			Column(
+				modifier = Modifier.verticalScroll(rememberScrollState()),
+				verticalArrangement = Arrangement.spacedBy(2.dp)
+			) {
+				SettingsToggleElement(
+					name = "Light Theme",
+					description = "Black-on-white QR codes scan better on webcams",
+					icon = Icons.Outlined.LightMode,
+					isChecked = isLightThemeEnabled,
+					onClick = onLightThemeToggle,
 				)
-				SettingsElement(
-					name = stringResource(R.string.settings_networks),
-					onClick = onManageNetworks,
-				)
-				SettingsElement(
-					name = stringResource(R.string.settings_verifier_certificate),
-					onClick = onGeneralVerifier,
-				)
+
+				Spacer(modifier = Modifier.height(16.dp))
+
 				SettingsElement(
 					name = stringResource(R.string.settings_backup),
+					icon = Icons.Outlined.Key,
 					onClick = onBackup,
 				)
 				SettingsElement(
+					name = "Multisig",
+					icon = Icons.Outlined.Groups,
+					onClick = onMultisigSettings,
+				)
+				SettingsElement(
+					name = "Advanced Settings",
+					icon = Icons.Outlined.Tune,
+					onClick = onAdvancedSettings,
+				)
+
+				Spacer(modifier = Modifier.height(16.dp))
+				SettingsElement(
 					name = stringResource(R.string.documents_privacy_policy),
+					icon = Icons.Outlined.Policy,
 					onClick = onShowPrivacyPolicy
 				)
 				SettingsElement(
 					name = stringResource(R.string.documents_terms_of_service),
+					icon = Icons.Outlined.Article,
 					onClick = onShowTerms
 				)
-				SettingsToggleElement(
-					name = "Online Mode",
-					description = if (wasOnlineModeEverEnabled && !isOnlineModeEnabled) {
-						"Previously used in online mode"
-					} else {
-						"Allow use with WiFi/Bluetooth enabled"
-					},
-					isChecked = isOnlineModeEnabled,
-					showWarning = wasOnlineModeEverEnabled && !isOnlineModeEnabled,
-					onClick = onOnlineModeToggle,
-				)
-				SettingsElement(
-					name = "Zcash Test QR",
-					onClick = onZcashTestQr,
-				)
-				SettingsElement(
-					name = stringResource(R.string.settings_wipe_data),
-					isDanger = true,
-					skipChevron = true,
-					onClick = onWipeData
-				)
-				Text(
-					text = "Security: $securitySummary",
-					style = SignerTypeface.BodyM,
-					color = MaterialTheme.colors.textSecondary,
-					modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-				)
-				Text(
-					text = stringResource(R.string.settings_version, appVersion),
-					style = SignerTypeface.BodyM,
-					color = MaterialTheme.colors.textSecondary,
-					modifier = Modifier.padding(horizontal = 24.dp)
-				)
-				Spacer(modifier = Modifier.height(16.dp))
-				Image(
-					painter = painterResource(id = R.drawable.rotko_logo),
-					contentDescription = "Rotko Networks",
-					modifier = Modifier
-						.padding(horizontal = 24.dp)
-						.height(40.dp)
-				)
-				Spacer(modifier = Modifier.height(24.dp))
+
+				Spacer(modifier = Modifier.weight(1f))
+				Spacer(modifier = Modifier.height(32.dp))
+				Column(
+					modifier = Modifier.fillMaxWidth(),
+					horizontalAlignment = Alignment.CenterHorizontally
+				) {
+					Image(
+						painter = painterResource(id = R.drawable.rotko_logo),
+						contentDescription = "Rotko Networks",
+						modifier = Modifier.height(40.dp)
+					)
+					Spacer(modifier = Modifier.height(8.dp))
+					Text(
+						text = stringResource(R.string.settings_version, appVersion),
+						style = SignerTypeface.BodyM,
+						color = MaterialTheme.colors.textSecondary,
+					)
+					Text(
+						text = "Security: $securitySummary",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+					)
+				}
+				Spacer(modifier = Modifier.height(40.dp))
 			}
 			ExposedIcon(
 				networkState = networkState,
@@ -153,23 +157,47 @@ internal fun SettingsScreenGeneralView(
 @Composable
 internal fun SettingsElement(
 	name: String,
+	icon: ImageVector? = null,
 	isDanger: Boolean = false,
 	skipChevron: Boolean = false,
 	onClick: Callback,
 ) {
 	Row(
 		modifier = Modifier
+			.fillMaxWidth()
 			.clickable(onClick = onClick)
-			.padding(vertical = 14.dp),
+			.padding(vertical = 18.dp),
+		verticalAlignment = Alignment.CenterVertically
 	) {
-		Text(
-			text = name,
-			style = SignerTypeface.TitleS,
-			color = if (isDanger) MaterialTheme.colors.red400 else MaterialTheme.colors.primary,
-			modifier = Modifier
-				.padding(start = 24.dp)
-				.weight(1f)
-		)
+		if (icon != null) {
+			Image(
+				imageVector = icon,
+				contentDescription = null,
+				colorFilter = ColorFilter.tint(
+					if (isDanger) MaterialTheme.colors.red400 else MaterialTheme.colors.primary
+				),
+				modifier = Modifier
+					.padding(start = 24.dp)
+					.size(20.dp)
+			)
+			Text(
+				text = name,
+				style = SignerTypeface.TitleS,
+				color = if (isDanger) MaterialTheme.colors.red400 else MaterialTheme.colors.primary,
+				modifier = Modifier
+					.padding(start = 12.dp)
+					.weight(1f)
+			)
+		} else {
+			Text(
+				text = name,
+				style = SignerTypeface.TitleS,
+				color = if (isDanger) MaterialTheme.colors.red400 else MaterialTheme.colors.primary,
+				modifier = Modifier
+					.padding(start = 24.dp)
+					.weight(1f)
+			)
+		}
 		if (!skipChevron) {
 			Image(
 				imageVector = Icons.Filled.ChevronRight,
@@ -185,19 +213,31 @@ internal fun SettingsElement(
 internal fun SettingsToggleElement(
 	name: String,
 	description: String,
+	icon: ImageVector? = null,
 	isChecked: Boolean,
 	showWarning: Boolean = false,
 	onClick: Callback,
 ) {
 	Row(
 		modifier = Modifier
+			.fillMaxWidth()
 			.clickable(onClick = onClick)
-			.padding(vertical = 10.dp),
+			.padding(vertical = 13.dp),
 		verticalAlignment = Alignment.CenterVertically,
 	) {
+		if (icon != null) {
+			Image(
+				imageVector = icon,
+				contentDescription = null,
+				colorFilter = ColorFilter.tint(MaterialTheme.colors.primary),
+				modifier = Modifier
+					.padding(start = 24.dp)
+					.size(20.dp)
+			)
+		}
 		Column(
 			modifier = Modifier
-				.padding(start = 24.dp)
+				.padding(start = if (icon != null) 12.dp else 24.dp)
 				.weight(1f)
 		) {
 			Text(
@@ -239,19 +279,14 @@ private fun PreviewSettingsScreen() {
 		val state = remember { mutableStateOf(NetworkState.Past) }
 		SettingsScreenGeneralView(
 			navController = rememberNavController(),
-			onWipeData = {},
-			onOpenLogs = {},
 			onShowTerms = {},
 			onShowPrivacyPolicy = {},
 			onBackup = {},
-			onManageNetworks = {},
-			onGeneralVerifier = {},
+			onMultisigSettings = {},
+			onAdvancedSettings = {},
 			onExposedClicked = {},
-			onOnlineModeToggle = {},
-			onZcashTestQr = {},
-			isStrongBoxProtected = false,
-			isOnlineModeEnabled = false,
-			wasOnlineModeEverEnabled = true,
+			onLightThemeToggle = {},
+			isLightThemeEnabled = false,
 			securitySummary = "StrongBox + MTE",
 			appVersion = "0.6.1",
 			networkState = state,

@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +20,10 @@ import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
+
+/** Minimum passphrase length. Encrypted FROST share is what stands between
+ *  a disk-read attacker and the spend material; sized for offline crack. */
+const val MIN_FROST_PASSPHRASE_LEN = 16
 
 /** Passphrase entry for FROST backup export/import. Always starts empty —
  *  never reuses a passphrase across opens. */
@@ -33,7 +38,9 @@ fun FrostBackupDialog(
 ) {
 	var passphrase by remember { mutableStateOf("") }
 	var confirm by remember { mutableStateOf("") }
-	val canConfirm = passphrase.length >= 8 &&
+	// Encrypted FROST share is the only barrier between a disk-read attacker
+	// and the spend material. 16-char minimum sized for offline-crack resistance.
+	val canConfirm = passphrase.length >= MIN_FROST_PASSPHRASE_LEN &&
 		(!requireConfirmField || passphrase == confirm)
 
 	Dialog(onDismissRequest = onCancel) {
@@ -73,10 +80,18 @@ fun FrostBackupDialog(
 				keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
 				singleLine = true,
 				modifier = Modifier.fillMaxWidth(),
+				colors = TextFieldDefaults.outlinedTextFieldColors(
+					textColor = MaterialTheme.colors.primary,
+					cursorColor = MaterialTheme.colors.primary,
+					focusedBorderColor = MaterialTheme.colors.primary,
+					unfocusedBorderColor = MaterialTheme.colors.textTertiary,
+					focusedLabelColor = MaterialTheme.colors.primary,
+					unfocusedLabelColor = MaterialTheme.colors.textTertiary,
+				),
 			)
-			if (passphrase.isNotEmpty() && passphrase.length < 8) {
+			if (passphrase.isNotEmpty() && passphrase.length < MIN_FROST_PASSPHRASE_LEN) {
 				Text(
-					text = "at least 8 characters",
+					text = "at least $MIN_FROST_PASSPHRASE_LEN characters",
 					style = SignerTypeface.CaptionM,
 					color = MaterialTheme.colors.red400,
 					modifier = Modifier.padding(top = 4.dp),
@@ -93,6 +108,14 @@ fun FrostBackupDialog(
 					keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
 					singleLine = true,
 					modifier = Modifier.fillMaxWidth(),
+					colors = TextFieldDefaults.outlinedTextFieldColors(
+						textColor = MaterialTheme.colors.primary,
+						cursorColor = MaterialTheme.colors.primary,
+						focusedBorderColor = MaterialTheme.colors.primary,
+						unfocusedBorderColor = MaterialTheme.colors.textTertiary,
+						focusedLabelColor = MaterialTheme.colors.primary,
+						unfocusedLabelColor = MaterialTheme.colors.textTertiary,
+					),
 				)
 				if (confirm.isNotEmpty() && passphrase != confirm) {
 					Text(

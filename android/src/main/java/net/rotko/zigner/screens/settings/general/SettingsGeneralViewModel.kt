@@ -138,4 +138,14 @@ class SettingsGeneralViewModel: ViewModel() {
 	suspend fun wipeToFactory(onAfterWipe: Callback): OperationResult<Unit, ErrorStateDestinationState> {
 		return resetUseCase.wipeToFactoryWithAuth(onAfterWipe)
 	}
+
+	val lightThemeEnabled: StateFlow<Boolean> =
+		preferencesRepository.lightThemeEnabled
+			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+	fun toggleLightTheme() {
+		viewModelScope.launch {
+			preferencesRepository.setLightThemeEnabled(!lightThemeEnabled.value)
+		}
+	}
 }

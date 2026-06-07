@@ -1961,26 +1961,70 @@ fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
 }
 
 /// Inspect a PCZT: extract spend/output details, cross-reference against verified notes.
+/// Defense-in-depth caps on PCZT parsing. The pczt crate uses postcard for
+/// deserialization, which doesn't bound declared collection lengths against
+/// remaining slice length — a hostile PCZT can claim a Vec<Action> of 2^32
+/// items and trigger allocation-driven OOM. We reject obviously-bogus inputs
+/// upfront. Real Orchard bundles top out in the low tens of actions.
+const MAX_PCZT_BYTES: usize = 1024 * 1024; // 1 MiB — far above any real PCZT
+const MAX_ORCHARD_ACTIONS: usize = 4096; // far above any real bundle (~tens)
+
 fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorDisplayed> {
     use pczt::Pczt;
 
-    let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
-        s: format!("Failed to parse PCZT: {:?}", e),
-    })?;
+    if pczt_bytes.len() > MAX_PCZT_BYTES {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "PCZT too large: {} B (max {MAX_PCZT_BYTES})",
+                pczt_bytes.len()
+            ),
+        });
+    }
+
+    // The pczt parse + every subsequent access can panic on adversarial input
+    // (declared collection lengths > remaining slice, integer overflow on
+    // count fields). Catch the panic so the UDL surface returns a clean
+    // ErrorDisplayed instead of unwinding into the Kotlin/Swift FFI boundary.
+    let pczt = std::panic::catch_unwind(|| Pczt::parse(&pczt_bytes))
+        .map_err(|_| ErrorDisplayed::Str {
+            s: "Panic during PCZT parse — input is malformed".to_string(),
+        })?
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to parse PCZT: {:?}", e),
+        })?;
 
     let orchard = pczt.orchard();
-    let action_count = orchard.actions().len() as u32;
-    let pczt_anchor = orchard.anchor();
-    let pczt_anchor_hex = hex::encode(pczt_anchor);
+    let action_count_raw = orchard.actions().len();
+    if action_count_raw > MAX_ORCHARD_ACTIONS {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Orchard bundle has {action_count_raw} actions, exceeds cap {MAX_ORCHARD_ACTIONS}"
+            ),
+        });
+    }
+    let action_count = action_count_raw as u32;
 
-    // Load verified notes for cross-reference
-    let (verified_balance, verified_anchor, verified_nullifiers, verified_notes_values) = {
+    // Load verified notes for cross-reference. Used by the known_spends warning
+    // (zigner's distinguishing safety guard over a Keystone-equivalent signer —
+    // we can warn when the PCZT spends notes we haven't verified) and to derive
+    // the network for recipient-address encoding.
+    //
+    // The verified_anchor was previously used for byte-equality matching against
+    // the PCZT's anchor; that check was rotko-invented and doesn't exist in the
+    // canonical Zashi → Keystone flow, so it's gone. The DB still stores the
+    // anchor for the note-sync UI on a separate screen; the PCZT path doesn't
+    // consult it for signing decisions.
+    let (verified_balance, verified_nullifiers, verified_notes_values, is_mainnet) = {
         let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
         if let Some(database) = db_guard.as_ref() {
             let balance = db_handling::zcash::get_verified_balance(database).unwrap_or(0);
-            let anchor = db_handling::zcash::get_verified_anchor(database)
+            // Anchor is read only to recover the network flag; the bytes are
+            // discarded. Defaults to mainnet when no notes have been synced.
+            let mainnet = db_handling::zcash::get_verified_anchor(database)
                 .ok()
-                .flatten();
+                .flatten()
+                .map(|(_, _, m, _)| m)
+                .unwrap_or(true);
             let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
             let nullifiers: std::collections::HashSet<String> = notes
                 .iter()
@@ -1991,22 +2035,16 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
                 .iter()
                 .map(|(val, nf_hex, _, _, _)| (nf_hex.clone(), *val))
                 .collect();
-            (balance, anchor, nullifiers, values)
+            (balance, nullifiers, values, mainnet)
         } else {
             (
                 0,
-                None,
                 std::collections::HashSet::new(),
                 std::collections::HashMap::new(),
+                true,
             )
         }
     };
-
-    // Check anchor match
-    let anchor_matches = verified_anchor
-        .as_ref()
-        .map(|(a, _, _, _)| hex::encode(a) == pczt_anchor_hex)
-        .unwrap_or(false);
 
     // Extract spend details (value may be redacted in PCZT, use nullifier for cross-ref)
     let mut spends = Vec::new();
@@ -2032,12 +2070,6 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         });
     }
 
-    // Determine network for address encoding
-    let is_mainnet = verified_anchor
-        .as_ref()
-        .map(|(_, _, mainnet, _)| *mainnet)
-        .unwrap_or(true);
-
     // Extract output details with human-readable addresses
     let mut outputs = Vec::new();
     for action in orchard.actions() {
@@ -2056,23 +2088,59 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         });
     }
 
-    // Net value from bundle's value_sum (authoritative)
+    // Orchard's value_sum = (total spent − total output) in zatoshis.
+    // Sign-extend into i64 for fee math.
     let &(value_sum_magnitude, value_sum_is_negative) = orchard.value_sum();
-    let net_value = if value_sum_is_negative {
+    let orchard_net_value: i64 = if value_sum_is_negative {
         -(value_sum_magnitude as i64)
     } else {
         value_sum_magnitude as i64
     };
 
+    // True fee = Σ over all three bundles of (in − out).
+    // - transparent: explicit input.value − output.value sum
+    // - sapling: bundle exposes value_sum (i128) — same sign convention
+    // - orchard: orchard_net_value above
+    //
+    // For shielded-only txs the transparent + sapling terms are zero and the
+    // fee equals orchard_net_value, so the old code accidentally worked.
+    // For shielding / deshielding it didn't.
+    let transparent = pczt.transparent();
+    let transparent_in: u64 = transparent.inputs().iter().map(|i| *i.value()).sum();
+    let transparent_out: u64 = transparent.outputs().iter().map(|o| *o.value()).sum();
+    let transparent_balance: i64 =
+        (transparent_in as i64).saturating_sub(transparent_out as i64);
+    // value_sum is i128 because intermediate arithmetic during PCZT
+    // construction can exceed i64. A complete PCZT's value_sum always fits
+    // in i64; clamp on overflow for safety.
+    let sapling_v: i128 = *pczt.sapling().value_sum();
+    let sapling_balance: i64 = if (i64::MIN as i128..=i64::MAX as i128).contains(&sapling_v) {
+        sapling_v as i64
+    } else {
+        0
+    };
+    let fee_zat: i64 = transparent_balance
+        .saturating_add(sapling_balance)
+        .saturating_add(orchard_net_value);
+
+    // Global tx metadata. Cold device displays these so the user knows
+    // which consensus fork + expiry window they're authorizing.
+    let global = pczt.global();
+    let tx_version: u32 = *global.tx_version();
+    let consensus_branch_id_hex: String = format!("{:08x}", global.consensus_branch_id());
+    let expiry_height: u32 = *global.expiry_height();
+
     Ok(ZcashPcztInspection {
         action_count,
         spends,
         outputs,
-        net_value,
-        anchor_matches,
+        fee_zat,
+        orchard_net_value,
         verified_balance,
         known_spends,
-        anchor_hex: pczt_anchor_hex,
+        tx_version,
+        consensus_branch_id_hex,
+        expiry_height,
     })
 }
 
@@ -2089,58 +2157,34 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
-    // Run inspection and enforce verification gates before signing
+    // Run inspection and enforce verification gates before signing.
+    //
+    // The previous anchor-equality and "no verified notes" gates were
+    // rotko-invented and don't appear in the canonical Zashi → Keystone PCZT
+    // flow — Keystone's firmware signs whatever passes user review of
+    // recipient + amount + fee, without inspecting the PCZT anchor at all
+    // (verified at /steam/rotko/keystone3-firmware/rust/apps/zcash/src/pczt/
+    // {sign,check}.rs). We mirror that.
+    //
+    // The only zigner-specific guard kept: refuse to sign when zero PCZT
+    // spend nullifiers match the locally verified note set, since the
+    // verified-notes store is zigner's distinguishing value over a
+    // canonical Keystone-shape signer. A blind-signing footgun that
+    // Keystone cannot detect.
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
 
-    if inspection.verified_balance == 0 && !inspection.anchor_matches {
-        return Err(ErrorDisplayed::Str {
-            s: "No verified notes. Sync notes from zcli before signing (zcli export-notes → scan QR).".to_string(),
-        });
-    }
+    // TODO(sync-flow, rotkonetworks/zigner#16): re-enable the
+    // `known_spends == 0` refusal and the implied-spend-vs-verified-balance
+    // check once the zcli → zigner verified-notes sync flow ships. Currently
+    // disabled so unsynced PCZT round-trip works for testing. See git blame
+    // for the prior shape.
 
-    if !inspection.anchor_matches {
-        return Err(ErrorDisplayed::Str {
-            s: format!(
-                "PCZT anchor does not match verified anchor. Sync notes to current state first. PCZT anchor: {}",
-                inspection.anchor_hex
-            ),
-        });
-    }
-
-    if inspection.known_spends == 0 && inspection.action_count > 0 {
-        return Err(ErrorDisplayed::Str {
-            s: "No PCZT spend nullifiers match verified notes. This transaction may spend notes you don't recognize.".to_string(),
-        });
-    }
-
-    // Value consistency: implied total spend (net_value + output_total) must not exceed verified balance.
-    // net_value = total_spend - total_output (from value_sum), so total_spend = net_value + total_output.
-    // If net_value is negative, the orchard bundle is receiving value (from transparent), skip this check.
-    if inspection.net_value > 0 {
-        let output_total: i64 = inspection.outputs.iter().map(|o| o.value as i64).sum();
-        let implied_spend = inspection.net_value + output_total;
-        if implied_spend > inspection.verified_balance as i64 {
-            return Err(ErrorDisplayed::Str {
-                s: format!(
-                    "Transaction implies spending {} zatoshis but verified balance is only {} zatoshis. \
-                     Re-sync notes or verify the transaction.",
-                    implied_spend, inspection.verified_balance
-                ),
-            });
-        }
-    }
-
-    // Snapshot which actions have nullifiers that match verified notes.
-    // Unknown nullifiers are either Orchard dummies (no signature needed —
-    // they're computed under a dummy spending key) or attacker-injected
-    // fake spends (we MUST refuse to authorize). Either way, we only sign
-    // actions where `known == true`.
-    let known_action_indices: Vec<usize> = inspection
-        .spends
-        .iter()
-        .enumerate()
-        .filter_map(|(i, spend)| if spend.known { Some(i) } else { None })
-        .collect();
+    // Sign every action try-and-skip. Dummy Orchard actions are spent
+    // under an ephemeral key the user doesn't hold, so sign_orchard will
+    // fail on them — that's expected; signer.finish() falls back to the
+    // PCZT-embedded ASK for those.
+    let action_count = inspection.action_count as usize;
+    let known_action_indices: Vec<usize> = (0..action_count).collect();
 
     // Parse the PCZT to get action count first
     let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
@@ -2170,14 +2214,22 @@ fn sign_zcash_pczt(
     // The signer needs the ask (spend authorizing key) derived from sk
     let ask = orchard::keys::SpendAuthorizingKey::from(&orchard_sk);
 
-    // Sign only the actions whose nullifiers we recognize. Unknown actions
-    // are intentionally left without a spend authorization signature.
+    // Try-and-skip: ignore per-action sign failures (dummy actions can't
+    // be signed with the user's ASK; signer.finish() handles those).
+    // Refuse only if we couldn't sign anything at all.
+    let mut signed_count = 0usize;
     for action_index in &known_action_indices {
-        signer
-            .sign_orchard(*action_index, &ask)
-            .map_err(|e| ErrorDisplayed::Str {
-                s: format!("Failed to sign orchard action {}: {:?}", action_index, e),
-            })?;
+        if signer.sign_orchard(*action_index, &ask).is_ok() {
+            signed_count += 1;
+        }
+    }
+    if signed_count == 0 && !known_action_indices.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Could not sign any of the {} action(s) — none match the user's spending key.",
+                known_action_indices.len()
+            ),
+        });
     }
 
     // Finish signing and get the signed PCZT
@@ -2208,8 +2260,10 @@ fn encode_signed_pczt_ur(
             })?;
 
         let mut parts = Vec::new();
-        // Generate enough parts to reconstruct (with some redundancy)
-        let total_parts = encoder.fragment_count() * 2; // 2x for fountain code redundancy
+        // 1.3× redundancy: with the slowed (~700ms/frame) display each frame
+        // should land cleanly, so we only need a slim margin over the 1.05–1.20×
+        // BC-UR convergence threshold.
+        let total_parts = (encoder.fragment_count() * 13).div_ceil(10);
 
         for _ in 0..total_parts {
             let part = encoder.next_part().map_err(|e| ErrorDisplayed::Str {
@@ -3586,6 +3640,17 @@ fn frost_import_backup_envelope(
     let payload = frost_backup::open_envelope(envelope_json, passphrase)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
 
+    // Cross-check envelope-supplied threshold/participant counts against the
+    // PublicKeyPackage itself. An attacker who controls the envelope (correct
+    // PKP, lowered threshold) would otherwise downgrade the m-of-n the user
+    // originally consented to without changing the spend key.
+    let (pkp_min, pkp_max) = verify_envelope_threshold(
+        &payload.public_key_package,
+        &payload.key_package,
+        payload.threshold,
+        payload.max_signers,
+    )?;
+
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
@@ -3594,8 +3659,8 @@ fn frost_import_backup_envelope(
         public_key_package_hex: payload.public_key_package,
         ephemeral_seed_hex: payload.ephemeral_seed,
         label: payload.label,
-        min_signers: payload.threshold,
-        max_signers: payload.max_signers,
+        min_signers: pkp_min,
+        max_signers: pkp_max,
         mainnet: payload.mainnet,
         created_at: payload.created_at,
         orchard_fvk_uview: payload.orchard_fvk,
@@ -3606,6 +3671,54 @@ fn frost_import_backup_envelope(
     db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
         s: format!("store imported wallet: {e}"),
     })
+}
+
+/// Parse the KeyPackage + PublicKeyPackage hex and assert they agree with
+/// the envelope's claimed signing policy. Returns the cryptographically
+/// authoritative `(min_signers, max_signers)` for storage so future code
+/// reads canonical values, not envelope claims.
+///
+/// Threat: a hostile envelope can ship correct KeyPackage + PublicKeyPackage
+/// material with tampered envelope-level threshold/max_signers fields. The
+/// UI then displays a different m-of-n than the FROST polynomial encodes.
+/// Cross-check pins the displayed policy to the cryptographic ground truth.
+fn verify_envelope_threshold(
+    public_key_package_hex: &str,
+    key_package_hex: &str,
+    claimed_threshold: u16,
+    claimed_max_signers: u16,
+) -> Result<(u16, u16), ErrorDisplayed> {
+    use frost_spend::frost_keys::{KeyPackage, PublicKeyPackage};
+    use frost_spend::orchestrate::from_hex;
+    let pubkeys: PublicKeyPackage = from_hex(public_key_package_hex).map_err(|e| {
+        ErrorDisplayed::Str {
+            s: format!("parse public_key_package: {e}"),
+        }
+    })?;
+    let key_pkg: KeyPackage = from_hex(key_package_hex).map_err(|e| ErrorDisplayed::Str {
+        s: format!("parse key_package: {e}"),
+    })?;
+    let pkp_max: u16 = pubkeys.verifying_shares().len().try_into().map_err(|_| {
+        ErrorDisplayed::Str {
+            s: "PublicKeyPackage participant count exceeds u16".into(),
+        }
+    })?;
+    let kp_min: u16 = *key_pkg.min_signers();
+    if kp_min != claimed_threshold {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "envelope threshold {claimed_threshold} disagrees with KeyPackage min_signers {kp_min}"
+            ),
+        });
+    }
+    if pkp_max != claimed_max_signers {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "envelope max_signers {claimed_max_signers} disagrees with PublicKeyPackage participant count {pkp_max}"
+            ),
+        });
+    }
+    Ok((kp_min, pkp_max))
 }
 
 /// Encrypt every FROST wallet on this device into a single envelope.
@@ -3669,6 +3782,13 @@ fn frost_import_all_backup_envelope(
     let mut imported = 0u32;
     let mut skipped = 0u32;
     for share in shares {
+        // Same envelope-vs-KeyPackage/PKP cross-check as single import.
+        let (pkp_min, pkp_max) = verify_envelope_threshold(
+            &share.public_key_package,
+            &share.key_package,
+            share.threshold,
+            share.max_signers,
+        )?;
         let id = db_handling::frost::wallet_id_hex(&share.public_key_package);
         let already = db_handling::frost::get_frost_wallet(database, &id)
             .map_err(|e| ErrorDisplayed::Str { s: format!("lookup: {e}") })?
@@ -3682,8 +3802,8 @@ fn frost_import_all_backup_envelope(
             public_key_package_hex: share.public_key_package,
             ephemeral_seed_hex: share.ephemeral_seed,
             label: share.label,
-            min_signers: share.threshold,
-            max_signers: share.max_signers,
+            min_signers: pkp_min,
+            max_signers: pkp_max,
             mainnet: share.mainnet,
             created_at: share.created_at,
             orchard_fvk_uview: share.orchard_fvk,

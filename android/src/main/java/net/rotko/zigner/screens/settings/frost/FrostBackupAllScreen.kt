@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.ui.theme.*
 import timber.log.Timber
 
@@ -32,6 +33,8 @@ import timber.log.Timber
  *  picks where to save via SAF. */
 @Composable
 fun FrostBackupAllScreen(onBack: Callback) {
+	// Passphrase entry + count of wallets; keep out of recents.
+	DisableScreenshots()
 	val ctx = LocalContext.current
 	val scope = rememberCoroutineScope()
 

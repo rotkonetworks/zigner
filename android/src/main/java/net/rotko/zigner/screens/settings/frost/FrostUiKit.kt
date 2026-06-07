@@ -1,5 +1,7 @@
 package net.rotko.zigner.screens.settings.frost
 
+import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -32,6 +34,35 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.ui.theme.SignerTypeface
 import net.rotko.zigner.ui.theme.accentGreen
+
+// ── helpers ──
+
+/** sanitize wallet label for filename use ([A-Za-z0-9_-] only). */
+internal fun sanitizeLabel(label: String): String {
+	val cleaned = label.replace(Regex("[^A-Za-z0-9_-]+"), "-").trim('-')
+	return if (cleaned.isEmpty()) "multisig" else cleaned
+}
+
+/** YYYYMMDD in local time. */
+internal fun ymdToday(): String {
+	val cal = java.util.Calendar.getInstance()
+	val y = cal.get(java.util.Calendar.YEAR)
+	val m = cal.get(java.util.Calendar.MONTH) + 1
+	val d = cal.get(java.util.Calendar.DAY_OF_MONTH)
+	return "%04d%02d%02d".format(y, m, d)
+}
+
+internal fun writeFile(ctx: Context, uri: Uri, text: String) {
+	ctx.contentResolver.openOutputStream(uri)?.use { os ->
+		os.write(text.toByteArray(Charsets.UTF_8))
+	} ?: throw IllegalStateException("could not open output stream for $uri")
+}
+
+internal fun readFile(ctx: Context, uri: Uri): String {
+	return ctx.contentResolver.openInputStream(uri)?.use { input ->
+		input.readBytes().toString(Charsets.UTF_8)
+	} ?: throw IllegalStateException("could not open input stream for $uri")
+}
 
 /** Square icon-only button with a long-press → Toast tooltip explaining the action.
  *  Used for compact wallet-row actions where icons replace text labels. */

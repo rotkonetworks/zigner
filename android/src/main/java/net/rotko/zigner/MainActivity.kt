@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.runtime.collectAsState
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.rememberNavController
 import net.rotko.zigner.dependencygraph.ServiceLocator
@@ -26,7 +27,9 @@ class MainActivity : AppCompatActivity() {
 		window.statusBarColor = Color.TRANSPARENT;
 
 		setContent {
-			SignerNewTheme {
+			val lightTheme = ServiceLocator.preferencesRepository.lightThemeEnabled
+				.collectAsState(initial = false)
+			SignerNewTheme(darkTheme = !lightTheme.value) {
 				RootNavigationGraph(
 					navController = rememberNavController().apply {
 						addVaultLogger(

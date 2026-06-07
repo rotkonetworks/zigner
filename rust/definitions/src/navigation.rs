@@ -1083,11 +1083,25 @@ pub struct ZcashPcztInspection {
     pub action_count: u32,
     pub spends: Vec<ZcashPcztSpend>,
     pub outputs: Vec<ZcashPcztOutput>,
-    pub net_value: i64,
-    pub anchor_matches: bool,
+    /// True transaction fee = (transparent inputs − transparent outputs)
+    ///                     + sapling value_balance
+    ///                     + orchard value_balance.
+    /// Honest across all three bundles. Was previously labeled "Fee" but only
+    /// computed the Orchard component, which is wrong when transparent legs
+    /// (shielding / deshielding) exist.
+    pub fee_zat: i64,
+    /// Net value of the Orchard bundle alone (kept for diagnostics; for the
+    /// canonical fee see `fee_zat`).
+    pub orchard_net_value: i64,
     pub verified_balance: u64,
     pub known_spends: u32,
-    pub anchor_hex: String,
+    /// Transaction version (v5 = 5 for current NU6/NU6.1).
+    pub tx_version: u32,
+    /// Consensus branch ID as 8-char lowercase hex. Cold device can show this
+    /// so the user knows which consensus fork they're authorizing for.
+    pub consensus_branch_id_hex: String,
+    /// Block height at which this transaction expires if not mined.
+    pub expiry_height: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1496,22 +1496,32 @@ dictionary ZcashSignContext {
     boolean has_notes;
 };
 
-// PCZT inspection result for display before signing
+// PCZT inspection result for display before signing.
+// Anchor is intentionally not validated — matches the Keystone signing model
+// (PCZT is ground truth; signature happens after user review of
+// recipient + amount + fee).
 dictionary ZcashPcztInspection {
     u32 action_count;
     // spends: list of (value_zatoshis, nullifier_is_known) pairs
     sequence<ZcashPcztSpend> spends;
     // outputs: list of (value_zatoshis, recipient_hex) pairs
     sequence<ZcashPcztOutput> outputs;
-    // net value (spends - outputs) in zatoshis = fee
-    i64 net_value;
-    // anchor matches our verified anchor?
-    boolean anchor_matches;
+    // True fee across all bundles: (transparent in - transparent out)
+    //   + sapling value_balance + orchard value_balance.
+    i64 fee_zat;
+    // Net value of the Orchard bundle alone (diagnostic; for canonical
+    // fee use fee_zat).
+    i64 orchard_net_value;
     // our verified balance (0 if no notes stored)
     u64 verified_balance;
     // how many spend nullifiers match our verified notes
     u32 known_spends;
-    string anchor_hex;
+    // tx_version (v5 = 5)
+    u32 tx_version;
+    // 8-char lowercase hex consensus branch ID
+    string consensus_branch_id_hex;
+    // block height at which this tx expires
+    u32 expiry_height;
 };
 
 dictionary ZcashPcztSpend {

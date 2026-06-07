@@ -364,7 +364,7 @@ private fun ZcashSimpleContent(req: SignRequest.ZcashSimple) {
 }
 
 @Composable
-private fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
+internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 	val inspection = req.inspection
 	if (inspection == null) {
 		Text(
@@ -375,14 +375,16 @@ private fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 		return
 	}
 
-	// Spends
+	// TODO(sync-flow): show only verified spends once zcli → zigner sync
+	// ships. Until then, every spend is "Unknown / 0 ZEC" noise — Orchard
+	// nullifiers don't reveal note value without the verified-notes set.
 	if (inspection.spends.isNotEmpty()) {
-		inspection.spends.forEach { spend ->
+		inspection.spends.filter { it.known }.forEach { spend ->
 			val zec = "%.8f".format(spend.value.toLong() / 100_000_000.0)
 			HighlightCard(
 				title = "$zec ZEC",
-				subtitle = if (spend.known) "Verified spend" else "Unknown spend — verify carefully",
-				color = if (spend.known) Color(0xFFF5A623) else Color(0xFFE74C3C),
+				subtitle = "Verified spend",
+				color = Color(0xFFF5A623),
 			)
 		}
 	}
@@ -412,14 +414,9 @@ private fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 		}
 	}
 
-	// Fee
-	val feeZec = "%.8f".format(inspection.netValue / 100_000_000.0)
+	// Fee (true fee across all bundles, not just Orchard value_sum)
+	val feeZec = "%.8f".format(inspection.feeZat / 100_000_000.0)
 	DetailRow(label = "Fee", value = "$feeZec ZEC")
-
-	// Warnings
-	if (!inspection.anchorMatches) {
-		WarningCard("Anchor mismatch — the transaction may reference an outdated state.")
-	}
 }
 
 // =============================================================================
@@ -523,7 +520,7 @@ private fun AdvancedTabContent(signRequest: SignRequest) {
 
 /** Prominent card for the main action (amount + recipient) */
 @Composable
-private fun HighlightCard(title: String, subtitle: String, color: Color) {
+internal fun HighlightCard(title: String, subtitle: String, color: Color) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -549,7 +546,7 @@ private fun HighlightCard(title: String, subtitle: String, color: Color) {
 
 /** Simple label: value row */
 @Composable
-private fun DetailRow(label: String, value: String) {
+internal fun DetailRow(label: String, value: String) {
 	Row(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -576,7 +573,7 @@ private fun DetailRow(label: String, value: String) {
 
 /** Warning card with red background */
 @Composable
-private fun WarningCard(message: String) {
+internal fun WarningCard(message: String) {
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()

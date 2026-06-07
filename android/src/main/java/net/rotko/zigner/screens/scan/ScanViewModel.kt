@@ -79,6 +79,17 @@ class ScanViewModel : ViewModel() {
 			is RepoResult.Failure -> ""
 		}
 	}
+
+	/** Get first available seed name (NOT phrase) for display before signing.
+	 *  Map iteration is unspecified on multi-seed devices; showing the chosen
+	 *  name on-screen makes "which key is about to sign" visible to the user.
+	 */
+	suspend fun getFirstSeedName(): String {
+		return when (val result = seedRepository.getAllSeeds()) {
+			is RepoResult.Success -> result.result.keys.firstOrNull() ?: ""
+			is RepoResult.Failure -> ""
+		}
+	}
 	private val importKeysRepository: ImportDerivedKeysRepository by lazy {
 		ImportDerivedKeysRepository(seedRepository)
 	}

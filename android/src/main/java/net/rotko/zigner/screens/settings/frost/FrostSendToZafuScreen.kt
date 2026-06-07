@@ -17,6 +17,7 @@ import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.qrcode.AnimatedQrKeysInfo
 import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.screens.scan.transaction.frost.toAnimatedQrFrames
 import net.rotko.zigner.ui.theme.*
 import org.json.JSONArray
@@ -32,6 +33,8 @@ fun FrostSendToZafuScreen(
 	onBack: Callback,
 	walletIdFilter: String? = null,
 ) {
+	// QR contains the wallet's UFVK; keep it out of screenshots and recents.
+	DisableScreenshots()
 	val scope = rememberCoroutineScope()
 	var qrJson by remember { mutableStateOf<String?>(null) }
 	var walletCount by remember { mutableStateOf(0) }
