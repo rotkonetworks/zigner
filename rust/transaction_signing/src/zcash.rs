@@ -244,7 +244,7 @@ impl OrchardSpendingKey {
     pub fn get_address_at(&self, diversifier_index: u32, mainnet: bool) -> String {
         use orchard::keys::FullViewingKey;
         use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
-        use zcash_address::Network;
+        use zcash_protocol::consensus::NetworkType as Network;
 
         let sk = self.to_spending_key().expect("valid spending key");
         let fvk = FullViewingKey::from(&sk);
@@ -271,7 +271,7 @@ impl OrchardSpendingKey {
     pub fn get_ufvk(&self, mainnet: bool) -> String {
         use orchard::keys::FullViewingKey;
         use zcash_address::unified::{Encoding, Fvk, Ufvk};
-        use zcash_address::Network;
+        use zcash_protocol::consensus::NetworkType as Network;
 
         let sk = self.to_spending_key().expect("valid spending key");
         let fvk = FullViewingKey::from(&sk);
@@ -299,7 +299,7 @@ impl OrchardSpendingKey {
     ) -> Result<String> {
         use orchard::keys::FullViewingKey;
         use zcash_address::unified::{Encoding, Fvk, Ufvk};
-        use zcash_address::Network;
+        use zcash_protocol::consensus::NetworkType as Network;
 
         let mnemonic = bip32::Mnemonic::new(seed_phrase, bip32::Language::English)
             .map_err(|e| Error::ZcashKeyDerivation(format!("invalid mnemonic: {e}")))?;

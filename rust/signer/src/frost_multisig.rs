@@ -246,7 +246,7 @@ pub fn frost_derive_metadata(
     use zcash_address::unified::{
         Address as UnifiedAddress, Encoding, Fvk, Receiver, Ufvk,
     };
-    use zcash_address::Network;
+    use zcash_protocol::consensus::NetworkType as Network;
 
     let sk = parse_32(sk_hex, "fvk sk")?;
     let pubkeys: PublicKeyPackage = from_hex(public_key_package_hex).map_err(|e| e.to_string())?;
