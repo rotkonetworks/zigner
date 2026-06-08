@@ -40,6 +40,7 @@ import io.parity.signer.uniffi.frostRenameWallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.domain.Callback
@@ -329,6 +330,83 @@ private fun FrostWalletListContent(
 				Spacer(modifier = Modifier.height(24.dp))
 			}
 		}
+	}
+
+	// ── Export passphrase dialog ──
+	exportTarget?.let { wallet ->
+		FrostBackupDialog(
+			title = "Export \"${wallet.label}\"",
+			subtitle = "Encrypts the FROST share with a passphrase you choose. Save the file somewhere safe — paper, USB drive, password manager.",
+			confirmLabel = "Export",
+			requireConfirmField = true,
+			onConfirm = { passphrase ->
+				exportTarget = null
+				scope.launch {
+					try {
+						val envelope = withContext(Dispatchers.Default) {
+							frostExportBackupEnvelope(wallet.walletId, passphrase)
+						}
+						pendingEnvelope = envelope
+						pendingFilename = "frost-backup-${sanitizeLabel(wallet.label)}-${ymdToday()}.json"
+						saveLauncher.launch(pendingFilename)
+					} catch (e: Exception) {
+						Timber.e(e, "[frost-backup] export failed")
+						error = e.message ?: "export failed"
+					}
+				}
+			},
+			onCancel = { exportTarget = null },
+		)
+	}
+
+	// ── Rename dialog ──
+	renameTarget?.let { wallet ->
+		FrostRenameDialog(
+			currentLabel = wallet.label,
+			onConfirm = { newLabel ->
+				renameTarget = null
+				scope.launch {
+					try {
+						withContext(Dispatchers.Default) {
+							frostRenameWallet(wallet.walletId, newLabel)
+						}
+						toast = "renamed to \"$newLabel\""
+						loadWallets()
+					} catch (e: Exception) {
+						Timber.e(e, "[frost-rename] failed")
+						error = e.message ?: "rename failed"
+					}
+				}
+			},
+			onCancel = { renameTarget = null },
+		)
+	}
+
+	// ── Import passphrase dialog ──
+	importEnvelopeJson?.let { json ->
+		FrostBackupDialog(
+			title = "Restore backup",
+			subtitle = "Enter the passphrase used when this file was exported.",
+			confirmLabel = "Restore",
+			requireConfirmField = false,
+			onConfirm = { passphrase ->
+				importEnvelopeJson = null
+				scope.launch {
+					try {
+						val newId = withContext(Dispatchers.Default) {
+							frostImportBackupEnvelope(json, passphrase)
+						}
+						toast = "wallet restored"
+						loadWallets()
+						Timber.d("[frost-backup] imported wallet=$newId")
+					} catch (e: Exception) {
+						Timber.e(e, "[frost-backup] import failed")
+						error = e.message ?: "import failed"
+					}
+				}
+			},
+			onCancel = { importEnvelopeJson = null },
+		)
 	}
 }
 
