@@ -3435,6 +3435,15 @@ fn frost_derive_address_raw(
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+fn frost_verify_pczt(
+    pczt_hex: &str,
+    claimed_sighash_hex: &str,
+    orchard_fvk_uview: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_verify_pczt(pczt_hex, claimed_sighash_hex, orchard_fvk_uview)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
 // ── FROST wallet storage ──
 
 fn frost_store_wallet(

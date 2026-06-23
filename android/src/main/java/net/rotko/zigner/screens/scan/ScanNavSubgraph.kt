@@ -192,6 +192,8 @@ fun ScanNavSubgraph(
 					walletIdHint = json.optString("walletId", ""),
 					alphasJson = json.optJSONArray("alphas")?.toString() ?: "[]",
 					summary = summaryText,
+					sighashHex = json.optString("sighash", ""),
+					pcztHex = json.optString("pczt", ""),
 					onNoncesUpdated = { noncesArr, k ->
 						scanViewModel.frostSignNoncesPerAction = noncesArr
 						scanViewModel.frostSignKeyPackage = k
