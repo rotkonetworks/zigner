@@ -182,6 +182,29 @@ pub fn frost_spend_sign_round2(
         .map_err(|e| e.to_string())
 }
 
+/// Authenticated variant: wraps the share in a SignedMessage so the coordinator
+/// can map it to the correct FROST identifier by VK, regardless of BTreeMap order.
+/// Use this instead of frost_spend_sign_round2 whenever sharing over the relay.
+/// Returns: hex-encoded SignedMessage containing the signature share.
+pub fn frost_spend_sign_round2_signed(
+    ephemeral_seed_hex: &str,
+    key_package_hex: &str,
+    nonces_hex: &str,
+    sighash_hex: &str,
+    alpha_hex: &str,
+    commitments_json: &str,
+) -> Result<String, String> {
+    consume_nonce(nonces_hex)?;
+
+    let seed = parse_seed(ephemeral_seed_hex)?;
+    let sighash = parse_32(sighash_hex, "sighash")?;
+    let alpha = parse_32(alpha_hex, "alpha")?;
+    let commitments: Vec<String> = serde_json::from_str(commitments_json)
+        .map_err(|e| format!("bad commitments JSON: {}", e))?;
+    orchestrate::spend_sign_round2_signed(&seed, key_package_hex, nonces_hex, &sighash, &alpha, &commitments)
+        .map_err(|e| e.to_string())
+}
+
 /// sign multiple actions at once (one share per alpha).
 /// alphas_json: JSON array of hex-encoded 32-byte alphas (one per Orchard action).
 /// commitments_json: JSON array of hex-encoded signed commitments.

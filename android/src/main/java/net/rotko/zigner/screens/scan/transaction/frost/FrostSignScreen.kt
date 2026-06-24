@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.frostListWallets
 import io.parity.signer.uniffi.frostLoadWallet
 import io.parity.signer.uniffi.frostSignRound1
-import io.parity.signer.uniffi.frostSpendSignRound2
+import io.parity.signer.uniffi.frostSpendSignRound2Signed
 import io.parity.signer.uniffi.frostVerifyPczt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,7 +65,8 @@ fun FrostSignScreen(
 	bundledCommitmentsJson: String = "[]",
 	previousNoncesPerAction: List<String> = emptyList(),
 	previousKeyPackage: String = "",
-	onNoncesUpdated: (noncesPerAction: List<String>, keyPackage: String) -> Unit = { _, _ -> },
+	previousEphemeralSeed: String = "",
+	onNoncesUpdated: (noncesPerAction: List<String>, keyPackage: String, ephemeralSeed: String) -> Unit = { _, _, _ -> },
 	onScanNext: Callback,
 	onDone: Callback,
 	modifier: Modifier = Modifier,
@@ -96,7 +97,8 @@ fun FrostSignScreen(
 					2 -> {
 						runRound2(
 							sighashHex, alphasJson, bundledCommitmentsJson,
-							previousNoncesPerAction, previousKeyPackage, onNoncesUpdated,
+							previousNoncesPerAction, previousKeyPackage, previousEphemeralSeed,
+							onNoncesUpdated,
 						) { qr -> qrData = qr }
 						state = FrostSignState.DISPLAY_QR
 					}
@@ -393,7 +395,7 @@ private suspend fun generateCommitments(
 	keyPackage: String,
 	ephemeralSeed: String,
 	alphasJson: String,
-	onNoncesUpdated: (List<String>, String) -> Unit,
+	onNoncesUpdated: (List<String>, String, String) -> Unit,
 	emit: (qrData: String) -> Unit,
 ) {
 	val alphas = org.json.JSONArray(alphasJson)
@@ -405,21 +407,22 @@ private suspend fun generateCommitments(
 		nonces.add(j.getString("nonces"))
 		commits.add(j.getString("commitments"))
 	}
-	onNoncesUpdated(nonces, keyPackage)
+	onNoncesUpdated(nonces, keyPackage, ephemeralSeed)
 	emit(org.json.JSONObject().apply {
 		put("frost", "sign1-resp")
 		put("commitments", org.json.JSONArray(commits))
 	}.toString())
 }
 
-/** Per-action: spend_sign_round2(key_pkg, nonces[i], sighash, alphas[i], bundled[i]) → share. */
+/** Per-action: produce authenticated share (SignedMessage) for each Orchard action. */
 private suspend fun runRound2(
 	sighashHex: String,
 	alphasJson: String,
 	bundledCommitmentsJson: String,
 	previousNoncesPerAction: List<String>,
 	previousKeyPackage: String,
-	onNoncesUpdated: (List<String>, String) -> Unit,
+	previousEphemeralSeed: String,
+	onNoncesUpdated: (List<String>, String, String) -> Unit,
 	emit: (qrData: String) -> Unit,
 ) {
 	val alphas = org.json.JSONArray(alphasJson)
@@ -430,7 +433,8 @@ private suspend fun runRound2(
 	val shares = mutableListOf<String>()
 	for (i in 0 until alphas.length()) {
 		val share = withContext(Dispatchers.Default) {
-			frostSpendSignRound2(
+			frostSpendSignRound2Signed(
+				previousEphemeralSeed,
 				previousKeyPackage,
 				previousNoncesPerAction[i],
 				sighashHex,
@@ -440,7 +444,7 @@ private suspend fun runRound2(
 		}
 		shares.add(share)
 	}
-	onNoncesUpdated(emptyList(), "")
+	onNoncesUpdated(emptyList(), "", "")
 	emit(org.json.JSONObject().apply {
 		put("frost", "sign2-resp")
 		put("shares", org.json.JSONArray(shares))

@@ -985,6 +985,12 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string frost_spend_sign_round2([ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alpha_hex, [ByRef] string commitments_json);
 
+    // Authenticated variant: share is wrapped in a SignedMessage so the coordinator
+    // maps it by VK-derived FROST id, not BTreeMap position. Use this when sharing
+    // over the relay to prevent the positional-fallback id-mismatch aggregate bug.
+    [Throws=ErrorDisplayed]
+    string frost_spend_sign_round2_signed([ByRef] string ephemeral_seed_hex, [ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alpha_hex, [ByRef] string commitments_json);
+
     // Sign multiple actions at once (one share per alpha)
     // Returns JSON: { "shares": [hex, ...] }
     [Throws=ErrorDisplayed]

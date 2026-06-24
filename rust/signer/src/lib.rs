@@ -3410,6 +3410,25 @@ fn frost_spend_sign_round2(
     .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+fn frost_spend_sign_round2_signed(
+    ephemeral_seed_hex: &str,
+    key_package_hex: &str,
+    nonces_hex: &str,
+    sighash_hex: &str,
+    alpha_hex: &str,
+    commitments_json: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_spend_sign_round2_signed(
+        ephemeral_seed_hex,
+        key_package_hex,
+        nonces_hex,
+        sighash_hex,
+        alpha_hex,
+        commitments_json,
+    )
+    .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
 fn frost_spend_sign_actions(
     key_package_hex: &str,
     nonces_hex: &str,
