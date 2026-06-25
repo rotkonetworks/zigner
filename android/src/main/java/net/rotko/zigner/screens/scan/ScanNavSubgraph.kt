@@ -192,9 +192,12 @@ fun ScanNavSubgraph(
 					walletIdHint = json.optString("walletId", ""),
 					alphasJson = json.optJSONArray("alphas")?.toString() ?: "[]",
 					summary = summaryText,
-					onNoncesUpdated = { noncesArr, k ->
+					sighashHex = json.optString("sighash", ""),
+					pcztHex = json.optString("pczt", ""),
+					onNoncesUpdated = { noncesArr, k, seed ->
 						scanViewModel.frostSignNoncesPerAction = noncesArr
 						scanViewModel.frostSignKeyPackage = k
+						scanViewModel.frostSignEphemeralSeed = seed
 					},
 					onScanNext = scanNextFrost,
 					modifier = Modifier.statusBarsPadding(),
@@ -210,9 +213,11 @@ fun ScanNavSubgraph(
 					bundledCommitmentsJson = json.optJSONArray("bundledCommitments")?.toString() ?: "[]",
 					previousNoncesPerAction = scanViewModel.frostSignNoncesPerAction,
 					previousKeyPackage = scanViewModel.frostSignKeyPackage,
-					onNoncesUpdated = { noncesArr, k ->
+					previousEphemeralSeed = scanViewModel.frostSignEphemeralSeed,
+					onNoncesUpdated = { noncesArr, k, seed ->
 						scanViewModel.frostSignNoncesPerAction = noncesArr
 						scanViewModel.frostSignKeyPackage = k
+						scanViewModel.frostSignEphemeralSeed = seed
 					},
 					onScanNext = scanNextFrost,
 					modifier = Modifier.statusBarsPadding(),

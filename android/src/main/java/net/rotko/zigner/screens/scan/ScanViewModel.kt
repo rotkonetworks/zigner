@@ -145,6 +145,7 @@ class ScanViewModel : ViewModel() {
 	var frostSignNonces: String = ""
 	var frostSignNoncesPerAction: List<String> = emptyList()
 	var frostSignKeyPackage: String = ""
+	var frostSignEphemeralSeed: String = ""
 	var frostSignWalletId: String = ""
 
 	fun clearFrostDkgState() {
@@ -155,6 +156,7 @@ class ScanViewModel : ViewModel() {
 		frostSignNonces = ""
 		frostSignNoncesPerAction = emptyList()
 		frostSignKeyPackage = ""
+		frostSignEphemeralSeed = ""
 	}
 
 	// Auth challenge state

@@ -182,6 +182,29 @@ pub fn frost_spend_sign_round2(
         .map_err(|e| e.to_string())
 }
 
+/// Authenticated variant: wraps the share in a SignedMessage so the coordinator
+/// can map it to the correct FROST identifier by VK, regardless of BTreeMap order.
+/// Use this instead of frost_spend_sign_round2 whenever sharing over the relay.
+/// Returns: hex-encoded SignedMessage containing the signature share.
+pub fn frost_spend_sign_round2_signed(
+    ephemeral_seed_hex: &str,
+    key_package_hex: &str,
+    nonces_hex: &str,
+    sighash_hex: &str,
+    alpha_hex: &str,
+    commitments_json: &str,
+) -> Result<String, String> {
+    consume_nonce(nonces_hex)?;
+
+    let seed = parse_seed(ephemeral_seed_hex)?;
+    let sighash = parse_32(sighash_hex, "sighash")?;
+    let alpha = parse_32(alpha_hex, "alpha")?;
+    let commitments: Vec<String> = serde_json::from_str(commitments_json)
+        .map_err(|e| format!("bad commitments JSON: {}", e))?;
+    orchestrate::spend_sign_round2_signed(&seed, key_package_hex, nonces_hex, &sighash, &alpha, &commitments)
+        .map_err(|e| e.to_string())
+}
+
 /// sign multiple actions at once (one share per alpha).
 /// alphas_json: JSON array of hex-encoded 32-byte alphas (one per Orchard action).
 /// commitments_json: JSON array of hex-encoded signed commitments.
@@ -268,6 +291,108 @@ pub fn frost_derive_metadata(
     serde_json::to_string(&serde_json::json!({
         "orchard_fvk_uview": ufvk_str,
         "address": addr_str,
+    }))
+    .map_err(|e| e.to_string())
+}
+
+/// Verify a FROST payout PCZT on-device before signing (gh #17). Recomputes the
+/// canonical ZIP-244 sighash from the PCZT and OVK-decodes its outputs with the
+/// group UFVK (which zigner stored at DKG — NOT trusting the host), so the cold
+/// signer authorizes the ACTUAL recipient/amount rather than a host-supplied
+/// claim. The caller compares `recomputed_sighash` against the sighash it's
+/// being asked to sign, and the derived outputs against the displayed summary;
+/// any mismatch must block the signature.
+///
+/// Returns JSON:
+/// `{ recomputed_sighash, sighash_match, outputs:[{recipient,amount_zat,is_change}],
+///    total_send_zat, total_change_zat }`
+pub fn frost_verify_pczt(
+    pczt_hex: &str,
+    claimed_sighash_hex: &str,
+    orchard_fvk_uview: &str,
+) -> Result<String, String> {
+    use orchard::keys::Scope;
+    use orchard::note_encryption::OrchardDomain;
+    use zcash_address::unified::{
+        Address as UnifiedAddress, Container, Encoding, Fvk, Receiver, Ufvk,
+    };
+    use zcash_note_encryption::try_output_recovery_with_ovk;
+    use zcash_primitives::transaction::sighash::SignableInput;
+    use zcash_primitives::transaction::sighash_v5::v5_signature_hash;
+    use zcash_primitives::transaction::txid::TxIdDigester;
+
+    let bytes = hex::decode(pczt_hex.trim()).map_err(|e| format!("bad pczt hex: {e}"))?;
+    let pczt = pczt::Pczt::parse(&bytes).map_err(|e| format!("pczt parse: {e:?}"))?;
+
+    // Canonical effects → both the sighash and the orchard bundle come from the
+    // same byte stream the FROST share will commit to.
+    let tx_data = pczt
+        .into_effects()
+        .map_err(|e| format!("pczt into_effects: {e:?}"))?;
+    let txid_parts = tx_data.digest(TxIdDigester);
+    let shielded_sighash = v5_signature_hash(&tx_data, &SignableInput::Shielded, &txid_parts);
+    let recomputed = hex::encode(shielded_sighash.as_ref());
+    let sighash_match = recomputed.eq_ignore_ascii_case(claimed_sighash_hex.trim());
+
+    // group orchard FVK from the stored UFVK string (uview1…)
+    let (network, ufvk) = Ufvk::decode(orchard_fvk_uview.trim())
+        .map_err(|e| format!("ufvk decode: {e}"))?;
+    let fvk_bytes = ufvk
+        .items()
+        .into_iter()
+        .find_map(|item| match item {
+            Fvk::Orchard(b) => Some(b),
+            _ => None,
+        })
+        .ok_or_else(|| "UFVK has no orchard component".to_string())?;
+    let fvk = orchard::keys::FullViewingKey::from_bytes(&fvk_bytes)
+        .ok_or_else(|| "invalid orchard FVK in UFVK".to_string())?;
+    let ovk_external = fvk.to_ovk(Scope::External);
+    let ovk_internal = fvk.to_ovk(Scope::Internal);
+
+    let mut outputs = Vec::new();
+    let mut total_send: u64 = 0;
+    let mut total_change: u64 = 0;
+    if let Some(bundle) = tx_data.orchard_bundle() {
+        let actions: Vec<_> = bundle.actions().iter().collect();
+        for action in actions.iter() {
+            let domain = OrchardDomain::for_action(*action);
+            let cv = action.cv_net();
+            let out_ct = action.encrypted_note().out_ciphertext;
+
+            let recovered = try_output_recovery_with_ovk(&domain, &ovk_external, *action, cv, &out_ct)
+                .map(|r| (r, false))
+                .or_else(|| {
+                    try_output_recovery_with_ovk(&domain, &ovk_internal, *action, cv, &out_ct)
+                        .map(|r| (r, true))
+                });
+            if let Some(((note, addr, _memo), is_change)) = recovered {
+                let amount = note.value().inner();
+                if is_change {
+                    total_change = total_change.saturating_add(amount);
+                } else {
+                    total_send = total_send.saturating_add(amount);
+                }
+                let ua = UnifiedAddress::try_from_items(vec![Receiver::Orchard(
+                    addr.to_raw_address_bytes(),
+                )])
+                .map(|a| a.encode(&network))
+                .unwrap_or_default();
+                outputs.push(serde_json::json!({
+                    "recipient": ua,
+                    "amount_zat": amount,
+                    "is_change": is_change,
+                }));
+            }
+        }
+    }
+
+    serde_json::to_string(&serde_json::json!({
+        "recomputed_sighash": recomputed,
+        "sighash_match": sighash_match,
+        "outputs": outputs,
+        "total_send_zat": total_send,
+        "total_change_zat": total_change,
     }))
     .map_err(|e| e.to_string())
 }
