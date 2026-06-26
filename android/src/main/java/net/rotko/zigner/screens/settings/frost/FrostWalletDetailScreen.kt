@@ -54,7 +54,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.frostDeleteWallet
-import io.parity.signer.uniffi.frostExportBackupEnvelope
 import io.parity.signer.uniffi.frostLoadWallet
 import io.parity.signer.uniffi.frostRenameWallet
 import kotlinx.coroutines.Dispatchers
@@ -214,9 +213,9 @@ fun FrostWalletDetailScreen(
 				exportOpen = false
 				scope.launch {
 					try {
-						val envelope = withContext(Dispatchers.Default) {
-							frostExportBackupEnvelope(walletId, passphrase)
-						}
+						// auth gate owns the export; null = auth cancelled/failed
+						val envelope = FrostExportUseCase.exportSingle(walletId, passphrase)
+							?: return@launch
 						pendingEnvelope = envelope
 						val filename =
 							"frost-backup-${sanitizeLabel(currentLabel)}-${ymdToday()}.json"

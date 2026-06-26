@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.FrostWalletSummaryFfi
-import io.parity.signer.uniffi.frostExportAllBackupEnvelope
 import io.parity.signer.uniffi.frostListWallets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -191,10 +190,10 @@ fun FrostBackupSelectionScreen(onBack: Callback) {
 				showDialog = false
 				scope.launch {
 					try {
-						// For now we just use Export All because core doesn't support selective yet
-						val envelope = withContext(Dispatchers.Default) {
-							frostExportAllBackupEnvelope(passphrase)
-						}
+						// For now we just use Export All because core doesn't support selective yet.
+						// auth gate owns the export; null = auth cancelled/failed
+						val envelope = FrostExportUseCase.exportAll(passphrase)
+							?: return@launch
 						pendingEnvelope = envelope
 						saveLauncher.launch("frost-backup-${ymdToday()}.json")
 					} catch (e: Exception) {
