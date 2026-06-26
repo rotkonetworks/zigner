@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import io.parity.signer.uniffi.frostExportAllBackupEnvelope
 import io.parity.signer.uniffi.frostListWallets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -164,9 +163,9 @@ fun FrostBackupAllScreen(onBack: Callback) {
 				showDialog = false
 				scope.launch {
 					try {
-						val envelope = withContext(Dispatchers.Default) {
-							frostExportAllBackupEnvelope(passphrase)
-						}
+						// auth gate owns the export; null = auth cancelled/failed
+						val envelope = FrostExportUseCase.exportAll(passphrase)
+							?: return@launch
 						pendingEnvelope = envelope
 						saveLauncher.launch("frost-backup-all-${ymdToday()}.json")
 					} catch (e: Exception) {
