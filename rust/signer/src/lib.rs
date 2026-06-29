@@ -2553,6 +2553,32 @@ fn clear_zcash_notes() -> Result<(), ErrorDisplayed> {
     })
 }
 
+/// Pure scan-progress probe for the camera. Reports how many zcash-notes
+/// frames have been collected (`have`), how many are needed to reconstruct
+/// (`needed`, -1 until the zoda frame-0 metadata or a single-part UR is
+/// seen), and whether reconstruction is now possible (`complete`). No
+/// attestation, no merkle check, no DB writes — the camera polls this while
+/// scanning to drive the progress counter and to decide when to hand frames
+/// to `decode_and_verify_zcash_notes`, which does the real verify + store.
+fn zcash_notes_scan_progress(parts: Vec<String>) -> ZcashNotesScanProgress {
+    // UR frames carry their own sequence header and are decoded elsewhere; for
+    // the zoda (`zt:`) note-sync transport we can read live counts off the
+    // decoder. Fall back to a decode attempt for the UR case.
+    let first = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
+    if !first.starts_with("zt:") {
+        let complete = decode_qr_payload(&parts, "zcash-notes").is_ok();
+        return ZcashNotesScanProgress { have: parts.len() as u32, needed: -1, complete };
+    }
+    match zt_decoder_from_parts(&parts, "zcash-notes") {
+        Ok(decoder) => ZcashNotesScanProgress {
+            have: decoder.received() as u32,
+            needed: decoder.threshold().map(i32::from).unwrap_or(-1),
+            complete: decoder.complete(),
+        },
+        Err(_) => ZcashNotesScanProgress { have: 0, needed: -1, complete: false },
+    }
+}
+
 /// Generic UR decoder that handles both single-part and multi-part (fountain) URs
 /// Decode QR payload — auto-detects UR (`ur:`) or zoda transport (`zt:`) format.
 fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
@@ -2569,44 +2595,64 @@ fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, E
     }
 }
 
-/// Decode zoda transport frames (`zt:type/hex`).
-fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
-    use zoda_vss::transport::{Decoder as ZtDecoder, TransportError};
+/// Feed collected `zt:type/hex` frames into a zoda decoder, skipping stray /
+/// foreign-session frames. Shared by the scan-progress probe and the full
+/// decode so both see identical accumulation semantics.
+///
+/// Animated QR frames arrive in cycling order, so the metadata frame (index 0,
+/// carrying k/n) is rarely captured first. zoda's decoder cannot recover the
+/// metadata if a non-zero frame is seen first (it pins the session and then
+/// treats the later frame 0 as an ordinary chunk), so we hand it the index-0
+/// frame first. Per-frame errors are skipped rather than fatal — a single
+/// garbled QR read shouldn't abort a scan that's still collecting frames.
+fn zt_decoder_from_parts(
+    parts: &[String],
+    expected_type: &str,
+) -> Result<zoda_vss::transport::Decoder, ErrorDisplayed> {
+    use zoda_vss::transport::Decoder as ZtDecoder;
 
     let zt_prefix = format!("zt:{}/", expected_type);
 
-    let mut decoder = ZtDecoder::new();
-
+    // hex-decode the matching frames, skipping non-matching / partial reads.
+    let mut frames: Vec<Vec<u8>> = Vec::new();
     for part in parts {
-        let lower = part.to_lowercase();
-        if !lower.starts_with(&zt_prefix) {
-            // skip non-matching frames (could be stray QRs)
+        if !part.to_lowercase().starts_with(&zt_prefix) {
             continue;
         }
-
-        let hex_data = &part[zt_prefix.len()..];
-        let frame_bytes = hex::decode(hex_data).map_err(|e| ErrorDisplayed::Str {
-            s: format!("bad hex in zt frame: {e}"),
-        })?;
-
-        match decoder.receive(&frame_bytes) {
-            Ok(_) => {}
-            Err(TransportError::SessionMismatch) => {
-                // stray QR from different session — skip silently
-                continue;
-            }
-            Err(e) => {
-                return Err(ErrorDisplayed::Str {
-                    s: format!("zt transport error: {e}"),
-                });
-            }
+        if let Ok(bytes) = hex::decode(&part[zt_prefix.len()..]) {
+            frames.push(bytes);
         }
+    }
 
+    // frame layout: session_id(8) || index(1) || chunk.
+    let mut decoder = ZtDecoder::new();
+
+    // Wait for the metadata (index-0) frame before feeding anything. zoda's
+    // decoder pins the session on the first frame it sees and panics
+    // (`self.n.unwrap()`) if a *second* non-zero frame arrives before
+    // metadata. Holding off until frame 0 is present — and feeding it first —
+    // guarantees k/n are established before any chunk frame, so that unwrap is
+    // never reached. Until then we report an empty decoder (have=0, k unknown).
+    if !frames.iter().any(|f| f.get(8) == Some(&0)) {
+        return Ok(decoder);
+    }
+    // stable-sort the index-0 frame to the front; everything else keeps order.
+    frames.sort_by_key(|f| u8::from(f.get(8) != Some(&0)));
+
+    for frame_bytes in &frames {
+        // tolerate per-frame rejects (foreign session, dup).
+        let _ = decoder.receive(frame_bytes);
         if decoder.complete() {
             break;
         }
     }
 
+    Ok(decoder)
+}
+
+/// Decode zoda transport frames (`zt:type/hex`).
+fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    let decoder = zt_decoder_from_parts(parts, expected_type)?;
     decoder.reconstruct().map_err(|e| ErrorDisplayed::Str {
         s: format!("zt reconstruct failed: {e}"),
     })

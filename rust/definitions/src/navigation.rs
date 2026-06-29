@@ -1063,6 +1063,13 @@ pub struct ZcashNoteSyncResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZcashNotesScanProgress {
+    pub have: u32,
+    pub needed: i32,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthSignResult {
     pub pubkey_hex: String,
     pub signature_hex: String,

@@ -817,6 +817,13 @@ namespace signer {
     [Throws=ErrorDisplayed]
     ZcashNoteSyncResult decode_and_verify_zcash_notes(sequence<string> ur_parts);
 
+    // Pure scan-progress probe: how many zcash-notes frames collected (have),
+    // how many needed to reconstruct (needed, -1 until known), and whether
+    // reconstruction is possible now (complete). No verify/store; the camera
+    // polls this to drive the progress counter and decide when to call
+    // decode_and_verify_zcash_notes.
+    ZcashNotesScanProgress zcash_notes_scan_progress(sequence<string> parts);
+
     // Get all verified zcash notes
     [Throws=ErrorDisplayed]
     sequence<ZcashVerifiedNoteDisplay> get_zcash_verified_notes();
@@ -1621,6 +1628,13 @@ dictionary ZcashNoteSyncResult {
     u32 anchor_height;
     boolean mainnet;
     boolean anchor_verified;
+};
+
+// Live scan progress for animated zcash-notes QR (zoda transport).
+dictionary ZcashNotesScanProgress {
+    u32 have;
+    i32 needed;
+    boolean complete;
 };
 
 
