@@ -2157,7 +2157,7 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
-    // Run inspection and enforce verification gates before signing.
+    // Run inspection; signing itself is intentionally permissive.
     //
     // The previous anchor-equality and "no verified notes" gates were
     // rotko-invented and don't appear in the canonical Zashi → Keystone PCZT
@@ -2166,18 +2166,16 @@ fn sign_zcash_pczt(
     // (verified at /steam/rotko/keystone3-firmware/rust/apps/zcash/src/pczt/
     // {sign,check}.rs). We mirror that.
     //
-    // The only zigner-specific guard kept: refuse to sign when zero PCZT
-    // spend nullifiers match the locally verified note set, since the
-    // verified-notes store is zigner's distinguishing value over a
-    // canonical Keystone-shape signer. A blind-signing footgun that
-    // Keystone cannot detect.
+    // zigner's distinguishing safety value (the verified-notes store) is
+    // surfaced as a SOFT on-device warning at review time, not a hard refuse
+    // here (rotkonetworks/zigner#16). A hard `known_spends == 0` / implied-
+    // spend-vs-balance refuse is impractical: the cold device can't learn its
+    // own change notes (their tree position isn't assigned until the tx is
+    // mined), so a synced wallet's change-spends would be refused until a
+    // re-sync. Instead the sign screen shows the `WARN_UNRECOGNIZED`
+    // acknowledge page when none of the spends match a verified note, plus
+    // inline per-spend verified/unknown labels (see ZcashPcztScreen).
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
-
-    // TODO(sync-flow, rotkonetworks/zigner#16): re-enable the
-    // `known_spends == 0` refusal and the implied-spend-vs-verified-balance
-    // check once the zcli → zigner verified-notes sync flow ships. Currently
-    // disabled so unsynced PCZT round-trip works for testing. See git blame
-    // for the prior shape.
 
     // Sign every action try-and-skip. Dummy Orchard actions are spent
     // under an ephemeral key the user doesn't hold, so sign_orchard will

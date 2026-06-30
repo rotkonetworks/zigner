@@ -46,11 +46,22 @@ import kotlin.time.Duration.Companion.milliseconds
 
 enum class PcztState {
 	INSPECTING,
+	WARN_UNRECOGNIZED,
 	REVIEW,
 	SIGNING,
 	DISPLAY_SIGNATURE,
 	ERROR,
 }
+
+/** Soft safety signal (rotkonetworks/zigner#16; the Keystone-parity design of
+ *  6e5ca104): none of the PCZT's spends match a note this device has verified.
+ *  Only meaningful once notes have been synced (verifiedBalance > 0) — a
+ *  never-synced device falls back to plain Keystone-shape review. Fires on a
+ *  forged / unrecognized PCZT, and also when spending only stale change after a
+ *  prior send (its nullifier isn't synced yet) — which is why it's a soft
+ *  acknowledge, not a hard refuse. */
+private fun noRecognizedSpends(insp: ZcashPcztInspection): Boolean =
+	insp.verifiedBalance > 0uL && insp.knownSpends == 0u && insp.actionCount > 0u
 
 @Composable
 fun ZcashPcztScreen(
@@ -81,7 +92,9 @@ fun ZcashPcztScreen(
 				val result = withContext(Dispatchers.Default) { inspectZcashPczt(bytes) }
 				inspection = result
 				signingSeedName = getSeedName()
-				state = PcztState.REVIEW
+				// Gate review behind an acknowledge page when none of the spends
+				// are recognized on this device (soft warning, rotkonetworks/zigner#16).
+				state = if (noRecognizedSpends(result)) PcztState.WARN_UNRECOGNIZED else PcztState.REVIEW
 			} catch (e: Exception) {
 				errorMsg = e.message ?: "Failed to inspect PCZT"
 				state = PcztState.ERROR
@@ -117,6 +130,13 @@ fun ZcashPcztScreen(
 
 		when (state) {
 			PcztState.INSPECTING -> CenteredSpinner("Inspecting transaction...")
+
+			PcztState.WARN_UNRECOGNIZED -> {
+				UnrecognizedSpendsPage(
+					onProceed = { state = PcztState.REVIEW },
+					onCancel = onDone,
+				)
+			}
 
 			PcztState.REVIEW -> {
 				val insp = inspection ?: return@Column
@@ -167,15 +187,25 @@ fun ZcashPcztScreen(
 						.padding(top = 12.dp),
 					verticalArrangement = Arrangement.spacedBy(12.dp),
 				) {
-					// TODO(sync-flow): restore VerificationCard + PcztGlossaryNote
-					// once the zcli → zigner verified-notes sync ships. Without
-					// synced notes every spend is "Unknown / 0 ZEC" which is
-					// noise rather than signal, so we hide it for now.
-					// VerificationCard(insp)
+					// Verified-notes context — shown only when this device has
+					// synced notes; a never-synced device stays Keystone-shape (no
+					// noise). The hard refuse is intentionally not re-enabled; the
+					// no-recognized-spends case surfaces as the WARN_UNRECOGNIZED
+					// acknowledge page before this screen.
+					if (insp.verifiedBalance > 0uL) {
+						VerificationCard(insp)
+					}
 					when (selectedTab) {
 						0 -> {
 							ZcashPcztSimpleContent(signRequest)
-							// PcztGlossaryNote(insp)
+							// Soft signal: some spends aren't recognized (may be
+							// dummies or notes not synced to this device).
+							if (insp.verifiedBalance > 0uL && insp.knownSpends < insp.actionCount) {
+								WarningCard("${insp.actionCount - insp.knownSpends} spend(s) not in verified notes. These may be unknown or dummy actions.")
+							}
+							if (insp.verifiedBalance > 0uL) {
+								PcztGlossaryNote(insp)
+							}
 						}
 						1 -> PcztAdvancedContent(insp, urParts)
 					}
@@ -358,6 +388,54 @@ private fun PcztGlossaryNote(insp: ZcashPcztInspection) {
 			.background(MaterialTheme.colors.fill6)
 			.padding(12.dp),
 	)
+}
+
+// Soft-warning interstitial: none of the tx's spends are recognized on this
+// device. Non-blocking — the user can acknowledge and proceed (rotkonetworks/zigner#16).
+@Composable
+private fun UnrecognizedSpendsPage(
+	onProceed: Callback,
+	onCancel: Callback,
+) {
+	Column(
+		modifier = Modifier.fillMaxSize(),
+		verticalArrangement = Arrangement.SpaceBetween,
+	) {
+		Column(
+			modifier = Modifier
+				.weight(1f)
+				.verticalScroll(rememberScrollState())
+				.padding(top = 12.dp),
+			verticalArrangement = Arrangement.spacedBy(12.dp),
+		) {
+			Text(
+				text = "\u26A0 Unrecognized spends",
+				style = SignerTypeface.TitleS,
+				color = MaterialTheme.colors.red500,
+			)
+			Text(
+				text = "None of this transaction's spends match notes verified on this device.",
+				style = SignerTypeface.BodyL,
+				color = MaterialTheme.colors.textSecondary,
+			)
+			Text(
+				text = "If you have sent funds since your last sync, this can be expected — the change from earlier sends is not verified on this device yet. Otherwise, this transaction may spend notes you do not recognize. Re-sync your notes from zafu and verify the recipient and amount carefully before proceeding.",
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textTertiary,
+				modifier = Modifier
+					.fillMaxWidth()
+					.clip(RoundedCornerShape(8.dp))
+					.background(MaterialTheme.colors.fill6)
+					.padding(12.dp),
+			)
+		}
+		SignerDivider()
+		Spacer(modifier = Modifier.height(8.dp))
+		Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+			PrimaryButtonWide(label = "Acknowledge and proceed", onClicked = onProceed)
+			SecondaryButtonWide(label = "Cancel", onClicked = onCancel)
+		}
+	}
 }
 
 // Advanced tab — raw PCZT internals for cross-checking against the coordinator.
