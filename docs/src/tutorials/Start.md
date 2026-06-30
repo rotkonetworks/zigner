@@ -49,22 +49,25 @@ constructs transactions.
 2. In Zafu, choose *Import watch-only* and scan the QR.
 3. Zafu syncs notes against the chain via your indexer (zidecar in the
    Rotko stack).
-4. Zafu exports the verified note bundle to Zigner as a `ur:zcash-notes`
-   QR. Zigner verifies the merkle paths and stores the anchor as the
-   trusted root for future spends.
+4. Zafu exports your verified notes to Zigner as an animated QR
+   (`zt:zcash-notes`). Zigner verifies each note's merkle path and stores
+   the notes so it can recognise your spends later. Re-sync after you
+   receive or send — see [Sync Verified Notes](./Sync-Verified-Notes.md).
 
 Once paired, your day-to-day flow for sending ZEC is:
 
 1. In Zafu, build the transaction. Zafu shows a PCZT as animated QR.
 2. In Zigner, scan the QR. The review screen shows recipient, amount,
-   fee, and any anchor / known-spend warnings.
+   fee, and per-spend verified / dummy / unknown labels.
 3. **Tap the recipient address to reveal the full string**. Read it
    character by character against what you intended.
 4. Approve. Zigner signs and shows a signature QR.
 5. Zafu scans the signature QR and broadcasts.
 
-If anything is wrong (anchor mismatch, unknown spends, value out of
-range), Zigner refuses to sign. There is no override.
+If the transaction spends value Zigner hasn't verified, it shows a soft
+warning you must acknowledge before signing — common right after a send,
+since your change isn't synced yet. Re-sync to clear it. See
+[Sync Verified Notes](./Sync-Verified-Notes.md).
 
 ## 4. Optional: FROST multisig
 
