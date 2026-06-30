@@ -375,16 +375,27 @@ internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 		return
 	}
 
-	// Per-spend verified/unknown labels. Unknown spends are either Orchard
-	// dummies (privacy padding) or real notes not synced to this device — the
-	// soft "not in verified notes" card on the review screen explains this.
+	// Per-spend label. The pczt crate hides per-spend value, so we tell dummies
+	// from real unverified notes by the value balance (unverifiedSpendValueZat):
+	// if zero, every unrecognized spend is 0-value Orchard padding (neutral);
+	// if positive, real unverified value is present so unknowns are flagged.
 	if (inspection.spends.isNotEmpty()) {
+		val unverified = unverifiedSpendValueZat(inspection)
 		inspection.spends.forEach { spend ->
 			val zec = "%.8f".format(spend.value.toLong() / 100_000_000.0)
+			val isDummy = !spend.known && unverified == 0L
 			HighlightCard(
 				title = "$zec ZEC",
-				subtitle = if (spend.known) "Verified spend" else "Unknown spend — verify carefully",
-				color = if (spend.known) Color(0xFFF5A623) else Color(0xFFE74C3C),
+				subtitle = when {
+					spend.known -> "Verified spend"
+					isDummy -> "Dummy (privacy padding)"
+					else -> "Unknown spend — verify carefully"
+				},
+				color = when {
+					spend.known -> Color(0xFFF5A623) // gold
+					isDummy -> Color(0xFF6B7280) // neutral grey
+					else -> Color(0xFFE74C3C) // red
+				},
 			)
 		}
 	}

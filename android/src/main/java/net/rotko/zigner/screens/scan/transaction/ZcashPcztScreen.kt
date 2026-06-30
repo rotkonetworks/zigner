@@ -53,15 +53,25 @@ enum class PcztState {
 	ERROR,
 }
 
-/** Soft safety signal (rotkonetworks/zigner#16; the Keystone-parity design of
- *  6e5ca104): none of the PCZT's spends match a note this device has verified.
- *  Only meaningful once notes have been synced (verifiedBalance > 0) — a
- *  never-synced device falls back to plain Keystone-shape review. Fires on a
- *  forged / unrecognized PCZT, and also when spending only stale change after a
- *  prior send (its nullifier isn't synced yet) — which is why it's a soft
- *  acknowledge, not a hard refuse. */
-private fun noRecognizedSpends(insp: ZcashPcztInspection): Boolean =
-	insp.verifiedBalance > 0uL && insp.knownSpends == 0u && insp.actionCount > 0u
+/** Aggregate value spent from notes this device hasn't verified, inferred from
+ *  the value balance: orchardNetValue (= total spent − total output) + outputs
+ *  − verified spends = total spent − verified spent. 0 means every unrecognized
+ *  spend is a 0-value Orchard dummy (padding); > 0 means real unverified value
+ *  is being spent. The pczt crate hides per-spend value, so this aggregate is
+ *  the signal — enough to tell "padding only" from "real unverified value." */
+internal fun unverifiedSpendValueZat(insp: ZcashPcztInspection): Long {
+	val outputs = insp.outputs.sumOf { it.value.toLong() }
+	val verifiedSpends = insp.spends.filter { it.known }.sumOf { it.value.toLong() }
+	return (insp.orchardNetValue + outputs - verifiedSpends).coerceAtLeast(0L)
+}
+
+/** Soft safety signal (rotkonetworks/zigner#16): the tx spends real value from
+ *  a note this device hasn't verified (not a 0-value dummy). Only meaningful
+ *  once notes have been synced (verifiedBalance > 0) — a never-synced device
+ *  stays Keystone-shape. Fires on spending stale change after a prior send (not
+ *  yet re-synced) or a forged PCZT — a soft acknowledge, not a hard refuse. */
+private fun hasUnverifiedValueSpend(insp: ZcashPcztInspection): Boolean =
+	insp.verifiedBalance > 0uL && unverifiedSpendValueZat(insp) > 0L
 
 @Composable
 fun ZcashPcztScreen(
@@ -92,9 +102,9 @@ fun ZcashPcztScreen(
 				val result = withContext(Dispatchers.Default) { inspectZcashPczt(bytes) }
 				inspection = result
 				signingSeedName = getSeedName()
-				// Gate review behind an acknowledge page when none of the spends
-				// are recognized on this device (soft warning, rotkonetworks/zigner#16).
-				state = if (noRecognizedSpends(result)) PcztState.WARN_UNRECOGNIZED else PcztState.REVIEW
+				// Gate review behind an acknowledge page when the tx spends real
+				// value this device hasn't verified (soft warning, rotkonetworks/zigner#16).
+				state = if (hasUnverifiedValueSpend(result)) PcztState.WARN_UNRECOGNIZED else PcztState.REVIEW
 			} catch (e: Exception) {
 				errorMsg = e.message ?: "Failed to inspect PCZT"
 				state = PcztState.ERROR
@@ -189,8 +199,8 @@ fun ZcashPcztScreen(
 				) {
 					// Verified-notes context — shown only when this device has
 					// synced notes; a never-synced device stays Keystone-shape (no
-					// noise). The hard refuse is intentionally not re-enabled; the
-					// no-recognized-spends case surfaces as the WARN_UNRECOGNIZED
+					// noise). The hard refuse is intentionally not re-enabled; an
+					// unverified-value spend surfaces as the WARN_UNRECOGNIZED
 					// acknowledge page before this screen.
 					if (insp.verifiedBalance > 0uL) {
 						VerificationCard(insp)
@@ -198,10 +208,11 @@ fun ZcashPcztScreen(
 					when (selectedTab) {
 						0 -> {
 							ZcashPcztSimpleContent(signRequest)
-							// Soft signal: some spends aren't recognized (may be
-							// dummies or notes not synced to this device).
-							if (insp.verifiedBalance > 0uL && insp.knownSpends < insp.actionCount) {
-								WarningCard("${insp.actionCount - insp.knownSpends} spend(s) not in verified notes. These may be unknown or dummy actions.")
+							// Soft signal: real value spent from notes not in the
+							// verified set (0-value dummies don't count, by balance).
+							if (insp.verifiedBalance > 0uL && unverifiedSpendValueZat(insp) > 0L) {
+								val zec = "%.8f".format(unverifiedSpendValueZat(insp) / 100_000_000.0)
+								WarningCard("This transaction spends $zec ZEC from notes not in your verified set — re-sync or verify carefully.")
 							}
 							if (insp.verifiedBalance > 0uL) {
 								PcztGlossaryNote(insp)
@@ -345,6 +356,9 @@ private fun ColumnScope.CenteredSpinner(label: String) {
 
 @Composable
 private fun VerificationCard(insp: ZcashPcztInspection) {
+	// Status by value balance, not spend count: 0-value dummies don't count as
+	// "unverified," so an otherwise-clean tx with Orchard padding stays neutral.
+	val unverified = unverifiedSpendValueZat(insp)
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -354,9 +368,12 @@ private fun VerificationCard(insp: ZcashPcztInspection) {
 		verticalArrangement = Arrangement.spacedBy(4.dp),
 	) {
 		Text(
-			text = "${insp.knownSpends}/${insp.actionCount} spends verified",
+			text = if (unverified > 0L)
+				"Spends ${"%.8f".format(unverified / 100_000_000.0)} ZEC not in your verified notes"
+			else
+				"All value spends verified",
 			style = SignerTypeface.CaptionM,
-			color = if (insp.knownSpends == insp.actionCount) MaterialTheme.colors.textSecondary else MaterialTheme.colors.red500,
+			color = if (unverified > 0L) MaterialTheme.colors.red500 else MaterialTheme.colors.textSecondary,
 		)
 		val balZec = insp.verifiedBalance.toLong() / 100_000_000.0
 		Text(
@@ -376,7 +393,7 @@ private fun PcztGlossaryNote(insp: ZcashPcztInspection) {
 		if (outputCount >= 2) {
 			appendLine("• Outputs include both your destination AND change back to your wallet (different diversifier of your UFVK).")
 		}
-		append("• Spends marked UNKNOWN are either dummies (privacy padding) or real notes you haven't synced to this device yet.")
+		append("• \"Dummy (privacy padding)\" spends carry no value. \"Unknown\" spends carry value from notes not yet synced to this device — re-sync to verify them.")
 	}
 	Text(
 		text = msg,
@@ -414,7 +431,7 @@ private fun UnrecognizedSpendsPage(
 				color = MaterialTheme.colors.red500,
 			)
 			Text(
-				text = "None of this transaction's spends match notes verified on this device.",
+				text = "This transaction spends value from one or more notes not verified on this device.",
 				style = SignerTypeface.BodyL,
 				color = MaterialTheme.colors.textSecondary,
 			)

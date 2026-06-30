@@ -2046,16 +2046,18 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         }
     };
 
-    // Extract spend details (value may be redacted in PCZT, use nullifier for cross-ref)
+    // Extract spend details. Known nullifiers get their value from our
+    // verified store; unknown ones report 0 here (the pczt crate's Spend
+    // doesn't expose per-spend value). The UI tells dummies from real
+    // unverified notes via the value balance instead — orchard_net_value +
+    // outputs - verified spends.
     let mut spends = Vec::new();
     let mut known_spends = 0u32;
     for action in orchard.actions() {
         let nullifier_hex = hex::encode(action.spend().nullifier());
         let known = verified_nullifiers.contains(&nullifier_hex);
-        // Look up value from our verified notes if the PCZT doesn't expose it
         let value = if known {
             known_spends += 1;
-            // Find matching note value from our verified store
             verified_notes_values
                 .get(&nullifier_hex)
                 .copied()
@@ -2173,8 +2175,9 @@ fn sign_zcash_pczt(
     // own change notes (their tree position isn't assigned until the tx is
     // mined), so a synced wallet's change-spends would be refused until a
     // re-sync. Instead the sign screen shows the `WARN_UNRECOGNIZED`
-    // acknowledge page when none of the spends match a verified note, plus
-    // inline per-spend verified/unknown labels (see ZcashPcztScreen).
+    // acknowledge page when the tx spends value from a note not in the verified
+    // set (0-value dummies excluded), plus inline per-spend verified / dummy /
+    // unknown labels (see ZcashPcztScreen).
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
 
     // Sign every action try-and-skip. Dummy Orchard actions are spent
