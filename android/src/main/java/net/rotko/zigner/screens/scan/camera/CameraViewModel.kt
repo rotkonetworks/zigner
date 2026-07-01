@@ -11,6 +11,7 @@ import net.rotko.zigner.domain.submitErrorState
 import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
 import io.parity.signer.uniffi.decodeUrZcashPczt
+import io.parity.signer.uniffi.zcashNotesScanProgress
 import io.parity.signer.uniffi.qrparserGetPacketsTotal
 import io.parity.signer.uniffi.qrparserTryDecodeQrSequence
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -128,6 +129,13 @@ class CameraViewModel() : ViewModel() {
 					Timber.d("[FROST] barcode: rawValueLen=${textValue?.length ?: -1} rawBytesLen=$rawBytesLen format=${it?.format}")
 					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
 						processUrFrame(textValue)
+						return@forEach
+					}
+
+					// zoda transport (`zt:type/hex`) — note-sync uses this for
+					// verified erasure-coded frames. ML Kit returns it as ASCII text.
+					if (textValue != null && textValue.lowercase().startsWith("zt:")) {
+						processZtFrame(textValue)
 						return@forEach
 					}
 
@@ -385,6 +393,35 @@ class CameraViewModel() : ViewModel() {
 			else -> {
 				Timber.d("Ignoring unknown UR type: $normalizedUr")
 			}
+		}
+	}
+
+	// zoda transport (`zt:type/hex`): k-of-n verified erasure frames. Unlike
+	// UR there is no per-frame sequence header (the threshold k lives in
+	// frame-0 metadata), so accumulate distinct frames and poll the pure Rust
+	// completeness probe rather than parsing zoda's wire layout here.
+	private fun processZtFrame(ztString: String) {
+		val normalized = ztString.lowercase()
+		if (!normalized.startsWith("zt:zcash-notes/")) {
+			Timber.d("Ignoring unknown zt type: ${normalized.take(24)}")
+			return
+		}
+		val current = _zcashNotesFrames.value
+		if (current.any { it.lowercase() == normalized }) return
+
+		val updated = current + ztString
+		_zcashNotesFrames.value = updated
+		// captured = frames scanned so far (keeps the counter moving). total
+		// (`needed`) comes from the zoda frame-0 metadata via the probe.
+		_captured.value = updated.size
+
+		// poll the pure Rust probe (cheap — receive loop, no reconstruct until
+		// enough shards) for the threshold and completion signal.
+		val progress = zcashNotesScanProgress(updated)
+		if (progress.needed > 0) _total.value = progress.needed
+		if (progress.complete) {
+			resetScanValues()
+			_zcashNotesComplete.value = updated
 		}
 	}
 

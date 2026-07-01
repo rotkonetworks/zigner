@@ -2046,16 +2046,18 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         }
     };
 
-    // Extract spend details (value may be redacted in PCZT, use nullifier for cross-ref)
+    // Extract spend details. Known nullifiers get their value from our
+    // verified store; unknown ones report 0 here (the pczt crate's Spend
+    // doesn't expose per-spend value). The UI tells dummies from real
+    // unverified notes via the value balance instead — orchard_net_value +
+    // outputs - verified spends.
     let mut spends = Vec::new();
     let mut known_spends = 0u32;
     for action in orchard.actions() {
         let nullifier_hex = hex::encode(action.spend().nullifier());
         let known = verified_nullifiers.contains(&nullifier_hex);
-        // Look up value from our verified notes if the PCZT doesn't expose it
         let value = if known {
             known_spends += 1;
-            // Find matching note value from our verified store
             verified_notes_values
                 .get(&nullifier_hex)
                 .copied()
@@ -2157,7 +2159,7 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
-    // Run inspection and enforce verification gates before signing.
+    // Run inspection; signing itself is intentionally permissive.
     //
     // The previous anchor-equality and "no verified notes" gates were
     // rotko-invented and don't appear in the canonical Zashi → Keystone PCZT
@@ -2166,18 +2168,17 @@ fn sign_zcash_pczt(
     // (verified at /steam/rotko/keystone3-firmware/rust/apps/zcash/src/pczt/
     // {sign,check}.rs). We mirror that.
     //
-    // The only zigner-specific guard kept: refuse to sign when zero PCZT
-    // spend nullifiers match the locally verified note set, since the
-    // verified-notes store is zigner's distinguishing value over a
-    // canonical Keystone-shape signer. A blind-signing footgun that
-    // Keystone cannot detect.
+    // zigner's distinguishing safety value (the verified-notes store) is
+    // surfaced as a SOFT on-device warning at review time, not a hard refuse
+    // here (rotkonetworks/zigner#16). A hard `known_spends == 0` / implied-
+    // spend-vs-balance refuse is impractical: the cold device can't learn its
+    // own change notes (their tree position isn't assigned until the tx is
+    // mined), so a synced wallet's change-spends would be refused until a
+    // re-sync. Instead the sign screen shows the `WARN_UNRECOGNIZED`
+    // acknowledge page when the tx spends value from a note not in the verified
+    // set (0-value dummies excluded), plus inline per-spend verified / dummy /
+    // unknown labels (see ZcashPcztScreen).
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
-
-    // TODO(sync-flow, rotkonetworks/zigner#16): re-enable the
-    // `known_spends == 0` refusal and the implied-spend-vs-verified-balance
-    // check once the zcli → zigner verified-notes sync flow ships. Currently
-    // disabled so unsynced PCZT round-trip works for testing. See git blame
-    // for the prior shape.
 
     // Sign every action try-and-skip. Dummy Orchard actions are spent
     // under an ephemeral key the user doesn't hold, so sign_orchard will
@@ -2553,6 +2554,32 @@ fn clear_zcash_notes() -> Result<(), ErrorDisplayed> {
     })
 }
 
+/// Pure scan-progress probe for the camera. Reports how many zcash-notes
+/// frames have been collected (`have`), how many are needed to reconstruct
+/// (`needed`, -1 until the zoda frame-0 metadata or a single-part UR is
+/// seen), and whether reconstruction is now possible (`complete`). No
+/// attestation, no merkle check, no DB writes — the camera polls this while
+/// scanning to drive the progress counter and to decide when to hand frames
+/// to `decode_and_verify_zcash_notes`, which does the real verify + store.
+fn zcash_notes_scan_progress(parts: Vec<String>) -> ZcashNotesScanProgress {
+    // UR frames carry their own sequence header and are decoded elsewhere; for
+    // the zoda (`zt:`) note-sync transport we can read live counts off the
+    // decoder. Fall back to a decode attempt for the UR case.
+    let first = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
+    if !first.starts_with("zt:") {
+        let complete = decode_qr_payload(&parts, "zcash-notes").is_ok();
+        return ZcashNotesScanProgress { have: parts.len() as u32, needed: -1, complete };
+    }
+    match zt_decoder_from_parts(&parts, "zcash-notes") {
+        Ok(decoder) => ZcashNotesScanProgress {
+            have: decoder.received() as u32,
+            needed: decoder.threshold().map(i32::from).unwrap_or(-1),
+            complete: decoder.complete(),
+        },
+        Err(_) => ZcashNotesScanProgress { have: 0, needed: -1, complete: false },
+    }
+}
+
 /// Generic UR decoder that handles both single-part and multi-part (fountain) URs
 /// Decode QR payload — auto-detects UR (`ur:`) or zoda transport (`zt:`) format.
 fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
@@ -2569,44 +2596,64 @@ fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, E
     }
 }
 
-/// Decode zoda transport frames (`zt:type/hex`).
-fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
-    use zoda_vss::transport::{Decoder as ZtDecoder, TransportError};
+/// Feed collected `zt:type/hex` frames into a zoda decoder, skipping stray /
+/// foreign-session frames. Shared by the scan-progress probe and the full
+/// decode so both see identical accumulation semantics.
+///
+/// Animated QR frames arrive in cycling order, so the metadata frame (index 0,
+/// carrying k/n) is rarely captured first. zoda's decoder cannot recover the
+/// metadata if a non-zero frame is seen first (it pins the session and then
+/// treats the later frame 0 as an ordinary chunk), so we hand it the index-0
+/// frame first. Per-frame errors are skipped rather than fatal — a single
+/// garbled QR read shouldn't abort a scan that's still collecting frames.
+fn zt_decoder_from_parts(
+    parts: &[String],
+    expected_type: &str,
+) -> Result<zoda_vss::transport::Decoder, ErrorDisplayed> {
+    use zoda_vss::transport::Decoder as ZtDecoder;
 
     let zt_prefix = format!("zt:{}/", expected_type);
 
-    let mut decoder = ZtDecoder::new();
-
+    // hex-decode the matching frames, skipping non-matching / partial reads.
+    let mut frames: Vec<Vec<u8>> = Vec::new();
     for part in parts {
-        let lower = part.to_lowercase();
-        if !lower.starts_with(&zt_prefix) {
-            // skip non-matching frames (could be stray QRs)
+        if !part.to_lowercase().starts_with(&zt_prefix) {
             continue;
         }
-
-        let hex_data = &part[zt_prefix.len()..];
-        let frame_bytes = hex::decode(hex_data).map_err(|e| ErrorDisplayed::Str {
-            s: format!("bad hex in zt frame: {e}"),
-        })?;
-
-        match decoder.receive(&frame_bytes) {
-            Ok(_) => {}
-            Err(TransportError::SessionMismatch) => {
-                // stray QR from different session — skip silently
-                continue;
-            }
-            Err(e) => {
-                return Err(ErrorDisplayed::Str {
-                    s: format!("zt transport error: {e}"),
-                });
-            }
+        if let Ok(bytes) = hex::decode(&part[zt_prefix.len()..]) {
+            frames.push(bytes);
         }
+    }
 
+    // frame layout: session_id(8) || index(1) || chunk.
+    let mut decoder = ZtDecoder::new();
+
+    // Wait for the metadata (index-0) frame before feeding anything. zoda's
+    // decoder pins the session on the first frame it sees and panics
+    // (`self.n.unwrap()`) if a *second* non-zero frame arrives before
+    // metadata. Holding off until frame 0 is present — and feeding it first —
+    // guarantees k/n are established before any chunk frame, so that unwrap is
+    // never reached. Until then we report an empty decoder (have=0, k unknown).
+    if !frames.iter().any(|f| f.get(8) == Some(&0)) {
+        return Ok(decoder);
+    }
+    // stable-sort the index-0 frame to the front; everything else keeps order.
+    frames.sort_by_key(|f| u8::from(f.get(8) != Some(&0)));
+
+    for frame_bytes in &frames {
+        // tolerate per-frame rejects (foreign session, dup).
+        let _ = decoder.receive(frame_bytes);
         if decoder.complete() {
             break;
         }
     }
 
+    Ok(decoder)
+}
+
+/// Decode zoda transport frames (`zt:type/hex`).
+fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    let decoder = zt_decoder_from_parts(parts, expected_type)?;
     decoder.reconstruct().map_err(|e| ErrorDisplayed::Str {
         s: format!("zt reconstruct failed: {e}"),
     })

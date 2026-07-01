@@ -375,16 +375,27 @@ internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 		return
 	}
 
-	// TODO(sync-flow): show only verified spends once zcli → zigner sync
-	// ships. Until then, every spend is "Unknown / 0 ZEC" noise — Orchard
-	// nullifiers don't reveal note value without the verified-notes set.
+	// Per-spend label. The pczt crate hides per-spend value, so we tell dummies
+	// from real unverified notes by the value balance (unverifiedSpendValueZat):
+	// if zero, every unrecognized spend is 0-value Orchard padding (neutral);
+	// if positive, real unverified value is present so unknowns are flagged.
 	if (inspection.spends.isNotEmpty()) {
-		inspection.spends.filter { it.known }.forEach { spend ->
+		val unverified = unverifiedSpendValueZat(inspection)
+		inspection.spends.forEach { spend ->
 			val zec = "%.8f".format(spend.value.toLong() / 100_000_000.0)
+			val isDummy = !spend.known && unverified == 0L
 			HighlightCard(
 				title = "$zec ZEC",
-				subtitle = "Verified spend",
-				color = Color(0xFFF5A623),
+				subtitle = when {
+					spend.known -> "Verified spend"
+					isDummy -> "Dummy (privacy padding)"
+					else -> "Unknown spend — verify carefully"
+				},
+				color = when {
+					spend.known -> Color(0xFFF5A623) // gold
+					isDummy -> Color(0xFF6B7280) // neutral grey
+					else -> Color(0xFFE74C3C) // red
+				},
 			)
 		}
 	}

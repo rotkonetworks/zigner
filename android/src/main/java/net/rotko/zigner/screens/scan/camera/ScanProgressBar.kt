@@ -55,7 +55,10 @@ fun ScanProgressBar(
 					style = SignerTypeface.BodyL,
 				)
 				Text(
-					text = stringResource(R.string.scan_progress_bar_progress, captured, total ?: -1),
+					text = if (total != null)
+						stringResource(R.string.scan_progress_bar_progress, captured, total)
+					else
+						stringResource(R.string.scan_progress_bar_progress_unknown, captured),
 					color = PROGRESS_TEXT_COLOR,
 					style = SignerTypeface.CaptionM,
 				)
