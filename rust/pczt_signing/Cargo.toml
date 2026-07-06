@@ -1,0 +1,24 @@
+[package]
+name = "pczt_signing"
+version = "0.1.0"
+edition = "2021"
+description = "Keystone-compatible PCZT Signer role for zigner: redacted PCZT in, signed PCZT out"
+license = "MIT"
+
+# Standalone on purpose: the zigner workspace is resolver=1 with an older
+# zcash stack (orchard 0.10). This crate pins the SAME librustzcash rev as
+# zcli feat/pczt-builder so PCZT field-level interop with zafu/zashi/vizor
+# is exact. Fold into the workspace when the legacy crates migrate.
+[workspace]
+
+[dependencies]
+pczt = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["orchard", "transparent", "signer"] }
+zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["orchard", "transparent-inputs"] }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["transparent-inputs"] }
+orchard = { version = "0.12", default-features = false }
+zip32 = { version = "0.2", default-features = false }
+bip39 = "2"
+# pczt's signer role uses rand_core::OsRng; the flag arrives via feature
+# unification in bigger graphs - standalone we enable it explicitly
+rand_core = { version = "0.6", features = ["getrandom"] }
