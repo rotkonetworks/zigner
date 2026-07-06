@@ -1,0 +1,13 @@
+[package]
+name = "module_host"
+version = "0.1.0"
+edition = "2021"
+description = "zigner kernel side: wasmi runtime + host API for protocol modules"
+license = "MIT"
+
+# Standalone like pczt_signing; joins the workspace with the stack migration.
+[workspace]
+
+[dependencies]
+wasmi = "0.38"
+rand_core = { version = "0.6", features = ["getrandom"] }

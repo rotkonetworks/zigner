@@ -5,6 +5,9 @@ edition = "2021"
 description = "Keystone-compatible PCZT Signer role for zigner: redacted PCZT in, signed PCZT out"
 license = "MIT"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 # Standalone on purpose: the zigner workspace is resolver=1 with an older
 # zcash stack (orchard 0.10). This crate pins the SAME librustzcash rev as
 # zcli feat/pczt-builder so PCZT field-level interop with zafu/zashi/vizor
@@ -30,3 +33,9 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 # so the interop test proves the exact bytes zafu will ship.
 zafu-wasm = { git = "https://github.com/rotkonetworks/zcli.git", branch = "feat/pczt-builder", default-features = false }
 secp256k1 = "0.29"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# wasmi module builds: randomness is a host capability. RedPallas signing
+# is randomized, so the module imports entropy instead of pretending the
+# sandbox has any.
+getrandom = { version = "0.2", features = ["custom"] }

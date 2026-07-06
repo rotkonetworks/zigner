@@ -232,3 +232,113 @@ pub fn sign_request(
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+
+/// wasm module entropy: forwarded to the kernel host. The host links this
+/// import to its CSPRNG; without a host (e.g. bare wasm check) it errors
+/// closed rather than yielding weak randomness.
+#[cfg(target_arch = "wasm32")]
+mod wasm_entropy {
+    #[link(wasm_import_module = "zigner_host")]
+    extern "C" {
+        fn host_getrandom(ptr: *mut u8, len: usize) -> i32;
+    }
+
+    fn hostrandom(dest: &mut [u8]) -> Result<(), getrandom::Error> {
+        let rc = unsafe { host_getrandom(dest.as_mut_ptr(), dest.len()) };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(getrandom::Error::UNSUPPORTED)
+        }
+    }
+
+    getrandom::register_custom_getrandom!(hostrandom);
+}
+
+/// C ABI for the wasmi kernel. Convention: (ptr,len) in, packed
+/// u64 (ptr<<32|len) out; 0 = error (kernel then calls last_error).
+/// Seed handling here is transitional - the target host API keeps seeds
+/// kernel-side and exposes sign-digest primitives instead; that swap
+/// happens with the host-API freeze (docs/update-architecture.md).
+#[cfg(target_arch = "wasm32")]
+mod wasm_abi {
+    use core::cell::RefCell;
+
+    thread_local! {
+        static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
+    }
+
+    fn pack(v: Vec<u8>) -> u64 {
+        let len = v.len() as u64;
+        let ptr = v.leak().as_ptr() as u64;
+        (ptr << 32) | len
+    }
+
+    #[no_mangle]
+    pub extern "C" fn zigner_alloc(len: usize) -> *mut u8 {
+        let mut v = Vec::with_capacity(len);
+        let ptr = v.as_mut_ptr();
+        core::mem::forget(v);
+        ptr
+    }
+
+    #[no_mangle]
+    pub extern "C" fn zigner_summarize_request(ptr: *const u8, len: usize) -> u64 {
+        let payload = unsafe { core::slice::from_raw_parts(ptr, len) };
+        match crate::summarize_request(payload) {
+            Ok(summaries) => {
+                let mut out = Vec::new();
+                for s in summaries {
+                    out.extend_from_slice(
+                        format!(
+                            "actions={} t_inputs={}\n{}",
+                            s.orchard_actions,
+                            s.transparent_inputs,
+                            s.outputs
+                                .iter()
+                                .map(|(l, v)| format!("{l}={v}"))
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        )
+                        .as_bytes(),
+                    );
+                    out.push(0x1e); // record separator
+                }
+                pack(out)
+            }
+            Err(e) => {
+                LAST_ERROR.with(|le| *le.borrow_mut() = e.to_string());
+                0
+            }
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn zigner_sign_request(
+        ptr: *const u8,
+        len: usize,
+        seed_ptr: *const u8,
+        seed_len: usize,
+        account: u32,
+        mainnet: u32,
+    ) -> u64 {
+        let payload = unsafe { core::slice::from_raw_parts(ptr, len) };
+        let seed = unsafe { core::slice::from_raw_parts(seed_ptr, seed_len) };
+        let Ok(seed_str) = core::str::from_utf8(seed) else {
+            LAST_ERROR.with(|le| *le.borrow_mut() = "seed utf8".into());
+            return 0;
+        };
+        match crate::sign_request(payload, seed_str, account, mainnet != 0) {
+            Ok(resp) => pack(resp),
+            Err(e) => {
+                LAST_ERROR.with(|le| *le.borrow_mut() = e.to_string());
+                0
+            }
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn zigner_last_error() -> u64 {
+        LAST_ERROR.with(|le| pack(le.borrow().clone().into_bytes()))
+    }
+}

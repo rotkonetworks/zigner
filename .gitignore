@@ -105,3 +105,5 @@ rust/transaction_signing/src/main.rs
 # Play upload signing - never commit
 android/keystore.properties
 *.jks
+rust/pczt_signing/target/
+rust/module_host/target/
