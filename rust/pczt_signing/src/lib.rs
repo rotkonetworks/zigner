@@ -17,6 +17,7 @@ use pczt::Pczt;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_protocol::consensus::{MainNetwork, TestNetwork};
 use zip32::AccountId;
+use zcash_transparent::keys::{NonHardenedChildIndex, TransparentKeyScope};
 
 #[derive(Debug)]
 pub enum Error {
@@ -103,6 +104,7 @@ pub fn sign_redacted_pczt(
     .map_err(|e| Error::KeyDerivation(format!("{e:?}")))?;
 
     let n_actions = pczt.orchard().actions().len();
+    let n_transparent = pczt.transparent().inputs().len();
     let mut signer = Signer::new(pczt).map_err(|e| Error::Sign(format!("{e:?}")))?;
 
     // The Signer role reads each action's alpha from the PCZT and applies
@@ -122,6 +124,36 @@ pub fn sign_redacted_pczt(
             let foreign = msg.contains("Wrong") || msg.contains("Missing");
             if !foreign {
                 return Err(Error::Sign(format!("action {index}: {msg}")));
+            }
+        }
+    }
+
+    // Transparent inputs: this pczt rev keeps bip32_derivation pub(crate),
+    // so instead of reading paths we candidate-scan our account's keys on
+    // the standard m/44'/133'/account'/{0,1}/{0..20} tree. Input::sign
+    // verifies the pubkey against script_pubkey before mutating, so a
+    // wrong-key attempt is a clean no-op error - "sign what is yours",
+    // bounded at 40 attempts per input.
+    if n_transparent > 0 {
+        const GAP_LIMIT: u32 = 20;
+        let account_key = usk.transparent();
+        let mut candidates = Vec::new();
+        for change in 0..=1u32 {
+            let scope = TransparentKeyScope::custom(change)
+                .ok_or_else(|| Error::KeyDerivation("scope".into()))?;
+            for child in 0..GAP_LIMIT {
+                let child_index = NonHardenedChildIndex::from_index(child)
+                    .ok_or_else(|| Error::KeyDerivation("child index".into()))?;
+                if let Ok(sk) = account_key.derive_secret_key(scope, child_index) {
+                    candidates.push(sk);
+                }
+            }
+        }
+        for index in 0..n_transparent {
+            for sk in &candidates {
+                if signer.sign_transparent(index, sk).is_ok() {
+                    break;
+                }
             }
         }
     }
