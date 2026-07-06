@@ -22,7 +22,7 @@ android {
 	defaultConfig {
 		applicationId "net.rotko.zigner"
 		minSdk 23
-		targetSdk 34
+		targetSdk 35
 		versionCode computeVersionCode(appVersionName)
 		versionName appVersionName
 		ndk {
@@ -35,10 +35,35 @@ android {
 		}
 	}
 
+	// Play upload signing. Reads android/keystore.properties (gitignored):
+	//   storeFile=zigner-upload.jks
+	//   storePassword=...
+	//   keyAlias=upload
+	//   keyPassword=...
+	// Falls back to env vars (CI). Unsigned builds still work for debug.
+	def keystoreProps = new Properties()
+	def keystorePropsFile = file('keystore.properties')
+	if (keystorePropsFile.exists()) {
+		keystorePropsFile.withInputStream { keystoreProps.load(it) }
+	}
+	signingConfigs {
+		release {
+			def storePath = keystoreProps['storeFile'] ?: System.getenv('ZIGNER_UPLOAD_KEYSTORE')
+			if (storePath) {
+				storeFile file(storePath)
+				storePassword keystoreProps['storePassword'] ?: System.getenv('ZIGNER_UPLOAD_STORE_PASSWORD')
+				keyAlias keystoreProps['keyAlias'] ?: System.getenv('ZIGNER_UPLOAD_KEY_ALIAS')
+				keyPassword keystoreProps['keyPassword'] ?: System.getenv('ZIGNER_UPLOAD_KEY_PASSWORD')
+			}
+		}
+	}
 	buildTypes {
 		release {
 			minifyEnabled false
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+			if (signingConfigs.release.storeFile != null) {
+				signingConfig signingConfigs.release
+			}
 		}
 	}
 	compileOptions {
@@ -62,8 +87,8 @@ android {
 			pickFirsts += ['lib/armeabi-v7a/libc++_shared.so', 'lib/arm64-v8a/libc++_shared.so', 'lib/x86/libc++_shared.so', 'lib/x86_64/libc++_shared.so']
 		}
 	}
-	compileSdk 34
-	ndkVersion '24.0.8215888'
+	compileSdk 36
+	ndkVersion '28.2.13676358'
     namespace 'net.rotko.zigner'
 }
 

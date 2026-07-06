@@ -101,3 +101,7 @@ rust/files/in_progress/*
 # development mess
 rust/transaction_parsing/src/main.rs
 rust/transaction_signing/src/main.rs
+
+# Play upload signing - never commit
+android/keystore.properties
+*.jks
