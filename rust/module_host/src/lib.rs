@@ -149,3 +149,4 @@ impl ModuleRuntime {
         self.read_packed(packed)
     }
 }
+pub mod manifest;
