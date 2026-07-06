@@ -94,9 +94,42 @@ fn wallet_produces_device_signs_wallet_extracts() {
     let redacted = zafu_wasm::redact_pczt_for_signer(pczt);
     let over_the_qr = redacted.serialize();
 
-    // ── device side: THIS crate ──
-    let signed_bytes =
-        pczt_signing::sign_redacted_pczt(&over_the_qr, MNEMONIC, 0, true).expect("device signs");
+    // ── device side: THIS crate, through the full QR envelope ──
+    use pczt_signing::envelope::{self, RequestMessage, SignRequest};
+
+    // Batch of two (same PCZT twice - proving is the expensive part and the
+    // envelope/batch machinery is what's under test here).
+    let batch_payload = envelope::encode_request(&SignRequest::Batch(vec![
+        RequestMessage { id: b"m-1".to_vec(), pczt_bytes: over_the_qr.clone() },
+        RequestMessage { id: b"m-2".to_vec(), pczt_bytes: over_the_qr.clone() },
+    ]))
+    .expect("encode batch");
+
+    // Confirmation summaries: what the user would see on-device.
+    let summaries = pczt_signing::summarize_request(&batch_payload).expect("summaries");
+    assert_eq!(summaries.len(), 2);
+    assert_eq!(summaries[0].transparent_inputs, 1);
+    assert!(summaries[0].orchard_actions >= 2);
+    let orchard_total: u64 = summaries[0]
+        .outputs
+        .iter()
+        .filter(|(l, _)| l.starts_with("orchard:"))
+        .map(|(_, v)| v)
+        .sum();
+    assert_eq!(orchard_total, 985_000, "recipient+change values visible for confirmation");
+
+    let response_payload =
+        pczt_signing::sign_request(&batch_payload, MNEMONIC, 0, true).expect("device signs batch");
+
+    // ── wallet side: parse response, verify Keystone-parity digests ──
+    let responses = envelope::parse_response(&response_payload).expect("parse response");
+    assert_eq!(responses.len(), 2);
+    assert_eq!(responses[0].id, b"m-1");
+    assert_eq!(responses[1].id, b"m-2");
+    for r in &responses {
+        assert_eq!(r.digest, envelope::integrity_digest(&r.signed_pczt));
+    }
+    let signed_bytes = responses[0].signed_pczt.clone();
 
     // ── wallet side: finalize + extract ──
     let signed = Pczt::parse(&signed_bytes).expect("signed PCZT parses");

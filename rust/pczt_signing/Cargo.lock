@@ -1293,6 +1293,7 @@ dependencies = [
  "pczt",
  "rand_core",
  "secp256k1",
+ "sha2 0.10.9",
  "zafu-wasm",
  "zcash_keys",
  "zcash_primitives",

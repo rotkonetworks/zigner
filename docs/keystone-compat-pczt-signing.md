@@ -63,6 +63,29 @@ digest path for legacy QR type):
    `ZcashBatchMessageInput { id, pczt_bytes }` -> signed batch with sha256
    digests. Unlocks one-exchange Ironwood migration + vote bundles.
 
+## Status (2026-07-06)
+
+Done in `rust/pczt_signing` (standalone crate, all tested):
+- Signer role: orchard spend-auth + transparent candidate-scan signing
+- QR envelope: tx_type 0x03 (single) / 0x04 (batch, cap 35), fail-closed
+  on unknown and legacy (0x02) types; response carries sha256 integrity
+  digests per message (Keystone parity)
+- summarize_request(): per-message confirmation data incl. orchard output
+  values + recipients (zafu's redactor retains them)
+- Interop proven: zafu-wasm produce+redact -> envelope -> this crate signs
+  (batch of 2, ids echoed, digests verified) -> zafu-wasm finalize+extract
+  -> valid v5 tx
+
+Remaining:
+- Workspace merge: the legacy resolver-1 workspace pins orchard 0.10 and
+  several deps of the new stack are yanked on crates.io (orchard 0.12.0,
+  core2 0.3.x, halo2_gadgets 0.4.0 - locks seeded from zcli's
+  feat/pczt-builder lockfile bypass this). Merge lands together with the
+  NU6.3 rev bump.
+- Kotlin: uniffi surface for summarize_request/sign_request + confirm
+  screen rendering PcztSummary; scan dispatcher routes tx_type 0x03/0x04.
+- UR fountain framing on the response for large batches.
+
 ## Sequencing
 
 - Store release (current firmware, blind digest signing): DONE - ships now,

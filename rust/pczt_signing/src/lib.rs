@@ -12,6 +12,11 @@
 //! the PCZT contents, so a compromised wallet cannot substitute a digest
 //! for a different transaction than the one displayed.
 
+pub mod envelope;
+
+use envelope::{
+    encode_response, parse_request, EnvelopeError, ResponseMessage, SignRequest,
+};
 use pczt::roles::signer::Signer;
 use pczt::Pczt;
 use zcash_keys::keys::UnifiedSpendingKey;
@@ -66,6 +71,19 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     let mut outputs = Vec::new();
     for out in pczt.transparent().outputs() {
         outputs.push((format!("t-script:{}", hex(out.script_pubkey())), *out.value()));
+    }
+    for action in pczt.orchard().actions() {
+        let out = action.output();
+        let label = match out.recipient() {
+            // 43-byte raw orchard receiver; the UI layer renders it as a
+            // unified address. Hex here keeps this crate encoding-agnostic.
+            Some(r) => format!("orchard:{}", hex(r)),
+            None => "orchard:shielded".to_string(),
+        };
+        match out.value() {
+            Some(v) => outputs.push((label, *v)),
+            None => outputs.push((label, 0)),
+        }
     }
 
     Ok(PcztSummary {
@@ -160,6 +178,55 @@ pub fn sign_redacted_pczt(
 
     let pczt = signer.finish();
     Ok(pczt.serialize())
+}
+
+#[derive(Debug)]
+pub enum RequestError {
+    Envelope(EnvelopeError),
+    Sign(usize, Error),
+}
+
+impl core::fmt::Display for RequestError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            RequestError::Envelope(e) => write!(f, "envelope: {e}"),
+            RequestError::Sign(i, e) => write!(f, "message {i}: {e}"),
+        }
+    }
+}
+
+/// Summaries for user confirmation, one per message in the request.
+pub fn summarize_request(payload: &[u8]) -> Result<Vec<PcztSummary>, RequestError> {
+    let request = parse_request(payload).map_err(RequestError::Envelope)?;
+    request
+        .messages()
+        .iter()
+        .enumerate()
+        .map(|(i, m)| summarize(&m.pczt_bytes).map_err(|e| RequestError::Sign(i, e)))
+        .collect()
+}
+
+/// The full device flow after user confirmation: parse the envelope, sign
+/// every message, return the response envelope for the wallet's camera.
+pub fn sign_request(
+    payload: &[u8],
+    seed_phrase: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<Vec<u8>, RequestError> {
+    let request = parse_request(payload).map_err(RequestError::Envelope)?;
+    let batch = matches!(request, SignRequest::Batch(_));
+    let mut responses = Vec::with_capacity(request.messages().len());
+    for (i, m) in request.messages().iter().enumerate() {
+        let signed = sign_redacted_pczt(&m.pczt_bytes, seed_phrase, account, mainnet)
+            .map_err(|e| RequestError::Sign(i, e))?;
+        responses.push(ResponseMessage {
+            id: m.id.clone(),
+            digest: envelope::integrity_digest(&signed),
+            signed_pczt: signed,
+        });
+    }
+    encode_response(&responses, batch).map_err(RequestError::Envelope)
 }
 
 fn hex(bytes: &[u8]) -> String {
