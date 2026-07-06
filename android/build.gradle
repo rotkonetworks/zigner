@@ -26,7 +26,7 @@ android {
 		versionCode computeVersionCode(appVersionName)
 		versionName appVersionName
 		ndk {
-			abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+			abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
 		}
 
 		testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -84,6 +84,12 @@ android {
 		release {
 			minifyEnabled false
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+			// Store artifacts ship phone ABIs only. x86_64 remains in debug
+			// builds for emulators; dropping it here keeps the APK set under
+			// Accrescent's 128 MiB cap (was 130.2 MiB with all four ABIs).
+			ndk {
+				abiFilters 'armeabi-v7a', 'arm64-v8a'
+			}
 			if (signingConfigured) {
 				signingConfig signingConfigs.release
 			}
@@ -147,7 +153,12 @@ cargo {
 	module = "../rust/signer"
 	targetDirectory = "../rust/target"
 	libname = "signer"
-	targets = ["arm", "arm64", "x86_64"]
+	// Phone ABIs only by default - x86_64 exists solely for emulator work
+	// and its ~30 MiB of split APKs pushed the store APK set past
+	// Accrescent's 128 MiB cap. Opt back in with -PwithEmulatorAbi.
+	targets = project.hasProperty('withEmulatorAbi')
+		? ["arm", "arm64", "x86_64"]
+		: ["arm", "arm64"]
 	apiLevel = 24 //NDK API level, not SDK
 	profile = 'release'
 	extraCargoBuildArguments = ["--locked"]
