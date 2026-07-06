@@ -46,14 +46,37 @@ android {
 	if (keystorePropsFile.exists()) {
 		keystorePropsFile.withInputStream { keystoreProps.load(it) }
 	}
+	// All-or-nothing signing resolution: partially configured signing is a
+	// configuration error (named, fail-fast), not a cryptic packaging failure.
+	def signingInputs = [
+		storeFile:     keystoreProps['storeFile']     ?: System.getenv('ZIGNER_UPLOAD_KEYSTORE'),
+		storePassword: keystoreProps['storePassword'] ?: System.getenv('ZIGNER_UPLOAD_STORE_PASSWORD'),
+		keyAlias:      keystoreProps['keyAlias']      ?: System.getenv('ZIGNER_UPLOAD_KEY_ALIAS'),
+		keyPassword:   keystoreProps['keyPassword']   ?: System.getenv('ZIGNER_UPLOAD_KEY_PASSWORD'),
+	]
+	def signingConfigured = signingInputs.values().any { it }
+	if (signingConfigured) {
+		def missing = signingInputs.findAll { !it.value }.keySet()
+		if (!missing.isEmpty()) {
+			throw new GradleException(
+				"release signing partially configured - missing: ${missing.join(', ')} " +
+				"(android/keystore.properties or ZIGNER_UPLOAD_* env)")
+		}
+		// file() resolves relative paths against android/, not the repo root
+		def resolvedStore = file(signingInputs.storeFile)
+		if (!resolvedStore.exists()) {
+			throw new GradleException(
+				"release keystore not found: ${resolvedStore} " +
+				"(relative paths resolve against android/ - use an absolute path or android/-relative)")
+		}
+	}
 	signingConfigs {
 		release {
-			def storePath = keystoreProps['storeFile'] ?: System.getenv('ZIGNER_UPLOAD_KEYSTORE')
-			if (storePath) {
-				storeFile file(storePath)
-				storePassword keystoreProps['storePassword'] ?: System.getenv('ZIGNER_UPLOAD_STORE_PASSWORD')
-				keyAlias keystoreProps['keyAlias'] ?: System.getenv('ZIGNER_UPLOAD_KEY_ALIAS')
-				keyPassword keystoreProps['keyPassword'] ?: System.getenv('ZIGNER_UPLOAD_KEY_PASSWORD')
+			if (signingConfigured) {
+				storeFile file(signingInputs.storeFile)
+				storePassword signingInputs.storePassword
+				keyAlias signingInputs.keyAlias
+				keyPassword signingInputs.keyPassword
 			}
 		}
 	}
@@ -61,8 +84,21 @@ android {
 		release {
 			minifyEnabled false
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-			if (signingConfigs.release.storeFile != null) {
+			if (signingConfigured) {
 				signingConfig signingConfigs.release
+			}
+		}
+	}
+
+	// CI guard against silently-green unsigned releases: with
+	// ZIGNER_REQUIRE_SIGNED=1, any release build without signing fails fast
+	// instead of emitting an unpublishable artifact.
+	tasks.configureEach { t ->
+		if ((t.name == 'assembleRelease' || t.name == 'bundleRelease' || t.name == 'packageRelease')
+			&& System.getenv('ZIGNER_REQUIRE_SIGNED') == '1' && !signingConfigured) {
+			t.doFirst {
+				throw new GradleException(
+					'ZIGNER_REQUIRE_SIGNED=1 but release signing is not configured - refusing unsigned release')
 			}
 		}
 	}
