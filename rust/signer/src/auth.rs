@@ -218,10 +218,12 @@ fn derive_zid_root(seed_phrase: &str) -> Result<[u8; 64], String> {
 /// Derive the ZID cross-site public key from the mnemonic.
 ///
 /// Matches zafu's deriveZidCrossSite(mnemonic, "default"):
+/// ```text
 ///   zid_root  = derive_zid_root(mnemonic)
 ///   identity  = HMAC-SHA512(zid_root, "identity:default")
 ///   seed      = HMAC-SHA512(identity, "cross-site")
 ///   pubkey    = ed25519.getPublicKey(seed[0:32])
+/// ```
 ///
 /// Returns hex-encoded 32-byte ed25519 public key.
 pub fn derive_zid_pubkey(seed_phrase: &str) -> Result<String, String> {
@@ -310,10 +312,12 @@ pub fn sign_zid_challenge(
 /// Derive a 12-word BIP39 hot wallet mnemonic from the master seed phrase.
 ///
 /// Uses two-stage KDF (v2):
+/// ```text
 ///   zid_root  = derive_zid_root(mnemonic)  // HKDF from BIP39 seed
 ///   identity  = HMAC-SHA512(zid_root, "identity:default")
 ///   seed      = HMAC-SHA512(identity, "hot-wallet-v1")
 ///   entropy   = seed[0..16]  (128 bits = 12 words)
+/// ```
 ///
 /// The resulting mnemonic is deterministic and recoverable from the master seed.
 /// Equivalent to `derive_hot_wallet_mnemonic_with_rotation(seed_phrase, "default", 0)`.

@@ -16,6 +16,24 @@ ignore = [
     # atomic-polyfill unmaintained - transitive via uniffi_bindgen 0.22,
     # goes away with the uniffi upgrade
     "RUSTSEC-2023-0089",
+    # unmaintained transitive deps pinned by the substrate-era stack
+    "RUSTSEC-2025-0141", # bincode
+    "RUSTSEC-2026-0105", # core2
+    "RUSTSEC-2025-0057", # fxhash
+    "RUSTSEC-2025-0161", # libsecp256k1
+    "RUSTSEC-2025-0119", # number_prefix
+    "RUSTSEC-2024-0436", # paste
+    "RUSTSEC-2026-0173", # proc-macro-error2
+    "RUSTSEC-2025-0134", # rustls-pemfile
+    # rand 0.8 unsound with custom logger; fix is the breaking 0.9 bump
+    "RUSTSEC-2026-0097",
+    # tracing-subscriber 0.2 ANSI log poisoning; 0.3 bump blocked by substrate pins
+    "RUSTSEC-2025-0055",
+    # rustls-webpki 0.101 name-constraint/CRL advisories; fixes only in 0.102+
+    # which the pinned rustls 0.21 stack cannot take
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
 ]
 
 [licenses]

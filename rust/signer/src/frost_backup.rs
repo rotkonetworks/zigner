@@ -21,12 +21,14 @@
 //!
 //! Plaintext payload (inside the box):
 //!
+//! ```text
 //!   { "version": 1,
 //!     "type": "frost-share",
 //!     "label", "publicKeyPackage", "keyPackage", "ephemeralSeed",
 //!     "threshold", "maxSigners", "mainnet",
 //!     "orchardFvk"?, "address"?, "relayUrl"?,
 //!     "createdAt" }
+//! ```
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
