@@ -2566,7 +2566,11 @@ fn zcash_notes_scan_progress(parts: Vec<String>) -> ZcashNotesScanProgress {
     let first = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
     if !first.starts_with("zt:") {
         let complete = decode_qr_payload(&parts, "zcash-notes").is_ok();
-        return ZcashNotesScanProgress { have: parts.len() as u32, needed: -1, complete };
+        return ZcashNotesScanProgress {
+            have: parts.len() as u32,
+            needed: -1,
+            complete,
+        };
     }
     match zt_decoder_from_parts(&parts, "zcash-notes") {
         Ok(decoder) => ZcashNotesScanProgress {
@@ -2574,7 +2578,11 @@ fn zcash_notes_scan_progress(parts: Vec<String>) -> ZcashNotesScanProgress {
             needed: decoder.threshold().map(i32::from).unwrap_or(-1),
             complete: decoder.complete(),
         },
-        Err(_) => ZcashNotesScanProgress { have: 0, needed: -1, complete: false },
+        Err(_) => ZcashNotesScanProgress {
+            have: 0,
+            needed: -1,
+            complete: false,
+        },
     }
 }
 

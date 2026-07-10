@@ -226,7 +226,7 @@ pub fn genesis_hash_in_specs(
             specs_set.push((network_specs_key, network_specs))
         }
     }
-    specs_set.sort_by(|a, b| a.1.order.cmp(&b.1.order));
+    specs_set.sort_by_key(|a| a.1.order);
     match specs_set.first() {
         Some(a) => Ok(Some(SpecsInvariants {
             base58prefix: a.1.specs.base58prefix,

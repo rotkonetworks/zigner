@@ -81,7 +81,7 @@ fn collect_set(
             metadata_set.push(MetaValues::from_entry_checked(y)?)
         }
     }
-    metadata_set.sort_by(|a, b| a.version.cmp(&b.version));
+    metadata_set.sort_by_key(|a| a.version);
     network_specs_set.sort_by(|a, b| a.specs.title.cmp(&b.specs.title));
     Ok((metadata_set, network_specs_set))
 }
