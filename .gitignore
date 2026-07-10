@@ -107,3 +107,6 @@ android/keystore.properties
 *.jks
 rust/pczt_signing/target/
 rust/module_host/target/
+
+# separate website repo
+zigner.rotko.net/
