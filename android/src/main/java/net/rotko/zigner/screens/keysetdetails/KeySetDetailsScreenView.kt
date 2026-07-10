@@ -486,7 +486,6 @@ private fun MultisigWalletRow(
 	}
 }
 
-
 @Preview(
 	name = "light", group = "general", uiMode = Configuration.UI_MODE_NIGHT_NO,
 	showBackground = true, backgroundColor = 0xFFFFFFFF,

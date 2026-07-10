@@ -834,6 +834,13 @@ namespace signer {
     [Throws=ErrorDisplayed]
     ZcashNoteSyncResult decode_and_verify_zcash_notes(sequence<string> ur_parts);
 
+    // Pure scan-progress probe: how many zcash-notes frames collected (have),
+    // how many needed to reconstruct (needed, -1 until known), and whether
+    // reconstruction is possible now (complete). No verify/store; the camera
+    // polls this to drive the progress counter and decide when to call
+    // decode_and_verify_zcash_notes.
+    ZcashNotesScanProgress zcash_notes_scan_progress(sequence<string> parts);
+
     // Get all verified zcash notes
     [Throws=ErrorDisplayed]
     sequence<ZcashVerifiedNoteDisplay> get_zcash_verified_notes();
@@ -1002,6 +1009,12 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string frost_spend_sign_round2([ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alpha_hex, [ByRef] string commitments_json);
 
+    // Authenticated variant: share is wrapped in a SignedMessage so the coordinator
+    // maps it by VK-derived FROST id, not BTreeMap position. Use this when sharing
+    // over the relay to prevent the positional-fallback id-mismatch aggregate bug.
+    [Throws=ErrorDisplayed]
+    string frost_spend_sign_round2_signed([ByRef] string ephemeral_seed_hex, [ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alpha_hex, [ByRef] string commitments_json);
+
     // Sign multiple actions at once (one share per alpha)
     // Returns JSON: { "shares": [hex, ...] }
     [Throws=ErrorDisplayed]
@@ -1010,6 +1023,12 @@ namespace signer {
     // Derive raw Orchard address from FROST group key (hex-encoded 43 bytes)
     [Throws=ErrorDisplayed]
     string frost_derive_address_raw([ByRef] string public_key_package_hex, u32 diversifier_index);
+
+    // gh #17: verify a FROST payout PCZT before signing — recompute the sighash
+    // and OVK-decode outputs with the group UFVK. Returns JSON; caller blocks the
+    // signature on sighash/recipient/amount mismatch. See frost_multisig::frost_verify_pczt.
+    [Throws=ErrorDisplayed]
+    string frost_verify_pczt([ByRef] string pczt_hex, [ByRef] string claimed_sighash_hex, [ByRef] string orchard_fvk_uview);
 
     // ========================================================================
     // FROST wallet storage (key packages from DKG)
@@ -1626,6 +1645,13 @@ dictionary ZcashNoteSyncResult {
     u32 anchor_height;
     boolean mainnet;
     boolean anchor_verified;
+};
+
+// Live scan progress for animated zcash-notes QR (zoda transport).
+dictionary ZcashNotesScanProgress {
+    u32 have;
+    i32 needed;
+    boolean complete;
 };
 
 

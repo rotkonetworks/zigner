@@ -28,6 +28,11 @@ orchard = "0.14"
 # Address encoding for PCZT recipient display
 zcash_address = "0.12"
 zcash_protocol = "0.9"
+# gh #17 on-device FROST PCZT verify: recompute sighash (zcash_primitives) +
+# OVK-decode outputs (zcash_note_encryption). Both already in the build graph
+# transitively via pczt/orchard — direct deps add no new compilation.
+zcash_primitives = "0.28"
+zcash_note_encryption = "0.4"
 # Auth identity derivation (HMAC-SHA512 KDF) and backup encryption
 hmac = "0.12"
 hkdf = "0.12"
