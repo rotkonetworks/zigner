@@ -86,7 +86,11 @@ pub struct PlaintextPayload {
     #[serde(rename = "maxSigners")]
     pub max_signers: u16,
     pub mainnet: bool,
-    #[serde(rename = "orchardFvk", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "orchardFvk",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub orchard_fvk: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
@@ -247,7 +251,11 @@ pub struct ShareEntry {
     #[serde(rename = "maxSigners")]
     pub max_signers: u16,
     pub mainnet: bool,
-    #[serde(rename = "orchardFvk", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "orchardFvk",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub orchard_fvk: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
@@ -265,19 +273,20 @@ pub fn seal_batch_envelope(shares: &[ShareEntry], passphrase: &str) -> Result<St
         shares: shares.to_vec(),
     };
     let bytes = serde_json::to_vec(&payload).map_err(|e| format!("serialize batch: {e}"))?;
-    let label = format!("{} multisig wallet{}", shares.len(), if shares.len() == 1 { "" } else { "s" });
-    seal_envelope_bytes(
-        &bytes,
-        passphrase,
-        "frost-share-batch-backup",
-        &label,
-        None,
-    )
+    let label = format!(
+        "{} multisig wallet{}",
+        shares.len(),
+        if shares.len() == 1 { "" } else { "s" }
+    );
+    seal_envelope_bytes(&bytes, passphrase, "frost-share-batch-backup", &label, None)
 }
 
 /// Open a batch envelope, returning the share list. Errors if the envelope
 /// is a single-share backup.
-pub fn open_batch_envelope(envelope_json: &str, passphrase: &str) -> Result<Vec<ShareEntry>, String> {
+pub fn open_batch_envelope(
+    envelope_json: &str,
+    passphrase: &str,
+) -> Result<Vec<ShareEntry>, String> {
     let (kind, bytes) = open_envelope_bytes(envelope_json, passphrase)?;
     if kind != "frost-share-batch-backup" {
         return Err(format!("expected frost-share-batch-backup, got '{kind}'"));

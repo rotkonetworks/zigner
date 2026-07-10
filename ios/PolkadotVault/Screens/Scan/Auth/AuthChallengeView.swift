@@ -97,7 +97,15 @@ struct AuthChallengeView: View {
     }
 
     private var progressView: some View {
-        VStack { Spacer(); ProgressView(); Text("Signing...").font(PrimaryFont.titleS.font).foregroundColor(.textAndIconsPrimary).padding(.top, Spacing.medium); Spacer() }
+        VStack {
+            Spacer()
+            ProgressView()
+            Text("Signing...")
+                .font(PrimaryFont.titleS.font)
+                .foregroundColor(.textAndIconsPrimary)
+                .padding(.top, Spacing.medium)
+            Spacer()
+        }
     }
 
     private func responseView(json: String) -> some View {
@@ -126,7 +134,21 @@ struct AuthChallengeView: View {
     }
 
     private func errorView(message: String) -> some View {
-        VStack { Spacer(); Text("Error").font(PrimaryFont.titleS.font).foregroundColor(.accentRed300); Text(message).font(PrimaryFont.bodyL.font).foregroundColor(.textAndIconsSecondary).multilineTextAlignment(.center).padding(.horizontal, Spacing.large); Spacer(); ActionButton(action: viewModel.onDismiss, text: "Dismiss", style: .secondary()).padding(.horizontal, Spacing.large).padding(.bottom, Spacing.large) }
+        VStack {
+            Spacer()
+            Text("Error")
+                .font(PrimaryFont.titleS.font)
+                .foregroundColor(.accentRed300)
+            Text(message)
+                .font(PrimaryFont.bodyL.font)
+                .foregroundColor(.textAndIconsSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Spacing.large)
+            Spacer()
+            ActionButton(action: viewModel.onDismiss, text: "Dismiss", style: .secondary())
+                .padding(.horizontal, Spacing.large)
+                .padding(.bottom, Spacing.large)
+        }
     }
 }
 

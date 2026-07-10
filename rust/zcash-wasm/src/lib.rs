@@ -140,28 +140,6 @@ fn get_address(sk: &SpendingKeyBytes, mainnet: bool) -> String {
         .encode(&network)
 }
 
-fn get_ufvk(sk: &SpendingKeyBytes, mainnet: bool) -> String {
-    use orchard::keys::FullViewingKey;
-    use zcash_address::unified::{Encoding, Fvk, Ufvk};
-    use zcash_address::Network;
-
-    let orchard_sk = orchard::keys::SpendingKey::from_bytes(sk.0)
-        .into_option()
-        .expect("valid spending key");
-    let fvk = FullViewingKey::from(&orchard_sk);
-
-    let orchard_fvk = Fvk::Orchard(fvk.to_bytes());
-    let network = if mainnet {
-        Network::Main
-    } else {
-        Network::Test
-    };
-
-    Ufvk::try_from_items(vec![orchard_fvk])
-        .expect("valid fvk")
-        .encode(&network)
-}
-
 /// Build UFVK with both orchard and transparent components from mnemonic seed.
 /// The transparent component allows watch-only wallets to derive t-addresses.
 fn get_ufvk_with_transparent(

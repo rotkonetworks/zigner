@@ -243,9 +243,7 @@ pub fn frost_derive_metadata(
     use frost_spend::frost_keys::PublicKeyPackage;
     use frost_spend::keys::{derive_address as fs_derive_address, derive_fvk_from_sk};
     use frost_spend::orchestrate::from_hex;
-    use zcash_address::unified::{
-        Address as UnifiedAddress, Encoding, Fvk, Receiver, Ufvk,
-    };
+    use zcash_address::unified::{Address as UnifiedAddress, Encoding, Fvk, Receiver, Ufvk};
     use zcash_protocol::consensus::NetworkType as Network;
 
     let sk = parse_32(sk_hex, "fvk sk")?;
@@ -255,7 +253,11 @@ pub fn frost_derive_metadata(
     let addr = fs_derive_address(&fvk, diversifier_index);
     let raw = addr.to_raw_address_bytes();
 
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
 
     let ufvk_str = Ufvk::try_from_items(vec![Fvk::Orchard(fvk.to_bytes())])
         .map_err(|e| format!("build UFVK: {e}"))?

@@ -95,7 +95,7 @@ pub fn decrypt(key: &BackupKey, encrypted: &[u8]) -> Result<Vec<u8>, String> {
 
     let version = encrypted[0];
     let aad: &[u8] = match version {
-        BACKUP_VERSION_V1 => &[],          // legacy, no AAD
+        BACKUP_VERSION_V1 => &[], // legacy, no AAD
         BACKUP_VERSION_V2 => BACKUP_AAD_V2,
         _ => return Err(format!("unsupported backup version: {version}")),
     };
@@ -105,7 +105,13 @@ pub fn decrypt(key: &BackupKey, encrypted: &[u8]) -> Result<Vec<u8>, String> {
 
     let cipher = XChaCha20Poly1305::new(key.as_bytes().into());
     cipher
-        .decrypt(nonce, Payload { msg: ciphertext, aad })
+        .decrypt(
+            nonce,
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|_| "decryption failed — wrong seed phrase or corrupted data".to_string())
 }
 

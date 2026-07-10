@@ -50,7 +50,11 @@ pub fn verify_package<'a>(
     last_installed_version: u32,
 ) -> Result<VerifiedModule<'a>, ManifestError> {
     let take = |b: &'a [u8], n: usize| -> Result<(&'a [u8], &'a [u8]), ManifestError> {
-        if b.len() < n { Err(ManifestError::Truncated) } else { Ok(b.split_at(n)) }
+        if b.len() < n {
+            Err(ManifestError::Truncated)
+        } else {
+            Ok(b.split_at(n))
+        }
     };
 
     let (magic, rest) = take(package, 4)?;
@@ -105,10 +109,16 @@ pub fn verify_package<'a>(
         return Err(ManifestError::HashMismatch);
     }
     if module_version <= last_installed_version {
-        return Err(ManifestError::Rollback { offered: module_version, installed: last_installed_version });
+        return Err(ManifestError::Rollback {
+            offered: module_version,
+            installed: last_installed_version,
+        });
     }
     if min_kernel_version > kernel_version {
-        return Err(ManifestError::KernelTooOld { required: min_kernel_version, running: kernel_version });
+        return Err(ManifestError::KernelTooOld {
+            required: min_kernel_version,
+            running: kernel_version,
+        });
     }
 
     Ok(VerifiedModule {

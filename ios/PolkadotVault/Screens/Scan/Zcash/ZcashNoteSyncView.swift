@@ -61,66 +61,8 @@ struct ZcashNoteSyncView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.small) {
-                    // Verified count
-                    VStack(alignment: .leading, spacing: Spacing.small) {
-                        Text("Verified")
-                            .font(PrimaryFont.labelM.font)
-                            .foregroundColor(.textAndIconsTertiary)
-                        Text("\(result.notesVerified) note\(result.notesVerified == 1 ? "" : "s") verified")
-                            .font(PrimaryFont.titleS.font)
-                            .foregroundColor(.textAndIconsPrimary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Spacing.medium)
-                    .containerBackground()
-
-                    // Balance
-                    VStack(alignment: .leading, spacing: Spacing.small) {
-                        Text("Verified Balance")
-                            .font(PrimaryFont.labelM.font)
-                            .foregroundColor(.textAndIconsTertiary)
-                        Text(formatZec(zatoshis: result.totalBalance))
-                            .font(PrimaryFont.titleL.font)
-                            .foregroundColor(.textAndIconsPrimary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Spacing.medium)
-                    .containerBackground()
-
-                    // Network & anchor
-                    VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                        Text(result.mainnet ? "Mainnet" : "Testnet")
-                            .font(PrimaryFont.labelM.font)
-                            .foregroundColor(.textAndIconsTertiary)
-                        Text("Anchor height: \(result.anchorHeight)")
-                            .font(PrimaryFont.captionM.font)
-                            .foregroundColor(.textAndIconsSecondary)
-                        Text("Anchor: \(String(result.anchorHex.prefix(16)))...")
-                            .font(PrimaryFont.captionM.font)
-                            .foregroundColor(.textAndIconsSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Spacing.small)
-                    .containerBackground()
-
-                    // Anchor attestation status
-                    VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-                        Text(result.anchorVerified
-                            ? "Anchor: Attested by threshold group"
-                            : "Anchor: From zcli (single-signer)")
-                            .font(PrimaryFont.labelM.font)
-                            .foregroundColor(result.anchorVerified
-                                ? .textAndIconsPrimary
-                                : .textAndIconsTertiary)
-                        if !result.anchorVerified {
-                            Text("No FROST wallet \u{2014} anchor trust relies on zcli. Set up a threshold wallet for independent verification.")
-                                .font(PrimaryFont.captionM.font)
-                                .foregroundColor(.textAndIconsTertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Spacing.small)
-                    .containerBackground()
+                    summaryCards(result: result)
+                    anchorCards(result: result)
                 }
                 .padding(.horizontal, Spacing.medium)
                 .padding(.top, Spacing.medium)
@@ -137,6 +79,73 @@ struct ZcashNoteSyncView: View {
             .padding(.horizontal, Spacing.large)
             .padding(.vertical, Spacing.medium)
         }
+    }
+
+    @ViewBuilder
+    private func summaryCards(result: ZcashNoteSyncResult) -> some View {
+        // Verified count
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            Text("Verified")
+                .font(PrimaryFont.labelM.font)
+                .foregroundColor(.textAndIconsTertiary)
+            Text("\(result.notesVerified) note\(result.notesVerified == 1 ? "" : "s") verified")
+                .font(PrimaryFont.titleS.font)
+                .foregroundColor(.textAndIconsPrimary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.medium)
+        .containerBackground()
+
+        // Balance
+        VStack(alignment: .leading, spacing: Spacing.small) {
+            Text("Verified Balance")
+                .font(PrimaryFont.labelM.font)
+                .foregroundColor(.textAndIconsTertiary)
+            Text(formatZec(zatoshis: result.totalBalance))
+                .font(PrimaryFont.titleL.font)
+                .foregroundColor(.textAndIconsPrimary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.medium)
+        .containerBackground()
+    }
+
+    @ViewBuilder
+    private func anchorCards(result: ZcashNoteSyncResult) -> some View {
+        // Network & anchor
+        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+            Text(result.mainnet ? "Mainnet" : "Testnet")
+                .font(PrimaryFont.labelM.font)
+                .foregroundColor(.textAndIconsTertiary)
+            Text("Anchor height: \(result.anchorHeight)")
+                .font(PrimaryFont.captionM.font)
+                .foregroundColor(.textAndIconsSecondary)
+            Text("Anchor: \(String(result.anchorHex.prefix(16)))...")
+                .font(PrimaryFont.captionM.font)
+                .foregroundColor(.textAndIconsSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.small)
+        .containerBackground()
+
+        // Anchor attestation status
+        VStack(alignment: .leading, spacing: Spacing.extraSmall) {
+            Text(result.anchorVerified
+                ? "Anchor: Attested by threshold group"
+                : "Anchor: From zcli (single-signer)")
+                .font(PrimaryFont.labelM.font)
+                .foregroundColor(result.anchorVerified
+                    ? .textAndIconsPrimary
+                    : .textAndIconsTertiary)
+            if !result.anchorVerified {
+                Text("No FROST wallet \u{2014} anchor trust relies on zcli. Set up a threshold wallet for independent verification.")
+                    .font(PrimaryFont.captionM.font)
+                    .foregroundColor(.textAndIconsTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.small)
+        .containerBackground()
     }
 
     private func errorView(message: String) -> some View {

@@ -122,15 +122,24 @@ fn parse_account_from_path(path: &str) -> Result<u32> {
 // Verified note storage (synced via animated QR)
 // ============================================================================
 
-/// Stored note value in sled: CBOR-encoded { value, cmx, position, block_height }
-/// Key: nullifier (32 bytes)
+// Stored note value in sled: CBOR-encoded { value, cmx, position, block_height }
+// Key: nullifier (32 bytes)
+
+/// Verified note as synced: (value, nullifier, cmx, position, block_height)
+pub type VerifiedNoteInput = (u64, [u8; 32], [u8; 32], u32, u32);
+
+/// Verified note as stored: (value, nullifier_hex, cmx, position, block_height)
+pub type VerifiedNote = (u64, String, [u8; 32], u32, u32);
+
+/// Anchor metadata: (anchor, height, mainnet, synced_at)
+pub type VerifiedAnchor = ([u8; 32], u32, bool, u64);
 
 /// Store verified notes in the database (clear-and-replace model)
 ///
 /// Also stores anchor and height in special keys prefixed with 0xff.
 pub fn store_verified_notes(
     database: &sled::Db,
-    notes: &[(u64, [u8; 32], [u8; 32], u32, u32)], // (value, nullifier, cmx, position, block_height)
+    notes: &[VerifiedNoteInput],
     anchor: &[u8; 32],
     anchor_height: u32,
     mainnet: bool,
@@ -169,7 +178,7 @@ pub fn store_verified_notes(
 
 /// Retrieve all verified notes from the database
 /// Returns: Vec<(value, nullifier_hex, cmx, position, block_height)>
-pub fn get_verified_notes(database: &sled::Db) -> Result<Vec<(u64, String, [u8; 32], u32, u32)>> {
+pub fn get_verified_notes(database: &sled::Db) -> Result<Vec<VerifiedNote>> {
     let tree = database.open_tree(ZCASH_NOTES_TREE)?;
     let mut notes = Vec::new();
 
@@ -203,7 +212,7 @@ pub fn get_verified_balance(database: &sled::Db) -> Result<u64> {
 }
 
 /// Get the stored anchor, height, mainnet flag, and sync timestamp
-pub fn get_verified_anchor(database: &sled::Db) -> Result<Option<([u8; 32], u32, bool, u64)>> {
+pub fn get_verified_anchor(database: &sled::Db) -> Result<Option<VerifiedAnchor>> {
     let tree = database.open_tree(ZCASH_NOTES_TREE)?;
     match tree.get(b"__anchor__")? {
         Some(data) => {

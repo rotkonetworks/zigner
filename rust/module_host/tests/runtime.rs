@@ -15,7 +15,9 @@ fn load() -> ModuleRuntime {
 #[test]
 fn module_rejects_unknown_tx_type_with_named_error() {
     let mut rt = load();
-    let err = rt.summarize_request(&[0x53, 0x04, 0x77, 1, 2, 3]).unwrap_err();
+    let err = rt
+        .summarize_request(&[0x53, 0x04, 0x77, 1, 2, 3])
+        .unwrap_err();
     match err {
         HostError::Module(msg) => assert!(msg.contains("unknown zcash tx type"), "{msg}"),
         other => panic!("wrong error class: {other:?}"),

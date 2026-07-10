@@ -345,7 +345,7 @@ struct CameraView: View {
                         minSigners: viewModel.frostDkgMinSigners,
                         label: viewModel.frostDkgLabel, mainnet: viewModel.frostDkgMainnet,
                         previousSecret: viewModel.frostDkgSecret,
-                        broadcastsJson: (json["broadcasts"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        broadcastsJson: jsonArrayString(json, key: "broadcasts"),
                         onSecretUpdated: { viewModel.frostDkgSecret = $0 },
                         onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostDkgSecret = "" }
                     ))
@@ -355,8 +355,8 @@ struct CameraView: View {
                         minSigners: viewModel.frostDkgMinSigners,
                         label: viewModel.frostDkgLabel, mainnet: viewModel.frostDkgMainnet,
                         previousSecret: viewModel.frostDkgSecret,
-                        round1Json: (json["round1"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
-                        round2Json: (json["round2"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        round1Json: jsonArrayString(json, key: "round1"),
+                        round2Json: jsonArrayString(json, key: "round2"),
                         onSecretUpdated: { viewModel.frostDkgSecret = $0 },
                         onScanNext: scanNext, onCompletion: { dismissFrost(); viewModel.frostDkgSecret = "" }
                     ))
@@ -370,8 +370,8 @@ struct CameraView: View {
                     FrostSignView(viewModel: .init(
                         round: 2,
                         sighashHex: json["sighash"] as? String ?? "",
-                        alphasJson: (json["alphas"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
-                        commitmentsJson: (json["commitments"] as? [String]).flatMap({ try? String(data: JSONSerialization.data(withJSONObject: $0), encoding: .utf8) }) ?? "[]",
+                        alphasJson: jsonArrayString(json, key: "alphas"),
+                        commitmentsJson: jsonArrayString(json, key: "commitments"),
                         previousNonces: viewModel.frostSignNonces,
                         previousKeyPackage: viewModel.frostSignKeyPackage,
                         onStateUpdated: { n, k in viewModel.frostSignNonces = n; viewModel.frostSignKeyPackage = k },
@@ -827,4 +827,13 @@ private extension CameraView.ViewModel {
         let seedPhrasesDictionary = seedsMediator.getSeeds(seedNames: Set(seedNames))
         return scanService.continueTransactionSigning(seedNames, seedPhrasesDictionary)
     }
+}
+
+/// Re-encodes a `[String]` field from a decoded QR JSON payload back into a
+/// JSON array string for the uniffi FROST entry points.
+private func jsonArrayString(_ json: [String: Any], key: String) -> String {
+    guard let items = json[key] as? [String],
+          let data = try? JSONSerialization.data(withJSONObject: items)
+    else { return "[]" }
+    return String(data: data, encoding: .utf8) ?? "[]"
 }

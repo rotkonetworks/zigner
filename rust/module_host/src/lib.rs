@@ -80,7 +80,14 @@ impl ModuleRuntime {
             .typed(&store)
             .map_err(|e| HostError::Wasm(e.to_string()))?;
 
-        Ok(Self { store, memory, alloc, summarize, sign, last_error })
+        Ok(Self {
+            store,
+            memory,
+            alloc,
+            summarize,
+            sign,
+            last_error,
+        })
     }
 
     fn write_in(&mut self, bytes: &[u8]) -> Result<u32, HostError> {
@@ -140,7 +147,14 @@ impl ModuleRuntime {
             .sign
             .call(
                 &mut self.store,
-                (p, payload.len() as u32, s, seed_phrase.len() as u32, account, u32::from(mainnet)),
+                (
+                    p,
+                    payload.len() as u32,
+                    s,
+                    seed_phrase.len() as u32,
+                    account,
+                    u32::from(mainnet),
+                ),
             )
             .map_err(|e| HostError::Wasm(e.to_string()))?;
         if packed == 0 {
