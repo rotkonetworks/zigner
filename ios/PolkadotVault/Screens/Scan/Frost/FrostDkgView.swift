@@ -198,12 +198,16 @@ extension FrostDkgView {
                             round2PackagesJson: self.round2Json
                         )
                         let json = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+                        // legacy caller: UFVK/address/relay metadata derivation is not
+                        // ported to iOS yet, so the wallet is stored without it
+                        // (same as the Android derive-failure fallback)
                         let walletId = try frostStoreWallet(
                             keyPackageHex: json?["key_package"] as? String ?? "",
                             publicKeyPackageHex: json?["public_key_package"] as? String ?? "",
                             ephemeralSeedHex: json?["ephemeral_seed"] as? String ?? "",
                             label: self.label, minSigners: self.minSigners,
-                            maxSigners: self.maxSigners, mainnet: self.mainnet
+                            maxSigners: self.maxSigners, mainnet: self.mainnet,
+                            orchardFvkUview: "", address: "", relayUrl: ""
                         )
                         DispatchQueue.main.async {
                             self.onSecretUpdated("")
