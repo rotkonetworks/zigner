@@ -4094,3 +4094,65 @@ ffi_support::define_string_destructor!(signer_destroy_string);
 mod tests {
     //use super::*;
 }
+
+// ── protocol module runtime bridge (uniffi) ─────────────────────────────
+
+/// Summary of one PCZT message for the confirm screen. `output_lines` are
+/// preformatted "label=zatoshi" pairs from the module's summarize; the
+/// screen renders them - it never re-derives amounts from anything the
+/// wallet sent outside the PCZT.
+pub struct ModulePcztSummary {
+    pub orchard_actions: u32,
+    pub transparent_inputs: u32,
+    pub output_lines: Vec<String>,
+}
+
+fn module_runtime(module_wasm: &[u8]) -> Result<module_host::ModuleRuntime, ErrorDisplayed> {
+    module_host::ModuleRuntime::load(module_wasm)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("module load: {e:?}") })
+}
+
+pub fn module_summarize_request(
+    module_wasm: &[u8],
+    payload: &[u8],
+) -> Result<Vec<ModulePcztSummary>, ErrorDisplayed> {
+    let mut rt = module_runtime(module_wasm)?;
+    let raw = rt
+        .summarize_request(payload)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("{e:?}") })?;
+    // module ABI: records separated by 0x1e; first line "actions=N t_inputs=M",
+    // following lines "label=value"
+    let mut out = Vec::new();
+    for record in raw.split(|b| *b == 0x1e).filter(|r| !r.is_empty()) {
+        let text = String::from_utf8_lossy(record);
+        let mut lines = text.lines();
+        let head = lines.next().unwrap_or_default();
+        let mut actions = 0u32;
+        let mut t_inputs = 0u32;
+        for part in head.split_whitespace() {
+            if let Some(v) = part.strip_prefix("actions=") {
+                actions = v.parse().unwrap_or(0);
+            } else if let Some(v) = part.strip_prefix("t_inputs=") {
+                t_inputs = v.parse().unwrap_or(0);
+            }
+        }
+        out.push(ModulePcztSummary {
+            orchard_actions: actions,
+            transparent_inputs: t_inputs,
+            output_lines: lines.map(str::to_owned).collect(),
+        });
+    }
+    Ok(out)
+}
+
+pub fn module_sign_request(
+    module_wasm: &[u8],
+    payload: &[u8],
+    seed_phrase: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<Vec<u8>, ErrorDisplayed> {
+    let mut rt = module_runtime(module_wasm)?;
+    rt.sign_request(payload, seed_phrase, account, mainnet)
+        .map_err(|e| ErrorDisplayed::Str { s: format!("{e:?}") })
+}

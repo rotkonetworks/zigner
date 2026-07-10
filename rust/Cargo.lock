@@ -7129,6 +7129,7 @@ dependencies = [
  "hmac 0.12.1",
  "lazy_static",
  "log",
+ "module_host",
  "navigator",
  "orchard 0.14.0",
  "oslog",
