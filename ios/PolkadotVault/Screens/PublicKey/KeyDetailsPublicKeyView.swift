@@ -235,7 +235,7 @@ private extension KeyDetailsPublicKeyView {
                     .padding(.horizontal, Spacing.large)
                     .padding(.vertical, Spacing.small)
                     .background(viewModel.isReceiveMode ? Color.fill12 : Color.accentPink300)
-                    .cornerRadius(CornerRadius.small, corners: [.topLeft, .bottomLeft])
+                    .cornerRadius(radius: CornerRadius.small, corners: [.topLeft, .bottomLeft])
             }
             Button(action: { viewModel.isReceiveMode = true }) {
                 Text("Receive")
@@ -244,7 +244,7 @@ private extension KeyDetailsPublicKeyView {
                     .padding(.horizontal, Spacing.large)
                     .padding(.vertical, Spacing.small)
                     .background(viewModel.isReceiveMode ? Color.accentPink300 : Color.fill12)
-                    .cornerRadius(CornerRadius.small, corners: [.topRight, .bottomRight])
+                    .cornerRadius(radius: CornerRadius.small, corners: [.topRight, .bottomRight])
             }
         }
         Text(viewModel.isReceiveMode

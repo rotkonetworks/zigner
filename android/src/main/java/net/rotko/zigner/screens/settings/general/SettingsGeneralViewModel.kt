@@ -55,10 +55,11 @@ class SettingsGeneralViewModel: ViewModel() {
 	}
 
 	fun getAppVersion(context: Context): String {
+		// versionName is nullable as of the SDK 35 stubs
 		return context.packageManager.getPackageInfo(
 			context.packageName,
 			0
-		).versionName
+		).versionName ?: "unknown"
 	}
 
 	val networkState: StateFlow<NetworkState> =

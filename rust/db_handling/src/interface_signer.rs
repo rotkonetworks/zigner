@@ -294,7 +294,7 @@ pub fn show_all_networks_with_flag(
             n
         })
         .collect();
-    networks.sort_by(|a, b| a.order.cmp(&b.order));
+    networks.sort_by_key(|a| a.order);
 
     Ok(MNetworkMenu { networks })
 }
@@ -315,7 +315,7 @@ pub fn show_all_networks(database: &sled::Db) -> Result<Vec<MMNetwork>> {
             path_id: n.specs.path_id,
         })
         .collect::<Vec<_>>();
-    networks.sort_by(|a, b| a.order.cmp(&b.order));
+    networks.sort_by_key(|a| a.order);
 
     Ok(networks)
 }
@@ -329,7 +329,7 @@ pub fn first_network(database: &sled::Db) -> Result<Option<OrderedNetworkSpecs>>
     if networks.is_empty() {
         return Err(Error::NoNetworksAvailable);
     }
-    networks.sort_by(|a, b| a.order.cmp(&b.order));
+    networks.sort_by_key(|a| a.order);
     Ok(networks.first().cloned())
 }
 

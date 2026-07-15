@@ -20,6 +20,12 @@ interface QrSequenceDecodeError {
     GenericError(string s);
 };
 
+dictionary ModulePcztSummary {
+    u32 orchard_actions;
+    u32 transparent_inputs;
+    sequence<string> output_lines;
+};
+
 dictionary MetaValuesDisplay {
     string name;
     u32 version;
@@ -589,6 +595,17 @@ interface ScreenData {
 
 namespace signer {
     FooterButton? action_get_name([ByRef] Action action);
+
+    // ── protocol module runtime (docs/keystone-compat-pczt-signing.md) ──
+    // Loads the wasm protocol module (APK asset or A/B slot) and drives the
+    // PCZT flows. Module bytes are passed per-call for now; slot management
+    // arrives with the update installer.
+    [Throws=ErrorDisplayed]
+    sequence<ModulePcztSummary> module_summarize_request([ByRef] sequence<u8> module_wasm, [ByRef] sequence<u8> payload);
+
+    [Throws=ErrorDisplayed]
+    sequence<u8> module_sign_request([ByRef] sequence<u8> module_wasm, [ByRef] sequence<u8> payload, [ByRef] string seed_phrase, u32 account, boolean mainnet);
+
 
     [Throws=ErrorDisplayed]
     void init_navigation([ByRef] string dbname, sequence<string> seed_names);

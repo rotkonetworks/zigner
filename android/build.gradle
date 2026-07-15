@@ -22,11 +22,11 @@ android {
 	defaultConfig {
 		applicationId "net.rotko.zigner"
 		minSdk 23
-		targetSdk 34
+		targetSdk 35
 		versionCode computeVersionCode(appVersionName)
 		versionName appVersionName
 		ndk {
-			abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+			abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
 		}
 
 		testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -35,10 +35,77 @@ android {
 		}
 	}
 
+	// Play upload signing. Reads android/keystore.properties (gitignored):
+	//   storeFile=zigner-upload.jks
+	//   storePassword=...
+	//   keyAlias=upload
+	//   keyPassword=...
+	// Falls back to env vars (CI). Unsigned builds still work for debug.
+	def keystoreProps = new Properties()
+	def keystorePropsFile = file('keystore.properties')
+	if (keystorePropsFile.exists()) {
+		keystorePropsFile.withInputStream { keystoreProps.load(it) }
+	}
+	// All-or-nothing signing resolution: partially configured signing is a
+	// configuration error (named, fail-fast), not a cryptic packaging failure.
+	def signingInputs = [
+		storeFile:     keystoreProps['storeFile']     ?: System.getenv('ZIGNER_UPLOAD_KEYSTORE'),
+		storePassword: keystoreProps['storePassword'] ?: System.getenv('ZIGNER_UPLOAD_STORE_PASSWORD'),
+		keyAlias:      keystoreProps['keyAlias']      ?: System.getenv('ZIGNER_UPLOAD_KEY_ALIAS'),
+		keyPassword:   keystoreProps['keyPassword']   ?: System.getenv('ZIGNER_UPLOAD_KEY_PASSWORD'),
+	]
+	def signingConfigured = signingInputs.values().any { it }
+	if (signingConfigured) {
+		def missing = signingInputs.findAll { !it.value }.keySet()
+		if (!missing.isEmpty()) {
+			throw new GradleException(
+				"release signing partially configured - missing: ${missing.join(', ')} " +
+				"(android/keystore.properties or ZIGNER_UPLOAD_* env)")
+		}
+		// file() resolves relative paths against android/, not the repo root
+		def resolvedStore = file(signingInputs.storeFile)
+		if (!resolvedStore.exists()) {
+			throw new GradleException(
+				"release keystore not found: ${resolvedStore} " +
+				"(relative paths resolve against android/ - use an absolute path or android/-relative)")
+		}
+	}
+	signingConfigs {
+		release {
+			if (signingConfigured) {
+				storeFile file(signingInputs.storeFile)
+				storePassword signingInputs.storePassword
+				keyAlias signingInputs.keyAlias
+				keyPassword signingInputs.keyPassword
+			}
+		}
+	}
 	buildTypes {
 		release {
 			minifyEnabled false
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+			// Store artifacts ship phone ABIs only. x86_64 remains in debug
+			// builds for emulators; dropping it here keeps the APK set under
+			// Accrescent's 128 MiB cap (was 130.2 MiB with all four ABIs).
+			ndk {
+				abiFilters 'armeabi-v7a', 'arm64-v8a'
+			}
+			if (signingConfigured) {
+				signingConfig signingConfigs.release
+			}
+		}
+	}
+
+	// CI guard against silently-green unsigned releases: with
+	// ZIGNER_REQUIRE_SIGNED=1, any release build without signing fails fast
+	// instead of emitting an unpublishable artifact.
+	tasks.configureEach { t ->
+		if ((t.name == 'assembleRelease' || t.name == 'bundleRelease' || t.name == 'packageRelease')
+			&& System.getenv('ZIGNER_REQUIRE_SIGNED') == '1' && !signingConfigured) {
+			t.doFirst {
+				throw new GradleException(
+					'ZIGNER_REQUIRE_SIGNED=1 but release signing is not configured - refusing unsigned release')
+			}
 		}
 	}
 	compileOptions {
@@ -62,8 +129,8 @@ android {
 			pickFirsts += ['lib/armeabi-v7a/libc++_shared.so', 'lib/arm64-v8a/libc++_shared.so', 'lib/x86/libc++_shared.so', 'lib/x86_64/libc++_shared.so']
 		}
 	}
-	compileSdk 34
-	ndkVersion '24.0.8215888'
+	compileSdk 36
+	ndkVersion '28.2.13676358'
     namespace 'net.rotko.zigner'
 }
 
@@ -86,7 +153,12 @@ cargo {
 	module = "../rust/signer"
 	targetDirectory = "../rust/target"
 	libname = "signer"
-	targets = ["arm", "arm64", "x86_64"]
+	// Phone ABIs only by default - x86_64 exists solely for emulator work
+	// and its ~30 MiB of split APKs pushed the store APK set past
+	// Accrescent's 128 MiB cap. Opt back in with -PwithEmulatorAbi.
+	targets = project.hasProperty('withEmulatorAbi')
+		? ["arm", "arm64", "x86_64"]
+		: ["arm", "arm64"]
 	apiLevel = 24 //NDK API level, not SDK
 	profile = 'release'
 	extraCargoBuildArguments = ["--locked"]
@@ -123,7 +195,7 @@ dependencies {
 	implementation "androidx.camera:camera-lifecycle:$androidx_camera_version"
 	implementation "androidx.camera:camera-view:$androidx_camera_version"
 	implementation "androidx.camera:camera-camera2:$androidx_camera_version"
-	implementation "com.google.mlkit:barcode-scanning:17.2.0"
+	implementation "com.google.mlkit:barcode-scanning:17.3.0"
 	implementation "com.halilibo.compose-richtext:richtext-commonmark-android:0.20.0"
 	implementation "com.halilibo.compose-richtext:richtext-ui-material-android:0.20.0"
 	implementation "org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.7"

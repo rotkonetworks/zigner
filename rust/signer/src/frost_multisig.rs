@@ -201,8 +201,15 @@ pub fn frost_spend_sign_round2_signed(
     let alpha = parse_32(alpha_hex, "alpha")?;
     let commitments: Vec<String> = serde_json::from_str(commitments_json)
         .map_err(|e| format!("bad commitments JSON: {}", e))?;
-    orchestrate::spend_sign_round2_signed(&seed, key_package_hex, nonces_hex, &sighash, &alpha, &commitments)
-        .map_err(|e| e.to_string())
+    orchestrate::spend_sign_round2_signed(
+        &seed,
+        key_package_hex,
+        nonces_hex,
+        &sighash,
+        &alpha,
+        &commitments,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// sign multiple actions at once (one share per alpha).
@@ -266,9 +273,7 @@ pub fn frost_derive_metadata(
     use frost_spend::frost_keys::PublicKeyPackage;
     use frost_spend::keys::{derive_address as fs_derive_address, derive_fvk_from_sk};
     use frost_spend::orchestrate::from_hex;
-    use zcash_address::unified::{
-        Address as UnifiedAddress, Encoding, Fvk, Receiver, Ufvk,
-    };
+    use zcash_address::unified::{Address as UnifiedAddress, Encoding, Fvk, Receiver, Ufvk};
     use zcash_protocol::consensus::NetworkType as Network;
 
     let sk = parse_32(sk_hex, "fvk sk")?;
@@ -278,7 +283,11 @@ pub fn frost_derive_metadata(
     let addr = fs_derive_address(&fvk, diversifier_index);
     let raw = addr.to_raw_address_bytes();
 
-    let network = if mainnet { Network::Main } else { Network::Test };
+    let network = if mainnet {
+        Network::Main
+    } else {
+        Network::Test
+    };
 
     let ufvk_str = Ufvk::try_from_items(vec![Fvk::Orchard(fvk.to_bytes())])
         .map_err(|e| format!("build UFVK: {e}"))?
@@ -335,8 +344,8 @@ pub fn frost_verify_pczt(
     let sighash_match = recomputed.eq_ignore_ascii_case(claimed_sighash_hex.trim());
 
     // group orchard FVK from the stored UFVK string (uview1…)
-    let (network, ufvk) = Ufvk::decode(orchard_fvk_uview.trim())
-        .map_err(|e| format!("ufvk decode: {e}"))?;
+    let (network, ufvk) =
+        Ufvk::decode(orchard_fvk_uview.trim()).map_err(|e| format!("ufvk decode: {e}"))?;
     let fvk_bytes = ufvk
         .items()
         .into_iter()
@@ -360,12 +369,13 @@ pub fn frost_verify_pczt(
             let cv = action.cv_net();
             let out_ct = action.encrypted_note().out_ciphertext;
 
-            let recovered = try_output_recovery_with_ovk(&domain, &ovk_external, *action, cv, &out_ct)
-                .map(|r| (r, false))
-                .or_else(|| {
-                    try_output_recovery_with_ovk(&domain, &ovk_internal, *action, cv, &out_ct)
-                        .map(|r| (r, true))
-                });
+            let recovered =
+                try_output_recovery_with_ovk(&domain, &ovk_external, *action, cv, &out_ct)
+                    .map(|r| (r, false))
+                    .or_else(|| {
+                        try_output_recovery_with_ovk(&domain, &ovk_internal, *action, cv, &out_ct)
+                            .map(|r| (r, true))
+                    });
             if let Some(((note, addr, _memo), is_change)) = recovered {
                 let amount = note.value().inner();
                 if is_change {

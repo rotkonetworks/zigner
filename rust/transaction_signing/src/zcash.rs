@@ -591,7 +591,11 @@ impl ZcashAuthorizationData {
         // Helpers that use slice::get for overflow-safe bounds checking.
         // A QR payload is attacker-controlled; offset arithmetic against
         // usize must never wrap, and slice indexing must never panic.
-        fn read_arr<const N: usize>(data: &[u8], offset: &mut usize, what: &str) -> Result<[u8; N]> {
+        fn read_arr<const N: usize>(
+            data: &[u8],
+            offset: &mut usize,
+            what: &str,
+        ) -> Result<[u8; N]> {
             let end = offset
                 .checked_add(N)
                 .ok_or_else(|| Error::ZcashParsing(format!("{what}: offset overflow")))?;
@@ -790,7 +794,6 @@ pub use frost_spend::attestation::attestation_digest;
 ///
 /// Returns Ok(true) if valid, Ok(false) if invalid, Err on parse failure.
 #[cfg(feature = "zcash")]
-#[must_use]
 pub fn verify_anchor_attestation(
     attestation_data: &[u8; 96],
     public_key_package_hex: &str,
@@ -1292,7 +1295,7 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
                         "merkle path must have 32 siblings, got {arr_len}"
                     )));
                 }
-                for i in 0..32 {
+                for sibling in &mut merkle_path {
                     let (bytes, consumed) = cbor_decode_bstr(data, offset)?;
                     offset = consumed;
                     if bytes.len() != 32 {
@@ -1300,7 +1303,7 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
                             "merkle sibling must be 32 bytes".to_string(),
                         ));
                     }
-                    merkle_path[i].copy_from_slice(&bytes);
+                    sibling.copy_from_slice(&bytes);
                 }
             }
             _ => {
@@ -1477,7 +1480,11 @@ impl ZcashSignRequest {
 
         // Helpers — every offset add uses checked_add and every slice
         // comes from data.get(..) so a malformed QR cannot panic the signer.
-        fn read_arr<const N: usize>(data: &[u8], offset: &mut usize, what: &str) -> Result<[u8; N]> {
+        fn read_arr<const N: usize>(
+            data: &[u8],
+            offset: &mut usize,
+            what: &str,
+        ) -> Result<[u8; N]> {
             let end = offset
                 .checked_add(N)
                 .ok_or_else(|| Error::ZcashParsing(format!("{what}: offset overflow")))?;

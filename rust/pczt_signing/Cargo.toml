@@ -1,0 +1,41 @@
+[package]
+name = "pczt_signing"
+version = "0.1.0"
+edition = "2021"
+description = "Keystone-compatible PCZT Signer role for zigner: redacted PCZT in, signed PCZT out"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# Standalone on purpose: the zigner workspace is resolver=1 with an older
+# zcash stack (orchard 0.10). This crate pins the SAME librustzcash rev as
+# zcli feat/pczt-builder so PCZT field-level interop with zafu/zashi/vizor
+# is exact. Fold into the workspace when the legacy crates migrate.
+[workspace]
+
+[dependencies]
+pczt = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["orchard", "transparent", "signer"] }
+zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["orchard", "transparent-inputs"] }
+zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["transparent-inputs"] }
+orchard = { version = "0.12", default-features = false }
+zip32 = { version = "0.2", default-features = false }
+zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "zcash_transparent", default-features = false, features = ["transparent-inputs"] }
+bip39 = "2"
+sha2 = { version = "0.10", default-features = false }
+# pczt's signer role uses rand_core::OsRng; the flag arrives via feature
+# unification in bigger graphs - standalone we enable it explicitly
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+[dev-dependencies]
+# The wallet-side half of the contract - producer, redactor, extractor -
+# so the interop test proves the exact bytes zafu will ship.
+zafu-wasm = { git = "https://github.com/rotkonetworks/zcli.git", branch = "feat/pczt-builder", default-features = false }
+secp256k1 = "0.29"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# wasmi module builds: randomness is a host capability. RedPallas signing
+# is randomized, so the module imports entropy instead of pretending the
+# sandbox has any.
+getrandom = { version = "0.2", features = ["custom"] }

@@ -35,8 +35,8 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
-        XCTAssertEqual(result[kSecMatchLimit] as! CFString, kSecMatchLimitOne)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
+        XCTAssertEqual(result[kSecMatchLimit] as! String, kSecMatchLimitOne as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.bananaSplitSuffix
@@ -53,8 +53,8 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
-        XCTAssertEqual(result[kSecMatchLimit] as! CFString, kSecMatchLimitOne)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
+        XCTAssertEqual(result[kSecMatchLimit] as! String, kSecMatchLimitOne as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.bananaSplitSuffix
@@ -71,7 +71,7 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.bananaSplitSuffix
@@ -89,7 +89,7 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.query(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.bananaSplitSuffix
@@ -107,8 +107,8 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.passhpraseQuery(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
-        XCTAssertEqual(result[kSecMatchLimit] as! CFString, kSecMatchLimitOne)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
+        XCTAssertEqual(result[kSecMatchLimit] as! String, kSecMatchLimitOne as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.passphraseSuffix
@@ -125,7 +125,7 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.passhpraseQuery(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.passphraseSuffix
@@ -149,13 +149,13 @@ final class KeychainBananaSplitQueryProviderTests: XCTestCase {
         let result = subject.passhpraseQuery(for: queryType) as! [CFString: Any]
 
         // Then
-        XCTAssertEqual(result[kSecClass] as! CFString, kSecClassGenericPassword)
+        XCTAssertEqual(result[kSecClass] as! String, kSecClassGenericPassword as String)
         XCTAssertEqual(
             result[kSecAttrAccount] as! String,
             seedName + KeychainBananaSplitQueryProvider.Constants.passphraseSuffix
         )
         XCTAssertEqual(result[kSecValueData] as? Data, expectedData)
-        XCTAssertTrue(result[kSecAttrAccessControl] as! SecAccessControl === expectedAccessControl)
+        XCTAssertTrue(result[kSecAttrAccessControl] as AnyObject === expectedAccessControl)
         XCTAssertEqual(result[kSecReturnData] as! Bool, false)
     }
 }

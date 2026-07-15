@@ -49,6 +49,12 @@ jobs:
         with:
           workspaces: rust -> rust/target
 
+      - name: Build protocol module (wasm32)
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cd rust/pczt_signing
+          cargo build --target wasm32-unknown-unknown --release --locked
+
       - name: cargo nextest
         run: |
           cd rust

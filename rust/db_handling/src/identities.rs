@@ -1573,7 +1573,11 @@ pub fn remove_key(
     multisigner: &MultiSigner,
     network_specs_key: &NetworkSpecsKey,
 ) -> Result<()> {
-    remove_keys_set(database, &[multisigner.to_owned()], network_specs_key)
+    remove_keys_set(
+        database,
+        std::slice::from_ref(multisigner),
+        network_specs_key,
+    )
 }
 
 /// Remove a set of addresses within a single network from the Vault database.

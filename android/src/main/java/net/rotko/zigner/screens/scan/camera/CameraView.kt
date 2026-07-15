@@ -82,7 +82,10 @@ internal fun CameraViewInternal(viewModel: CameraViewModel) {
 						Rational(
 							configuration.screenWidthDp,
 							configuration.screenHeightDp
-						), previewView.display.rotation
+						// display is null until the view attaches to a window - the
+						// provider future can win that race (seen more on camerax 1.4
+						// init timing). ROTATION_0 matches the locked-portrait activity.
+						), previewView.display?.rotation ?: android.view.Surface.ROTATION_0
 					)
 						.build()
 
