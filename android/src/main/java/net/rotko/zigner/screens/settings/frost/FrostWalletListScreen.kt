@@ -32,7 +32,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import io.parity.signer.uniffi.FrostWalletSummaryFfi
 import io.parity.signer.uniffi.frostDeleteWallet
-import io.parity.signer.uniffi.frostExportBackupEnvelope
 import io.parity.signer.uniffi.frostImportAllBackupEnvelope
 import io.parity.signer.uniffi.frostImportBackupEnvelope
 import io.parity.signer.uniffi.frostListWallets
@@ -40,6 +39,7 @@ import io.parity.signer.uniffi.frostRenameWallet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.domain.Callback
@@ -157,9 +157,9 @@ fun FrostWalletListScreen(
 				exportTarget = null
 				scope.launch {
 					try {
-						val envelope = withContext(Dispatchers.Default) {
-							frostExportBackupEnvelope(wallet.walletId, passphrase)
-						}
+						// auth gate owns the export; null = auth cancelled/failed
+						val envelope = FrostExportUseCase.exportSingle(wallet.walletId, passphrase)
+							?: return@launch
 						pendingEnvelope = envelope
 						pendingFilename = "frost-backup-${sanitizeLabel(wallet.label)}-${ymdToday()}.json"
 						saveLauncher.launch(pendingFilename)

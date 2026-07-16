@@ -5,6 +5,7 @@ authors = ["debris <marek.kotewicz@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+module_host = { path = "../module_host" }
 anyhow = "1.0"
 ffi-support = "0.4"
 hex = "0.4.3"
@@ -18,13 +19,20 @@ ur = "0.4"
 # SHA-256 for seed fingerprint
 sha2 = "0.10"
 # PCZT (Partially Created Zcash Transaction) for Zashi hardware wallet signing
+# NU6.2 release stack — must match the pczt 0.7 format zafu/zcli now produce.
 # Note: requires transparent feature due to bug in pczt crate where signer role references transparent types
-pczt = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
-zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "zcash_transparent", features = ["transparent-inputs"] }
+pczt = { version = "0.7", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
+zcash_transparent = { version = "0.8", package = "zcash_transparent", features = ["transparent-inputs"] }
 # Orchard crate for SpendAuthorizingKey type - use same version as pczt
-orchard = "0.12"
+orchard = "0.14"
 # Address encoding for PCZT recipient display
-zcash_address = "0.4"
+zcash_address = "0.12"
+zcash_protocol = "0.9"
+# gh #17 on-device FROST PCZT verify: recompute sighash (zcash_primitives) +
+# OVK-decode outputs (zcash_note_encryption). Both already in the build graph
+# transitively via pczt/orchard — direct deps add no new compilation.
+zcash_primitives = "0.28"
+zcash_note_encryption = "0.4"
 # Auth identity derivation (HMAC-SHA512 KDF) and backup encryption
 hmac = "0.12"
 hkdf = "0.12"

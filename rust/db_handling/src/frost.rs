@@ -69,7 +69,7 @@ pub fn store_frost_wallet(database: &sled::Db, data: &FrostWalletData) -> Result
     let id = wallet_id_bytes(&data.public_key_package_hex);
     let json = serde_json::to_vec(data)
         .map_err(|e| Error::Other(anyhow::anyhow!("FROST serialize: {e}")))?;
-    tree.insert(&id, json.as_slice())?;
+    tree.insert(id, json.as_slice())?;
     tree.flush()?;
 
     // Set sticky flag: attestation now required permanently
@@ -135,7 +135,9 @@ pub fn rename_frost_wallet(
     new_label: &str,
 ) -> Result<()> {
     if new_label.trim().is_empty() {
-        return Err(Error::Other(anyhow::anyhow!("FROST rename: label cannot be empty")));
+        return Err(Error::Other(anyhow::anyhow!(
+            "FROST rename: label cannot be empty"
+        )));
     }
     let tree = database.open_tree(FROST_KEYS_TREE)?;
     let id = hex::decode(wallet_id_hex)

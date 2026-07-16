@@ -48,4 +48,7 @@ jobs:
         run: |
           cd rust
           export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
-          cargo nextest run --retries 2 --locked
+          # module_host runtime tests need the pczt_signing wasm artifact;
+          # apple clang can't compile secp256k1-sys for wasm32, so those
+          # tests run on the Linux job only
+          cargo nextest run --retries 2 --locked -E 'not (package(module_host) and binary(runtime))'

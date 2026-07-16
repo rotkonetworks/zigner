@@ -21,11 +21,33 @@ struct FrostSignView: View {
             )
             switch viewModel.state {
             case .loading:
-                VStack { Spacer(); ProgressView(); Text(viewModel.round == 1 ? "Generating commitments..." : "Signing...").font(PrimaryFont.titleS.font).foregroundColor(.textAndIconsPrimary).padding(.top, Spacing.medium); Spacer() }
+                VStack {
+                    Spacer()
+                    ProgressView()
+                    Text(viewModel.round == 1 ? "Generating commitments..." : "Signing...")
+                        .font(PrimaryFont.titleS.font)
+                        .foregroundColor(.textAndIconsPrimary)
+                        .padding(.top, Spacing.medium)
+                    Spacer()
+                }
             case let .displayQr(data):
                 displayView(qrData: data)
             case let .error(message):
-                VStack { Spacer(); Text("Signing Failed").font(PrimaryFont.titleS.font).foregroundColor(.accentRed300); Text(message).font(PrimaryFont.bodyL.font).foregroundColor(.textAndIconsSecondary).multilineTextAlignment(.center).padding(.horizontal, Spacing.large); Spacer(); ActionButton(action: viewModel.onDismiss, text: "Dismiss", style: .secondary()).padding(.horizontal, Spacing.large).padding(.bottom, Spacing.large) }
+                VStack {
+                    Spacer()
+                    Text("Signing Failed")
+                        .font(PrimaryFont.titleS.font)
+                        .foregroundColor(.accentRed300)
+                    Text(message)
+                        .font(PrimaryFont.bodyL.font)
+                        .foregroundColor(.textAndIconsSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, Spacing.large)
+                    Spacer()
+                    ActionButton(action: viewModel.onDismiss, text: "Dismiss", style: .secondary())
+                        .padding(.horizontal, Spacing.large)
+                        .padding(.bottom, Spacing.large)
+                }
             }
         }
         .background(.backgroundPrimary)

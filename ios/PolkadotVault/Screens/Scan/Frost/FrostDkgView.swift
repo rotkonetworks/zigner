@@ -22,13 +22,35 @@ struct FrostDkgView: View {
             )
             switch viewModel.state {
             case .computing:
-                VStack { Spacer(); ProgressView(); Text("Computing round \(viewModel.round)...").font(PrimaryFont.titleS.font).foregroundColor(.textAndIconsPrimary).padding(.top, Spacing.medium); Spacer() }
+                VStack {
+                    Spacer()
+                    ProgressView()
+                    Text("Computing round \(viewModel.round)...")
+                        .font(PrimaryFont.titleS.font)
+                        .foregroundColor(.textAndIconsPrimary)
+                        .padding(.top, Spacing.medium)
+                    Spacer()
+                }
             case let .displayQr(data):
                 displayView(qrData: data)
             case let .complete(walletId):
                 completeView(walletId: walletId)
             case let .error(message):
-                VStack { Spacer(); Text("DKG Failed").font(PrimaryFont.titleS.font).foregroundColor(.accentRed300); Text(message).font(PrimaryFont.bodyL.font).foregroundColor(.textAndIconsSecondary).multilineTextAlignment(.center).padding(.horizontal, Spacing.large); Spacer(); ActionButton(action: viewModel.onDismiss, text: "Dismiss", style: .secondary()).padding(.horizontal, Spacing.large).padding(.bottom, Spacing.large) }
+                VStack {
+                    Spacer()
+                    Text("DKG Failed")
+                        .font(PrimaryFont.titleS.font)
+                        .foregroundColor(.accentRed300)
+                    Text(message)
+                        .font(PrimaryFont.bodyL.font)
+                        .foregroundColor(.textAndIconsSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, Spacing.large)
+                    Spacer()
+                    ActionButton(action: viewModel.onDismiss, text: "Dismiss", style: .secondary())
+                        .padding(.horizontal, Spacing.large)
+                        .padding(.bottom, Spacing.large)
+                }
             }
         }
         .background(.backgroundPrimary)
@@ -170,14 +192,22 @@ extension FrostDkgView {
                             self.state = .displayQr(packagesStr)
                         }
                     case 3:
-                        let result = try frostDkgPart3(secretHex: self.previousSecret, round1BroadcastsJson: self.round1Json, round2PackagesJson: self.round2Json)
+                        let result = try frostDkgPart3(
+                            secretHex: self.previousSecret,
+                            round1BroadcastsJson: self.round1Json,
+                            round2PackagesJson: self.round2Json
+                        )
                         let json = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+                        // legacy caller: UFVK/address/relay metadata derivation is not
+                        // ported to iOS yet, so the wallet is stored without it
+                        // (same as the Android derive-failure fallback)
                         let walletId = try frostStoreWallet(
                             keyPackageHex: json?["key_package"] as? String ?? "",
                             publicKeyPackageHex: json?["public_key_package"] as? String ?? "",
                             ephemeralSeedHex: json?["ephemeral_seed"] as? String ?? "",
                             label: self.label, minSigners: self.minSigners,
-                            maxSigners: self.maxSigners, mainnet: self.mainnet
+                            maxSigners: self.maxSigners, mainnet: self.mainnet,
+                            orchardFvkUview: "", address: "", relayUrl: ""
                         )
                         DispatchQueue.main.async {
                             self.onSecretUpdated("")

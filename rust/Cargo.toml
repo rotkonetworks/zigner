@@ -14,6 +14,7 @@ members = [
 	"qr_reader_pc",
 	"qrcode_rtx",
 	"qrcode_static",
+	"module_host",
 	"signer",
 	"transaction_parsing",
 	"transaction_signing",

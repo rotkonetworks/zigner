@@ -1947,7 +1947,7 @@ fn get_zcash_sign_context() -> Result<ZcashSignContext, ErrorDisplayed> {
 /// Encode a raw 43-byte Orchard address as a unified address string (u1...).
 fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
     use zcash_address::unified::{Address as UnifiedAddress, Encoding, Receiver};
-    use zcash_address::Network;
+    use zcash_protocol::consensus::NetworkType as Network;
 
     let receiver = Receiver::Orchard(*raw);
     let network = if mainnet {
@@ -2046,16 +2046,18 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         }
     };
 
-    // Extract spend details (value may be redacted in PCZT, use nullifier for cross-ref)
+    // Extract spend details. Known nullifiers get their value from our
+    // verified store; unknown ones report 0 here (the pczt crate's Spend
+    // doesn't expose per-spend value). The UI tells dummies from real
+    // unverified notes via the value balance instead — orchard_net_value +
+    // outputs - verified spends.
     let mut spends = Vec::new();
     let mut known_spends = 0u32;
     for action in orchard.actions() {
         let nullifier_hex = hex::encode(action.spend().nullifier());
         let known = verified_nullifiers.contains(&nullifier_hex);
-        // Look up value from our verified notes if the PCZT doesn't expose it
         let value = if known {
             known_spends += 1;
-            // Find matching note value from our verified store
             verified_notes_values
                 .get(&nullifier_hex)
                 .copied()
@@ -2108,8 +2110,7 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
     let transparent = pczt.transparent();
     let transparent_in: u64 = transparent.inputs().iter().map(|i| *i.value()).sum();
     let transparent_out: u64 = transparent.outputs().iter().map(|o| *o.value()).sum();
-    let transparent_balance: i64 =
-        (transparent_in as i64).saturating_sub(transparent_out as i64);
+    let transparent_balance: i64 = (transparent_in as i64).saturating_sub(transparent_out as i64);
     // value_sum is i128 because intermediate arithmetic during PCZT
     // construction can exceed i64. A complete PCZT's value_sum always fits
     // in i64; clamp on overflow for safety.
@@ -2157,7 +2158,7 @@ fn sign_zcash_pczt(
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
 
-    // Run inspection and enforce verification gates before signing.
+    // Run inspection; signing itself is intentionally permissive.
     //
     // The previous anchor-equality and "no verified notes" gates were
     // rotko-invented and don't appear in the canonical Zashi → Keystone PCZT
@@ -2166,18 +2167,17 @@ fn sign_zcash_pczt(
     // (verified at /steam/rotko/keystone3-firmware/rust/apps/zcash/src/pczt/
     // {sign,check}.rs). We mirror that.
     //
-    // The only zigner-specific guard kept: refuse to sign when zero PCZT
-    // spend nullifiers match the locally verified note set, since the
-    // verified-notes store is zigner's distinguishing value over a
-    // canonical Keystone-shape signer. A blind-signing footgun that
-    // Keystone cannot detect.
+    // zigner's distinguishing safety value (the verified-notes store) is
+    // surfaced as a SOFT on-device warning at review time, not a hard refuse
+    // here (rotkonetworks/zigner#16). A hard `known_spends == 0` / implied-
+    // spend-vs-balance refuse is impractical: the cold device can't learn its
+    // own change notes (their tree position isn't assigned until the tx is
+    // mined), so a synced wallet's change-spends would be refused until a
+    // re-sync. Instead the sign screen shows the `WARN_UNRECOGNIZED`
+    // acknowledge page when the tx spends value from a note not in the verified
+    // set (0-value dummies excluded), plus inline per-spend verified / dummy /
+    // unknown labels (see ZcashPcztScreen).
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
-
-    // TODO(sync-flow, rotkonetworks/zigner#16): re-enable the
-    // `known_spends == 0` refusal and the implied-spend-vs-verified-balance
-    // check once the zcli → zigner verified-notes sync flow ships. Currently
-    // disabled so unsynced PCZT round-trip works for testing. See git blame
-    // for the prior shape.
 
     // Sign every action try-and-skip. Dummy Orchard actions are spent
     // under an ephemeral key the user doesn't hold, so sign_orchard will
@@ -2360,72 +2360,71 @@ fn decode_and_verify_zcash_notes(
     // sled-backed registry. Bootstrapped from ROTKO_ZCASH_VERIFIER on
     // first run, but users running their own zidecar can scan in
     // additional verifier keys via the dedicated UR import path.
-    let anchor_verified = if let Some(attestation) = &bundle.anchor_attestation {
-        if attestation.len() != 64 {
-            return Err(ErrorDisplayed::Str {
-                s: format!(
-                    "attestation length {} bytes — expected exactly 64 (ed25519)",
-                    attestation.len()
-                ),
-            });
-        }
-        let signature = &attestation[..64];
-        let verifier_pubkeys =
-            db_handling::anchor_verifiers::enabled_pubkeys(database).map_err(|e| {
-                ErrorDisplayed::Str {
+    let anchor_verified =
+        if let Some(attestation) = &bundle.anchor_attestation {
+            if attestation.len() != 64 {
+                return Err(ErrorDisplayed::Str {
+                    s: format!(
+                        "attestation length {} bytes — expected exactly 64 (ed25519)",
+                        attestation.len()
+                    ),
+                });
+            }
+            let signature = &attestation[..64];
+            let verifier_pubkeys = db_handling::anchor_verifiers::enabled_pubkeys(database)
+                .map_err(|e| ErrorDisplayed::Str {
                     s: format!("anchor verifier registry: {e}"),
-                }
-            })?;
+                })?;
 
-        if verifier_pubkeys.is_empty() {
-            // No enabled verifiers — refuse rather than accept silently. A
-            // device with no trusted verifier MUST NOT accept attested
-            // bundles; re-add at least the built-in verifier or scan in
-            // your own.
-            return Err(ErrorDisplayed::Str {
-                s: "No enabled anchor verifiers. Re-enable the built-in verifier \
+            if verifier_pubkeys.is_empty() {
+                // No enabled verifiers — refuse rather than accept silently. A
+                // device with no trusted verifier MUST NOT accept attested
+                // bundles; re-add at least the built-in verifier or scan in
+                // your own.
+                return Err(ErrorDisplayed::Str {
+                    s: "No enabled anchor verifiers. Re-enable the built-in verifier \
                     or add your own zidecar verifier key in Settings before \
                     importing notes."
-                    .to_string(),
-            });
-        }
-
-        let sig = sp_core::ed25519::Signature::from_raw({
-            let mut s = [0u8; 64];
-            s.copy_from_slice(signature);
-            s
-        });
-
-        // Try each enabled verifier — accept on the first match.
-        // Per-verifier digest because the verifier's pubkey is bound
-        // into the digest's domain separation.
-        let mut matched = false;
-        for verifier_key in &verifier_pubkeys {
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(b"zcash-anchor-v1");
-            hasher.update(verifier_key);
-            hasher.update(&bundle.anchor);
-            hasher.update(&bundle.anchor_height.to_le_bytes());
-            hasher.update(&[u8::from(bundle.mainnet)]);
-            let digest: [u8; 32] = hasher.finalize().into();
-            let pubkey = sp_core::ed25519::Public::from_raw(*verifier_key);
-            if <sp_core::ed25519::Pair as sp_core::Pair>::verify(&sig, &digest, &pubkey) {
-                matched = true;
-                break;
+                        .to_string(),
+                });
             }
-        }
-        if !matched {
-            return Err(ErrorDisplayed::Str {
-                s: "Anchor attestation signature invalid — not signed by any \
-                    trusted verifier. Check Settings → Anchor verifiers."
-                    .to_string(),
+
+            let sig = sp_core::ed25519::Signature::from_raw({
+                let mut s = [0u8; 64];
+                s.copy_from_slice(signature);
+                s
             });
-        }
-        true
-    } else {
-        false // no attestation present, accept as unverified
-    };
+
+            // Try each enabled verifier — accept on the first match.
+            // Per-verifier digest because the verifier's pubkey is bound
+            // into the digest's domain separation.
+            let mut matched = false;
+            for verifier_key in &verifier_pubkeys {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(b"zcash-anchor-v1");
+                hasher.update(verifier_key);
+                hasher.update(bundle.anchor);
+                hasher.update(bundle.anchor_height.to_le_bytes());
+                hasher.update([u8::from(bundle.mainnet)]);
+                let digest: [u8; 32] = hasher.finalize().into();
+                let pubkey = sp_core::ed25519::Public::from_raw(*verifier_key);
+                if <sp_core::ed25519::Pair as sp_core::Pair>::verify(&sig, digest, &pubkey) {
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched {
+                return Err(ErrorDisplayed::Str {
+                    s: "Anchor attestation signature invalid — not signed by any \
+                    trusted verifier. Check Settings → Anchor verifiers."
+                        .to_string(),
+                });
+            }
+            true
+        } else {
+            false // no attestation present, accept as unverified
+        };
 
     // Sticky attestation flag: once a device has participated in any FROST
     // wallet, attestation is required for all subsequent note imports. This
@@ -2553,6 +2552,40 @@ fn clear_zcash_notes() -> Result<(), ErrorDisplayed> {
     })
 }
 
+/// Pure scan-progress probe for the camera. Reports how many zcash-notes
+/// frames have been collected (`have`), how many are needed to reconstruct
+/// (`needed`, -1 until the zoda frame-0 metadata or a single-part UR is
+/// seen), and whether reconstruction is now possible (`complete`). No
+/// attestation, no merkle check, no DB writes — the camera polls this while
+/// scanning to drive the progress counter and to decide when to hand frames
+/// to `decode_and_verify_zcash_notes`, which does the real verify + store.
+fn zcash_notes_scan_progress(parts: Vec<String>) -> ZcashNotesScanProgress {
+    // UR frames carry their own sequence header and are decoded elsewhere; for
+    // the zoda (`zt:`) note-sync transport we can read live counts off the
+    // decoder. Fall back to a decode attempt for the UR case.
+    let first = parts.first().map(|s| s.to_lowercase()).unwrap_or_default();
+    if !first.starts_with("zt:") {
+        let complete = decode_qr_payload(&parts, "zcash-notes").is_ok();
+        return ZcashNotesScanProgress {
+            have: parts.len() as u32,
+            needed: -1,
+            complete,
+        };
+    }
+    match zt_decoder_from_parts(&parts, "zcash-notes") {
+        Ok(decoder) => ZcashNotesScanProgress {
+            have: decoder.received() as u32,
+            needed: decoder.threshold().map(i32::from).unwrap_or(-1),
+            complete: decoder.complete(),
+        },
+        Err(_) => ZcashNotesScanProgress {
+            have: 0,
+            needed: -1,
+            complete: false,
+        },
+    }
+}
+
 /// Generic UR decoder that handles both single-part and multi-part (fountain) URs
 /// Decode QR payload — auto-detects UR (`ur:`) or zoda transport (`zt:`) format.
 fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
@@ -2569,44 +2602,64 @@ fn decode_qr_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, E
     }
 }
 
-/// Decode zoda transport frames (`zt:type/hex`).
-fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
-    use zoda_vss::transport::{Decoder as ZtDecoder, TransportError};
+/// Feed collected `zt:type/hex` frames into a zoda decoder, skipping stray /
+/// foreign-session frames. Shared by the scan-progress probe and the full
+/// decode so both see identical accumulation semantics.
+///
+/// Animated QR frames arrive in cycling order, so the metadata frame (index 0,
+/// carrying k/n) is rarely captured first. zoda's decoder cannot recover the
+/// metadata if a non-zero frame is seen first (it pins the session and then
+/// treats the later frame 0 as an ordinary chunk), so we hand it the index-0
+/// frame first. Per-frame errors are skipped rather than fatal — a single
+/// garbled QR read shouldn't abort a scan that's still collecting frames.
+fn zt_decoder_from_parts(
+    parts: &[String],
+    expected_type: &str,
+) -> Result<zoda_vss::transport::Decoder, ErrorDisplayed> {
+    use zoda_vss::transport::Decoder as ZtDecoder;
 
     let zt_prefix = format!("zt:{}/", expected_type);
 
-    let mut decoder = ZtDecoder::new();
-
+    // hex-decode the matching frames, skipping non-matching / partial reads.
+    let mut frames: Vec<Vec<u8>> = Vec::new();
     for part in parts {
-        let lower = part.to_lowercase();
-        if !lower.starts_with(&zt_prefix) {
-            // skip non-matching frames (could be stray QRs)
+        if !part.to_lowercase().starts_with(&zt_prefix) {
             continue;
         }
-
-        let hex_data = &part[zt_prefix.len()..];
-        let frame_bytes = hex::decode(hex_data).map_err(|e| ErrorDisplayed::Str {
-            s: format!("bad hex in zt frame: {e}"),
-        })?;
-
-        match decoder.receive(&frame_bytes) {
-            Ok(_) => {}
-            Err(TransportError::SessionMismatch) => {
-                // stray QR from different session — skip silently
-                continue;
-            }
-            Err(e) => {
-                return Err(ErrorDisplayed::Str {
-                    s: format!("zt transport error: {e}"),
-                });
-            }
+        if let Ok(bytes) = hex::decode(&part[zt_prefix.len()..]) {
+            frames.push(bytes);
         }
+    }
 
+    // frame layout: session_id(8) || index(1) || chunk.
+    let mut decoder = ZtDecoder::new();
+
+    // Wait for the metadata (index-0) frame before feeding anything. zoda's
+    // decoder pins the session on the first frame it sees and panics
+    // (`self.n.unwrap()`) if a *second* non-zero frame arrives before
+    // metadata. Holding off until frame 0 is present — and feeding it first —
+    // guarantees k/n are established before any chunk frame, so that unwrap is
+    // never reached. Until then we report an empty decoder (have=0, k unknown).
+    if !frames.iter().any(|f| f.get(8) == Some(&0)) {
+        return Ok(decoder);
+    }
+    // stable-sort the index-0 frame to the front; everything else keeps order.
+    frames.sort_by_key(|f| u8::from(f.get(8) != Some(&0)));
+
+    for frame_bytes in &frames {
+        // tolerate per-frame rejects (foreign session, dup).
+        let _ = decoder.receive(frame_bytes);
         if decoder.complete() {
             break;
         }
     }
 
+    Ok(decoder)
+}
+
+/// Decode zoda transport frames (`zt:type/hex`).
+fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    let decoder = zt_decoder_from_parts(parts, expected_type)?;
     decoder.reconstruct().map_err(|e| ErrorDisplayed::Str {
         s: format!("zt reconstruct failed: {e}"),
     })
@@ -3410,6 +3463,25 @@ fn frost_spend_sign_round2(
     .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+fn frost_spend_sign_round2_signed(
+    ephemeral_seed_hex: &str,
+    key_package_hex: &str,
+    nonces_hex: &str,
+    sighash_hex: &str,
+    alpha_hex: &str,
+    commitments_json: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_spend_sign_round2_signed(
+        ephemeral_seed_hex,
+        key_package_hex,
+        nonces_hex,
+        sighash_hex,
+        alpha_hex,
+        commitments_json,
+    )
+    .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
 fn frost_spend_sign_actions(
     key_package_hex: &str,
     nonces_hex: &str,
@@ -3435,8 +3507,19 @@ fn frost_derive_address_raw(
         .map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
+fn frost_verify_pczt(
+    pczt_hex: &str,
+    claimed_sighash_hex: &str,
+    orchard_fvk_uview: &str,
+) -> Result<String, ErrorDisplayed> {
+    frost_multisig::frost_verify_pczt(pczt_hex, claimed_sighash_hex, orchard_fvk_uview)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
 // ── FROST wallet storage ──
 
+// Signature mirrors the UDL entry — the argument list is the wire format.
+#[allow(clippy::too_many_arguments)]
 fn frost_store_wallet(
     key_package_hex: &str,
     public_key_package_hex: &str,
@@ -3454,7 +3537,13 @@ fn frost_store_wallet(
 
     // Empty strings → None, so older callers that pass "" don't poison the
     // optional fields with empty data.
-    let none_if_empty = |s: &str| if s.is_empty() { None } else { Some(s.to_string()) };
+    let none_if_empty = |s: &str| {
+        if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        }
+    };
 
     let data = db_handling::frost::FrostWalletData {
         key_package_hex: key_package_hex.to_string(),
@@ -3690,19 +3779,21 @@ fn verify_envelope_threshold(
 ) -> Result<(u16, u16), ErrorDisplayed> {
     use frost_spend::frost_keys::{KeyPackage, PublicKeyPackage};
     use frost_spend::orchestrate::from_hex;
-    let pubkeys: PublicKeyPackage = from_hex(public_key_package_hex).map_err(|e| {
-        ErrorDisplayed::Str {
+    let pubkeys: PublicKeyPackage =
+        from_hex(public_key_package_hex).map_err(|e| ErrorDisplayed::Str {
             s: format!("parse public_key_package: {e}"),
-        }
-    })?;
+        })?;
     let key_pkg: KeyPackage = from_hex(key_package_hex).map_err(|e| ErrorDisplayed::Str {
         s: format!("parse key_package: {e}"),
     })?;
-    let pkp_max: u16 = pubkeys.verifying_shares().len().try_into().map_err(|_| {
-        ErrorDisplayed::Str {
-            s: "PublicKeyPackage participant count exceeds u16".into(),
-        }
-    })?;
+    let pkp_max: u16 =
+        pubkeys
+            .verifying_shares()
+            .len()
+            .try_into()
+            .map_err(|_| ErrorDisplayed::Str {
+                s: "PublicKeyPackage participant count exceeds u16".into(),
+            })?;
     let kp_min: u16 = *key_pkg.min_signers();
     if kp_min != claimed_threshold {
         return Err(ErrorDisplayed::Str {
@@ -3762,8 +3853,7 @@ fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDis
         });
     }
 
-    frost_backup::seal_batch_envelope(&shares, passphrase)
-        .map_err(|e| ErrorDisplayed::Str { s: e })
+    frost_backup::seal_batch_envelope(&shares, passphrase).map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
 /// Decrypt a batch envelope and import every share inside. Returns JSON
@@ -3791,7 +3881,9 @@ fn frost_import_all_backup_envelope(
         )?;
         let id = db_handling::frost::wallet_id_hex(&share.public_key_package);
         let already = db_handling::frost::get_frost_wallet(database, &id)
-            .map_err(|e| ErrorDisplayed::Str { s: format!("lookup: {e}") })?
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("lookup: {e}"),
+            })?
             .is_some();
         if already {
             skipped += 1;
@@ -3811,7 +3903,9 @@ fn frost_import_all_backup_envelope(
             relay_url: share.relay_url,
         };
         db_handling::frost::store_frost_wallet(database, &data).map_err(|e| {
-            ErrorDisplayed::Str { s: format!("store imported wallet: {e}") }
+            ErrorDisplayed::Str {
+                s: format!("store imported wallet: {e}"),
+            }
         })?;
         imported += 1;
     }
@@ -3820,7 +3914,9 @@ fn frost_import_all_backup_envelope(
         "imported": imported,
         "skipped": skipped,
     }))
-    .map_err(|e| ErrorDisplayed::Str { s: format!("serialize result: {e}") })
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("serialize result: {e}"),
+    })
 }
 
 // ── anchor verifier registry FFI ──
@@ -3870,9 +3966,9 @@ fn decode_verifier_key_qr(ur_parts: Vec<String>) -> Result<AnchorVerifierImport,
     let mut label: Option<String> = None;
     let mut o = 1;
     for _ in 0..2 {
-        let key = *cbor
-            .get(o)
-            .ok_or_else(|| ErrorDisplayed::Str { s: "truncated key".into() })?;
+        let key = *cbor.get(o).ok_or_else(|| ErrorDisplayed::Str {
+            s: "truncated key".into(),
+        })?;
         o += 1;
         match key {
             0x01 => {
@@ -3899,10 +3995,14 @@ fn decode_verifier_key_qr(ur_parts: Vec<String>) -> Result<AnchorVerifierImport,
                 };
                 let end = body_start
                     .checked_add(32)
-                    .ok_or_else(|| ErrorDisplayed::Str { s: "pubkey overflow".into() })?;
-                let bytes = cbor.get(body_start..end).ok_or_else(|| ErrorDisplayed::Str {
-                    s: "pubkey truncated".into(),
-                })?;
+                    .ok_or_else(|| ErrorDisplayed::Str {
+                        s: "pubkey overflow".into(),
+                    })?;
+                let bytes = cbor
+                    .get(body_start..end)
+                    .ok_or_else(|| ErrorDisplayed::Str {
+                        s: "pubkey truncated".into(),
+                    })?;
                 let mut pk = [0u8; 32];
                 pk.copy_from_slice(bytes);
                 pubkey = Some(pk);
@@ -3932,13 +4032,20 @@ fn decode_verifier_key_qr(ur_parts: Vec<String>) -> Result<AnchorVerifierImport,
                 }
                 let end = body_start
                     .checked_add(body_len)
-                    .ok_or_else(|| ErrorDisplayed::Str { s: "label overflow".into() })?;
-                let bytes = cbor.get(body_start..end).ok_or_else(|| ErrorDisplayed::Str {
-                    s: "label truncated".into(),
-                })?;
-                label = Some(String::from_utf8(bytes.to_vec()).map_err(|e| ErrorDisplayed::Str {
-                    s: format!("label utf-8: {e}"),
-                })?);
+                    .ok_or_else(|| ErrorDisplayed::Str {
+                        s: "label overflow".into(),
+                    })?;
+                let bytes = cbor
+                    .get(body_start..end)
+                    .ok_or_else(|| ErrorDisplayed::Str {
+                        s: "label truncated".into(),
+                    })?;
+                label =
+                    Some(
+                        String::from_utf8(bytes.to_vec()).map_err(|e| ErrorDisplayed::Str {
+                            s: format!("label utf-8: {e}"),
+                        })?,
+                    );
                 o = end;
             }
             other => {
@@ -4039,16 +4146,16 @@ fn remove_anchor_verifier(pubkey_hex: &str, force: bool) -> Result<(), ErrorDisp
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
     let remaining: Vec<[u8; 32]> = db_handling::anchor_verifiers::enabled_pubkeys(database)
-        .map_err(|e| ErrorDisplayed::Str { s: format!("enabled list: {e}") })?
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("enabled list: {e}"),
+        })?
         .into_iter()
         .filter(|k| k != &pk)
         .collect();
     check_lockout(database, remaining, force)?;
 
-    db_handling::anchor_verifiers::remove_verifier(database, &pk).map_err(|e| {
-        ErrorDisplayed::Str {
-            s: format!("remove verifier: {e}"),
-        }
+    db_handling::anchor_verifiers::remove_verifier(database, &pk).map_err(|e| ErrorDisplayed::Str {
+        s: format!("remove verifier: {e}"),
     })
 }
 
@@ -4074,7 +4181,9 @@ fn set_anchor_verifier_enabled(
     if !enabled {
         // Disabling: simulate post-state (drop pk from enabled list).
         let remaining: Vec<[u8; 32]> = db_handling::anchor_verifiers::enabled_pubkeys(database)
-            .map_err(|e| ErrorDisplayed::Str { s: format!("enabled list: {e}") })?
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("enabled list: {e}"),
+            })?
             .into_iter()
             .filter(|k| k != &pk)
             .collect();
@@ -4089,6 +4198,73 @@ fn set_anchor_verifier_enabled(
 }
 
 ffi_support::define_string_destructor!(signer_destroy_string);
+
+// ── protocol module runtime bridge (uniffi) ─────────────────────────────
+
+/// Summary of one PCZT message for the confirm screen. `output_lines` are
+/// preformatted "label=zatoshi" pairs from the module's summarize; the
+/// screen renders them - it never re-derives amounts from anything the
+/// wallet sent outside the PCZT.
+pub struct ModulePcztSummary {
+    pub orchard_actions: u32,
+    pub transparent_inputs: u32,
+    pub output_lines: Vec<String>,
+}
+
+fn module_runtime(module_wasm: &[u8]) -> Result<module_host::ModuleRuntime, ErrorDisplayed> {
+    module_host::ModuleRuntime::load(module_wasm).map_err(|e| ErrorDisplayed::Str {
+        s: format!("module load: {e:?}"),
+    })
+}
+
+pub fn module_summarize_request(
+    module_wasm: &[u8],
+    payload: &[u8],
+) -> Result<Vec<ModulePcztSummary>, ErrorDisplayed> {
+    let mut rt = module_runtime(module_wasm)?;
+    let raw = rt
+        .summarize_request(payload)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("{e:?}"),
+        })?;
+    // module ABI: records separated by 0x1e; first line "actions=N t_inputs=M",
+    // following lines "label=value"
+    let mut out = Vec::new();
+    for record in raw.split(|b| *b == 0x1e).filter(|r| !r.is_empty()) {
+        let text = String::from_utf8_lossy(record);
+        let mut lines = text.lines();
+        let head = lines.next().unwrap_or_default();
+        let mut actions = 0u32;
+        let mut t_inputs = 0u32;
+        for part in head.split_whitespace() {
+            if let Some(v) = part.strip_prefix("actions=") {
+                actions = v.parse().unwrap_or(0);
+            } else if let Some(v) = part.strip_prefix("t_inputs=") {
+                t_inputs = v.parse().unwrap_or(0);
+            }
+        }
+        out.push(ModulePcztSummary {
+            orchard_actions: actions,
+            transparent_inputs: t_inputs,
+            output_lines: lines.map(str::to_owned).collect(),
+        });
+    }
+    Ok(out)
+}
+
+pub fn module_sign_request(
+    module_wasm: &[u8],
+    payload: &[u8],
+    seed_phrase: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<Vec<u8>, ErrorDisplayed> {
+    let mut rt = module_runtime(module_wasm)?;
+    rt.sign_request(payload, seed_phrase, account, mainnet)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("{e:?}"),
+        })
+}
 
 #[cfg(test)]
 mod tests {

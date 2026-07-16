@@ -89,8 +89,8 @@ pub fn update_verifier(
     let bytes = tree
         .get(pubkey)?
         .ok_or_else(|| Error::Other(anyhow::anyhow!("verifier not found")))?;
-    let mut record: VerifierRecord = serde_json::from_slice(&bytes)
-        .map_err(|e| Error::Other(anyhow::anyhow!("decode: {e}")))?;
+    let mut record: VerifierRecord =
+        serde_json::from_slice(&bytes).map_err(|e| Error::Other(anyhow::anyhow!("decode: {e}")))?;
     if let Some(label) = new_label {
         record.label = label.to_string();
     }

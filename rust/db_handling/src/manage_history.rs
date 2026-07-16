@@ -54,7 +54,7 @@ pub fn get_history(database: &sled::Db) -> Result<Vec<(Order, Entry)>> {
         let history_entry = <Entry>::decode(&mut &history_entry_encoded[..])?;
         out.push((order, history_entry));
     }
-    out.sort_by(|a, b| b.0.stamp().cmp(&a.0.stamp()));
+    out.sort_by_key(|a| std::cmp::Reverse(a.0.stamp()));
     Ok(out)
 }
 

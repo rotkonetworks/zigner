@@ -58,45 +58,12 @@ struct ZcashPcztView: View {
 
                     // Spends
                     if !inspection.spends.isEmpty {
-                        sectionCard(title: "Spending") {
-                            ForEach(Array(inspection.spends.enumerated()), id: \.offset) { _, spend in
-                                HStack {
-                                    if spend.value > 0 {
-                                        let zec = Double(spend.value) / 100_000_000.0
-                                        Text(String(format: "%.8f ZEC", zec))
-                                            .font(PrimaryFont.bodyL.font)
-                                            .foregroundColor(.textAndIconsPrimary)
-                                    } else {
-                                        Text("redacted")
-                                            .font(PrimaryFont.bodyL.font)
-                                            .foregroundColor(.textAndIconsTertiary)
-                                    }
-                                    Spacer()
-                                    Text(spend.known ? "verified" : "UNKNOWN")
-                                        .font(PrimaryFont.labelM.font)
-                                        .foregroundColor(spend.known ? .textAndIconsPrimary : .accentRed300)
-                                }
-                            }
-                        }
+                        spendsSection(spends: inspection.spends)
                     }
 
                     // Outputs
                     if !inspection.outputs.isEmpty {
-                        sectionCard(title: "Outputs") {
-                            ForEach(Array(inspection.outputs.enumerated()), id: \.offset) { _, output in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    let zec = Double(output.value) / 100_000_000.0
-                                    Text(String(format: "%.8f ZEC", zec))
-                                        .font(PrimaryFont.bodyL.font)
-                                        .foregroundColor(.textAndIconsPrimary)
-                                    if !output.recipient.isEmpty {
-                                        Text(String(output.recipient.prefix(20)) + "..." + String(output.recipient.suffix(8)))
-                                            .font(PrimaryFont.captionM.font)
-                                            .foregroundColor(.textAndIconsTertiary)
-                                    }
-                                }
-                            }
-                        }
+                        outputsSection(outputs: inspection.outputs)
                     }
 
                     // Fee
@@ -134,6 +101,47 @@ struct ZcashPcztView: View {
             }
             .padding(.horizontal, Spacing.large)
             .padding(.vertical, Spacing.medium)
+        }
+    }
+
+    private func spendsSection(spends: [ZcashPcztSpend]) -> some View {
+        sectionCard(title: "Spending") {
+            ForEach(Array(spends.enumerated()), id: \.offset) { _, spend in
+                HStack {
+                    if spend.value > 0 {
+                        let zec = Double(spend.value) / 100_000_000.0
+                        Text(String(format: "%.8f ZEC", zec))
+                            .font(PrimaryFont.bodyL.font)
+                            .foregroundColor(.textAndIconsPrimary)
+                    } else {
+                        Text("redacted")
+                            .font(PrimaryFont.bodyL.font)
+                            .foregroundColor(.textAndIconsTertiary)
+                    }
+                    Spacer()
+                    Text(spend.known ? "verified" : "UNKNOWN")
+                        .font(PrimaryFont.labelM.font)
+                        .foregroundColor(spend.known ? .textAndIconsPrimary : .accentRed300)
+                }
+            }
+        }
+    }
+
+    private func outputsSection(outputs: [ZcashPcztOutput]) -> some View {
+        sectionCard(title: "Outputs") {
+            ForEach(Array(outputs.enumerated()), id: \.offset) { _, output in
+                VStack(alignment: .leading, spacing: 2) {
+                    let zec = Double(output.value) / 100_000_000.0
+                    Text(String(format: "%.8f ZEC", zec))
+                        .font(PrimaryFont.bodyL.font)
+                        .foregroundColor(.textAndIconsPrimary)
+                    if !output.recipient.isEmpty {
+                        Text(String(output.recipient.prefix(20)) + "..." + String(output.recipient.suffix(8)))
+                            .font(PrimaryFont.captionM.font)
+                            .foregroundColor(.textAndIconsTertiary)
+                    }
+                }
+            }
         }
     }
 

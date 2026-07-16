@@ -6,6 +6,7 @@
 
 - [User Guides](./tutorials/SUMMARY.md)
     - [Getting Started](./tutorials/Start.md)
+    - [Sync Verified Notes](./tutorials/Sync-Verified-Notes.md)
 
 - [Development]()
     - [Build](./development/Build.md)
