@@ -49,6 +49,11 @@ impl core::fmt::Display for Error {
 pub struct PcztSummary {
     /// Number of orchard actions we will spend-auth sign.
     pub orchard_actions: usize,
+    /// Number of ironwood actions (NU6.3 / V6 pool, orchard-shaped) present.
+    /// Only exists when built against a NU6.3-capable stack; the default
+    /// 5333c01b-pinned build never sets the cfg and compiles this out.
+    #[cfg(zcash_unstable = "nu6.3")]
+    pub ironwood_actions: usize,
     /// Number of transparent inputs we will sign.
     pub transparent_inputs: usize,
     /// Recipient outputs visible in the redacted PCZT: (address-or-"shielded", zatoshi).
@@ -86,8 +91,27 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
         }
     }
 
+    // Ironwood (NU6.3 / V6): the fork models the new pool as a second
+    // orchard-shaped bundle, so display extraction is identical.
+    #[cfg(zcash_unstable = "nu6.3")]
+    let ironwood_actions = pczt.ironwood().actions().len();
+    #[cfg(zcash_unstable = "nu6.3")]
+    for action in pczt.ironwood().actions() {
+        let out = action.output();
+        let label = match out.recipient() {
+            Some(r) => format!("ironwood:{}", hex(r)),
+            None => "ironwood:shielded".to_string(),
+        };
+        match out.value() {
+            Some(v) => outputs.push((label, *v)),
+            None => outputs.push((label, 0)),
+        }
+    }
+
     Ok(PcztSummary {
         orchard_actions,
+        #[cfg(zcash_unstable = "nu6.3")]
+        ironwood_actions,
         transparent_inputs,
         outputs,
         fee_zat: None,
@@ -122,6 +146,8 @@ pub fn sign_redacted_pczt(
     .map_err(|e| Error::KeyDerivation(format!("{e:?}")))?;
 
     let n_actions = pczt.orchard().actions().len();
+    #[cfg(zcash_unstable = "nu6.3")]
+    let n_ironwood = pczt.ironwood().actions().len();
     let n_transparent = pczt.transparent().inputs().len();
     let mut signer = Signer::new(pczt).map_err(|e| Error::Sign(format!("{e:?}")))?;
 
@@ -142,6 +168,21 @@ pub fn sign_redacted_pczt(
             let foreign = msg.contains("Wrong") || msg.contains("Missing");
             if !foreign {
                 return Err(Error::Sign(format!("action {index}: {msg}")));
+            }
+        }
+    }
+
+    // Ironwood actions (NU6.3 / V6): same RedPallas spend-auth key material,
+    // second bundle. Dummy spends were already signed by the wallet's IO
+    // finalizer and error here with a Wrong-key mismatch, which is tolerated
+    // exactly like foreign orchard actions above - "sign what is yours".
+    #[cfg(zcash_unstable = "nu6.3")]
+    for index in 0..n_ironwood {
+        if let Err(e) = signer.sign_ironwood(index, &osak) {
+            let msg = format!("{e:?}");
+            let foreign = msg.contains("Wrong") || msg.contains("Missing");
+            if !foreign {
+                return Err(Error::Sign(format!("ironwood action {index}: {msg}")));
             }
         }
     }

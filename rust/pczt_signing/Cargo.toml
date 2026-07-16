@@ -8,6 +8,13 @@ license = "MIT"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# src/lib.rs carries cfg(zcash_unstable = "nu6.3") blocks that are only
+# compiled by the parallel Valar-fork manifest in ../pczt_signing_valar.
+# Declaring the cfg here keeps the default build warning-clean; it does
+# not change the dependency graph or any compiled code.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(zcash_unstable, values("nu6.3"))'] }
+
 # Standalone on purpose: the zigner workspace is resolver=1 with an older
 # zcash stack (orchard 0.10). This crate pins the SAME librustzcash rev as
 # zcli feat/pczt-builder so PCZT field-level interop with zafu/zashi/vizor
