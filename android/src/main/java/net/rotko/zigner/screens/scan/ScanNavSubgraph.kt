@@ -32,6 +32,7 @@ import net.rotko.zigner.screens.scan.transaction.AuthChallengeScreen
 import net.rotko.zigner.screens.scan.transaction.ZidSignScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostSignScreen
+import net.rotko.zigner.screens.scan.transaction.ModulePcztScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedTransactionScreen
@@ -98,9 +99,18 @@ fun ScanNavSubgraph(
 	val urBackupData = urBackupFrames.value
 
 	val zcashPcztParts = scanViewModel.zcashPcztUrParts.collectAsStateWithLifecycle()
+	val modulePcztPayload = scanViewModel.modulePcztPayload.collectAsStateWithLifecycle()
 	val frostData = scanViewModel.frostPayload.collectAsStateWithLifecycle()
 
-	if (zcashPcztParts.value != null) {
+	if (modulePcztPayload.value != null) {
+		ModulePcztScreen(
+			payloadHex = modulePcztPayload.value!!,
+			getSeedPhrase = { scanViewModel.getFirstSeedPhrase() },
+			getSeedName = { scanViewModel.getFirstSeedName() },
+			modifier = Modifier.statusBarsPadding(),
+			onDone = { scanViewModel.modulePcztPayload.value = null },
+		)
+	} else if (zcashPcztParts.value != null) {
 		ZcashPcztScreen(
 			urParts = zcashPcztParts.value!!,
 			getSeedPhrase = { scanViewModel.getFirstSeedPhrase() },
@@ -372,6 +382,9 @@ fun ScanNavSubgraph(
 			},
 			onZcashPczt = { urParts ->
 				scanViewModel.zcashPcztUrParts.value = urParts
+			},
+			onZcashModulePczt = { payloadHex ->
+				scanViewModel.modulePcztPayload.value = payloadHex
 			},
 			onFrost = { json ->
 				scanViewModel.frostPayload.value = json

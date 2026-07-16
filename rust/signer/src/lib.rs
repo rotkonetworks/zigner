@@ -4266,6 +4266,40 @@ pub fn module_sign_request(
         })
 }
 
+/// Frame a module sign-response envelope (prelude || digests || signed
+/// PCZTs) as UR strings for animated QR display. Same CBOR `{1: bytes}`
+/// wrap and fountain encoder as the signed-PCZT path, but under a distinct
+/// UR type so wallets never mistake the envelope for a bare PCZT.
+pub fn module_response_to_ur(
+    response: &[u8],
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
+    const UR_TYPE: &str = "zigner-module";
+    let cbor_data = encode_pczt_to_cbor(response);
+
+    if max_fragment_len == 0 || cbor_data.len() <= max_fragment_len as usize {
+        return Ok(vec![ur::ur::encode(
+            &cbor_data,
+            &ur::Type::Custom(UR_TYPE),
+        )]);
+    }
+
+    let mut encoder = ur::ur::Encoder::new(&cbor_data, max_fragment_len as usize, UR_TYPE)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to create UR encoder: {e:?}"),
+        })?;
+
+    // 1.3x redundancy, matching encode_signed_pczt_ur (see comment there).
+    let total_parts = (encoder.fragment_count() * 13).div_ceil(10);
+    let mut parts = Vec::with_capacity(total_parts);
+    for _ in 0..total_parts {
+        parts.push(encoder.next_part().map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to encode UR part: {e:?}"),
+        })?);
+    }
+    Ok(parts)
+}
+
 #[cfg(test)]
 mod tests {
     //use super::*;

@@ -41,6 +41,7 @@ fun ScanScreen(
 	onPenumbraSignRequest: (String) -> Unit = {},
 	onCosmosSignRequest: (String) -> Unit = {},
 	onZcashSimpleSign: (String) -> Unit = {},
+	onZcashModulePczt: (String) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 	onZcashNotes: (List<String>) -> Unit = {},
 	onZcashPczt: (List<String>) -> Unit = {},
@@ -62,6 +63,7 @@ fun ScanScreen(
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnZcashSimpleSign by rememberUpdatedState(onZcashSimpleSign)
+	val currentOnZcashModulePczt by rememberUpdatedState(onZcashModulePczt)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
 	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
@@ -140,6 +142,17 @@ fun ScanScreen(
 				.collect { qrData ->
 					currentOnZcashSimpleSign(qrData)
 					viewModel.resetZcashSimpleSign()
+				}
+		}
+
+		// Zcash PCZT protocol-module request handler (530403/530404)
+		launch {
+			viewModel.zcashModulePcztPayload
+				.filterNotNull()
+				.filter { it.isNotEmpty() }
+				.collect { qrData ->
+					currentOnZcashModulePczt(qrData)
+					viewModel.resetZcashModulePczt()
 				}
 		}
 

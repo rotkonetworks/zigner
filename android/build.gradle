@@ -142,6 +142,13 @@ android.applicationVariants.all { variant ->
 		commandLine 'uniffi-bindgen', 'generate', "${workingDir}/../rust/signer/src/signer.udl", '--language', 'kotlin', '--out-dir', uniffiPath
 	}
 	variant.javaCompileProvider.get().dependsOn(t)
+	// Kotlin compilation runs before javaCompile and reads the generated
+	// bindings as a source dir - without this dependency a bare
+	// :android:compileDebugKotlin (or a clean tree / stale bindings after a
+	// udl change) compiles against missing or outdated bindings.
+	tasks.matching { it.name == "compile${variant.name.capitalize()}Kotlin" }.configureEach {
+		it.dependsOn(t)
+	}
 	def sourceSet = variant.sourceSets.find { it.name == variant.name }
 	sourceSet.java.srcDir new File(uniffiPath)
 	// XXX: I've been trying to make this work but I can't, so the compiled bindings will show as "regular sources" in Android Studio.

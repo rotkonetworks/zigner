@@ -51,6 +51,12 @@ class CameraViewModel() : ViewModel() {
 	val zcashSimpleSignPayload: StateFlow<String?> =
 		_zcashSimpleSignPayload.asStateFlow()
 
+	// Zcash PCZT protocol-module request payload (530403 single / 530404 batch),
+	// routed to the wasm protocol module instead of the built-in parsers.
+	private val _zcashModulePcztPayload = MutableStateFlow<String?>(null)
+	val zcashModulePcztPayload: StateFlow<String?> =
+		_zcashModulePcztPayload.asStateFlow()
+
 	// UR backup frames (multipart UR QR codes starting with "ur:")
 	private val _urBackupFrames = MutableStateFlow<List<String>>(emptyList())
 	val urBackupFrames: StateFlow<List<String>> = _urBackupFrames.asStateFlow()
@@ -298,6 +304,12 @@ class CameraViewModel() : ViewModel() {
 				return
 			}
 
+			if (isZcashModulePcztRequest(firstPayload)) {
+				resetScanValues()
+				_zcashModulePcztPayload.value = firstPayload
+				return
+			}
+
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
@@ -319,7 +331,13 @@ class CameraViewModel() : ViewModel() {
 
 				is DecodeSequenceResult.Other -> {
 					resetScanValues()
-					addPendingTransaction(payload.s)
+					// Multi-frame PCZT module requests arrive here after the
+					// Rust sequence decoder reassembles them into one hex payload.
+					if (isZcashModulePcztRequest(payload.s)) {
+						_zcashModulePcztPayload.value = payload.s
+					} else {
+						addPendingTransaction(payload.s)
+					}
 				}
 
 				is DecodeSequenceResult.DynamicDerivations -> {
@@ -359,8 +377,22 @@ class CameraViewModel() : ViewModel() {
 		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
 	}
 
+	/**
+	 * Check if hex payload is a Zcash PCZT protocol-module request:
+	 * prelude [0x53][crypto=0x04][tx_type], 0x03 single / 0x04 batch.
+	 */
+	private fun isZcashModulePcztRequest(hexPayload: String): Boolean {
+		if (hexPayload.length < 6) return false
+		val prefix = hexPayload.substring(0, 6).lowercase()
+		return prefix == "530403" || prefix == "530404"
+	}
+
 	fun resetZcashSimpleSign() {
 		_zcashSimpleSignPayload.value = null
+	}
+
+	fun resetZcashModulePczt() {
+		_zcashModulePcztPayload.value = null
 	}
 
 	/**
@@ -514,6 +546,7 @@ class CameraViewModel() : ViewModel() {
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null
 		_zcashSimpleSignPayload.value = null
+		_zcashModulePcztPayload.value = null
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
 		_zcashNotesFrames.value = emptyList()
