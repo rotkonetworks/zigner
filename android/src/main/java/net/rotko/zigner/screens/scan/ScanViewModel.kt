@@ -126,6 +126,9 @@ class ScanViewModel : ViewModel() {
 	// PCZT signing state
 	var zcashPcztUrParts: MutableStateFlow<List<String>?> = MutableStateFlow(null)
 
+	// Protocol-module PCZT request state (prelude 530403/530404, hex payload)
+	var modulePcztPayload: MutableStateFlow<String?> = MutableStateFlow(null)
+
 	// Unified signing state (replaces per-network state above)
 	var signRequest: MutableStateFlow<SignRequest?> = MutableStateFlow(null)
 	var signatureResult: MutableStateFlow<SignatureResult?> = MutableStateFlow(null)
@@ -448,7 +451,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null) {
 			clearState()
 			true
 		} else {
@@ -473,6 +476,7 @@ class ScanViewModel : ViewModel() {
 		zcashNoteSyncResult.value = null
 		zcashNoteSyncFrames.value = null
 		zcashPcztUrParts.value = null
+		modulePcztPayload.value = null
 		frostPayload.value = null
 		clearFrostDkgState()
 		clearFrostSignState()
