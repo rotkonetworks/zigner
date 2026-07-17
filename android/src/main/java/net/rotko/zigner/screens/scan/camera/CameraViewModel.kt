@@ -10,6 +10,7 @@ import net.rotko.zigner.domain.encodeHex
 import net.rotko.zigner.domain.submitErrorState
 import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
+import io.parity.signer.uniffi.decodeUrModuleRequest
 import io.parity.signer.uniffi.decodeUrZcashPczt
 import io.parity.signer.uniffi.zcashNotesScanProgress
 import io.parity.signer.uniffi.qrparserGetPacketsTotal
@@ -72,6 +73,10 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashPcztFrames = MutableStateFlow<List<String>>(emptyList())
 	private val _zcashPcztComplete = MutableStateFlow<List<String>?>(null)
 	val zcashPcztComplete: StateFlow<List<String>?> = _zcashPcztComplete.asStateFlow()
+
+	// UR zigner-module request frames (ur:zigner-module protocol-module PCZT
+	// request via animated QR); fountain-decoded to _zcashModulePcztPayload.
+	private val _zignerModuleFrames = MutableStateFlow<List<String>>(emptyList())
 
 	// JSON payloads (detected by {"frost":...} or {"auth":...} prefix)
 	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
@@ -422,6 +427,35 @@ class CameraViewModel() : ViewModel() {
 					_zcashPcztComplete.value = frames
 				}
 			}
+			// Protocol-module PCZT request over BC-UR fountain (ur:zigner-module).
+			// zafu animates the RAW prelude envelope [0x53][0x04][0x03]||pczt
+			// through the same fountain as ur:zcash-pczt but under this type so it
+			// reaches the ironwood-AWARE module path (not the blind zcash-pczt
+			// signer). Fountain-decode to the raw envelope, then dispatch on the
+			// 6-hex prelude exactly like the raw-byte / substrate multi-QR path.
+			normalizedUr.startsWith("ur:zigner-module") -> {
+				processUrFountainFrame(urString, normalizedUr, "ur:zigner-module", _zignerModuleFrames,
+					tryDecode = { frames ->
+						try { decodeUrModuleRequest(frames); true } catch (_: Exception) { false }
+					},
+				) { frames ->
+					try {
+						val decoded = decodeUrModuleRequest(frames)
+						val payloadHex =
+							ByteArray(decoded.size) { i -> decoded[i].toByte() }.encodeHex()
+						if (isZcashModulePcztRequest(payloadHex)) {
+							resetZignerModuleFrames()
+							_zcashModulePcztPayload.value = payloadHex
+						} else {
+							Timber.w("ur:zigner-module payload is not a module PCZT request; prelude=${payloadHex.take(6)}")
+							resetZignerModuleFrames()
+						}
+					} catch (e: Exception) {
+						Timber.e(e, "ur:zigner-module fountain decode failed")
+						resetZignerModuleFrames()
+					}
+				}
+			}
 			else -> {
 				Timber.d("Ignoring unknown UR type: $normalizedUr")
 			}
@@ -553,6 +587,7 @@ class CameraViewModel() : ViewModel() {
 		_zcashNotesComplete.value = null
 		_zcashPcztFrames.value = emptyList()
 		_zcashPcztComplete.value = null
+		_zignerModuleFrames.value = emptyList()
 		_frostPayload.value = null
 		_authPayload.value = null
 		_zidSignPayload.value = null
@@ -572,6 +607,10 @@ class CameraViewModel() : ViewModel() {
 	fun resetZcashPczt() {
 		_zcashPcztFrames.value = emptyList()
 		_zcashPcztComplete.value = null
+	}
+
+	fun resetZignerModuleFrames() {
+		_zignerModuleFrames.value = emptyList()
 	}
 
 	fun resetFrostPayload() {
