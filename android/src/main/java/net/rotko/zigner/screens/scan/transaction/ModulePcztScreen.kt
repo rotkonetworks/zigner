@@ -340,8 +340,35 @@ private fun ModulePcztSummaryCard(
 			style = SignerTypeface.CaptionM,
 			color = MaterialTheme.colors.textSecondary,
 		)
+		// Ironwood (NU6.3 / V6) actions. Nonzero => this is a turnstile
+		// migration and the ironwood destination below is real; the count
+		// is shown prominently so it can never be signed invisibly. Zero
+		// means the active module is ironwood-blind (default module) OR the
+		// tx has no ironwood outputs - either way there is nothing to hide.
+		if (summary.ironwoodActions > 0u) {
+			Text(
+				text = "Ironwood migration - actions: ${summary.ironwoodActions}",
+				style = SignerTypeface.LabelM,
+				color = MaterialTheme.colors.pink500,
+			)
+		} else {
+			Text(
+				text = "Ironwood actions: 0",
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textTertiary,
+			)
+		}
 		Text(
 			text = "Transparent inputs: ${summary.transparentInputs}",
+			style = SignerTypeface.CaptionM,
+			color = MaterialTheme.colors.textSecondary,
+		)
+		// Canonical network fee straight from the PCZT (already accounts for
+		// the ironwood value balance). "unknown" when the module could not
+		// derive it - never an understated number re-derived by the app.
+		Text(
+			text = summary.feeZat?.let { "Fee: %.8f ZEC".format(it.toLong() / 100_000_000.0) }
+				?: "Fee: unknown",
 			style = SignerTypeface.CaptionM,
 			color = MaterialTheme.colors.textSecondary,
 		)
@@ -367,6 +394,10 @@ private fun ModuleOutputLine(line: String) {
 	val eq = line.lastIndexOf('=')
 	val label = if (eq > 0) line.substring(0, eq) else line
 	val zats = if (eq > 0) line.substring(eq + 1).toLongOrNull() else null
+	// Ironwood destination lines ("ironwood:<hex>=<zat>") are the turnstile
+	// migration target - tag them so the user sees the pool they are moving
+	// to, not just an address+amount.
+	val isIronwood = label.startsWith("ironwood:")
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -374,6 +405,13 @@ private fun ModuleOutputLine(line: String) {
 			.background(MaterialTheme.colors.fill6)
 			.padding(8.dp),
 	) {
+		if (isIronwood) {
+			Text(
+				text = "-> Ironwood pool",
+				style = SignerTypeface.LabelM,
+				color = MaterialTheme.colors.pink500,
+			)
+		}
 		Text(
 			text = if (zats != null) "%.8f ZEC".format(zats / 100_000_000.0) else line,
 			style = SignerTypeface.BodyM,
