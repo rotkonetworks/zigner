@@ -199,6 +199,37 @@ fn wallet_builds_v6_migration_device_signs() {
         "migrated value visible for confirmation"
     );
 
+    // Fee correctness (FIX-B / R3 finding 2): the summary fee MUST equal
+    // inputs - ALL outputs, INCLUDING the ironwood output. An ironwood-blind
+    // fee (orchard value_sum only) would report ~the whole migrated amount as
+    // fee, since the migrated value leaves the orchard pool. compute_fee_zat
+    // sums every bundle value balance via fee_paid, so the confirmed fee is
+    // the real network fee.
+    assert_eq!(
+        summary.fee_zat,
+        Some(fee),
+        "confirmed fee is inputs minus ALL outputs (incl ironwood), not the migrated amount: {summary:?}"
+    );
+    assert!(
+        summary.fee_zat.unwrap() < migrated,
+        "fee must be far below the migrated value, not ~equal to it (the ironwood-blind bug)"
+    );
+
+    // Head ABI (FIX-B / R3 finding 3): the wasm summary head must carry
+    // ironwood_actions and the fee so the device confirmation head reflects
+    // the migration. Drive the actual C ABI the module_host calls.
+    let payload = pczt_signing::envelope::encode_request(&pczt_signing::envelope::SignRequest::Single(
+        pczt_signing::envelope::RequestMessage {
+            id: Vec::new(),
+            pczt_bytes: over_the_qr.clone(),
+        },
+    ))
+    .expect("encode single request");
+    let summaries = pczt_signing::summarize_request(&payload).expect("summarize_request");
+    assert_eq!(summaries.len(), 1);
+    assert!(summaries[0].ironwood_actions >= 1, "head reports ironwood_actions");
+    assert_eq!(summaries[0].fee_zat, Some(fee), "head reports canonical fee");
+
     // -- device side: sign --
     let signed_bytes =
         pczt_signing::sign_redacted_pczt(&over_the_qr, MNEMONIC, 0, false).expect("device signs");

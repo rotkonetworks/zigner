@@ -108,14 +108,59 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
         }
     }
 
+    // Fee: reconstruct the transaction effects from the PCZT and let the
+    // canonical fee_paid() sum EVERY bundle's value balance - transparent +
+    // sapling + orchard + (cfg-gated) ironwood. For a shielded->shielded
+    // turnstile migration there are no transparent inputs, so the prevout
+    // lookup is never consulted and the fee is exactly
+    // -(orchard_value_balance + ironwood_value_balance). Crucially this does
+    // NOT omit the ironwood value_sum: an ironwood-blind fee that only saw
+    // the orchard side would report ~the entire migrated amount as fee.
+    //
+    // Effects extraction needs a second parse (into_effects consumes the
+    // Pczt); the redacted turnstile PCZT retains every value_sum the
+    // computation reads (redaction only clears witnesses/proofs, not the
+    // value commitments), so this succeeds on exactly the bytes we display.
+    //
+    // Gated to the nu6.3 build: it is the ironwood/turnstile path where an
+    // omitted ironwood value_sum would understate the fee. The default
+    // 5333c01b build keeps its prior behaviour (fee_zat = None) for normal
+    // orchard sends and is untouched - per FIX-B "do not touch that path".
+    #[cfg(zcash_unstable = "nu6.3")]
+    let fee_zat = compute_fee_zat(pczt_bytes);
+    #[cfg(not(zcash_unstable = "nu6.3"))]
+    let fee_zat = None;
+
     Ok(PcztSummary {
         orchard_actions,
         #[cfg(zcash_unstable = "nu6.3")]
         ironwood_actions,
         transparent_inputs,
         outputs,
-        fee_zat: None,
+        fee_zat,
     })
+}
+
+/// Recompute the transaction fee from the PCZT's own value balances.
+///
+/// Returns `None` when the PCZT cannot be turned into effects (e.g. a
+/// redaction that dropped a field the extractor needs, or a transparent
+/// input whose prevout value we cannot supply). A `None` fee renders as
+/// "unknown" on the device rather than a wrong number - fail-closed for the
+/// confirmation screen.
+#[cfg(zcash_unstable = "nu6.3")]
+fn compute_fee_zat(pczt_bytes: &[u8]) -> Option<u64> {
+    let pczt = Pczt::parse(pczt_bytes).ok()?;
+    let effects = pczt.into_effects().ok()?;
+    // Transparent inputs carry their own value in the PCZT (transparent.value
+    // is public), but fee_paid takes a prevout lookup by outpoint. We have no
+    // prevout db on the device; for the turnstile migration there are no
+    // transparent inputs so the closure is never called. If a future request
+    // does carry transparent inputs, returning None here makes fee_paid bail
+    // and we display "unknown" rather than an understated fee.
+    let fee: Result<Option<zcash_protocol::value::Zatoshis>, zcash_protocol::value::BalanceError> =
+        effects.fee_paid(|_outpoint| Ok(None));
+    fee.ok().flatten().map(u64::from)
 }
 
 /// Sign every orchard action and transparent input this seed controls.
@@ -330,11 +375,29 @@ mod wasm_abi {
             Ok(summaries) => {
                 let mut out = Vec::new();
                 for s in summaries {
+                    // Summary head ABI. `ironwood_actions` MUST appear so the
+                    // device confirmation head reflects a turnstile migration;
+                    // an ironwood-blind head (orchard actions only) would let a
+                    // migration render as an empty/zero-action transaction. The
+                    // default 5333c01b build has no ironwood pool and emits
+                    // ironwood_actions=0. `fee` is the canonical fee that
+                    // already includes the ironwood value balance (see
+                    // compute_fee_zat); "unknown" when not derivable.
+                    #[cfg(zcash_unstable = "nu6.3")]
+                    let ironwood_actions = s.ironwood_actions;
+                    #[cfg(not(zcash_unstable = "nu6.3"))]
+                    let ironwood_actions = 0usize;
+                    let fee = match s.fee_zat {
+                        Some(v) => v.to_string(),
+                        None => "unknown".to_string(),
+                    };
                     out.extend_from_slice(
                         format!(
-                            "actions={} t_inputs={}\n{}",
+                            "actions={} ironwood_actions={} t_inputs={} fee={}\n{}",
                             s.orchard_actions,
+                            ironwood_actions,
                             s.transparent_inputs,
+                            fee,
                             s.outputs
                                 .iter()
                                 .map(|(l, v)| format!("{l}={v}"))

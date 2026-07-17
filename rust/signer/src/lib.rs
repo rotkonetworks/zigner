@@ -4207,7 +4207,16 @@ ffi_support::define_string_destructor!(signer_destroy_string);
 /// wallet sent outside the PCZT.
 pub struct ModulePcztSummary {
     pub orchard_actions: u32,
+    /// Ironwood (NU6.3 / V6) actions present in the request. Nonzero marks a
+    /// turnstile migration; the confirm screen must surface this so the
+    /// ironwood destination is never signed invisibly. The default (non
+    /// nu6.3) module emits 0 here.
+    pub ironwood_actions: u32,
     pub transparent_inputs: u32,
+    /// Canonical fee in zatoshi (already includes the ironwood value balance),
+    /// or None when the module could not derive it from the PCZT. The screen
+    /// shows "unknown" for None rather than an understated number.
+    pub fee_zat: Option<u64>,
     pub output_lines: Vec<String>,
 }
 
@@ -4227,25 +4236,37 @@ pub fn module_summarize_request(
         .map_err(|e| ErrorDisplayed::Str {
             s: format!("{e:?}"),
         })?;
-    // module ABI: records separated by 0x1e; first line "actions=N t_inputs=M",
-    // following lines "label=value"
+    // module ABI: records separated by 0x1e; head line
+    // "actions=N ironwood_actions=I t_inputs=M fee=F" (fee is a zatoshi
+    // integer or the literal "unknown"), following lines "label=value".
+    // ironwood_actions/fee are absent from pre-ironwood modules; treat a
+    // missing ironwood_actions as 0 and a missing/"unknown" fee as None so
+    // old modules keep parsing.
     let mut out = Vec::new();
     for record in raw.split(|b| *b == 0x1e).filter(|r| !r.is_empty()) {
         let text = String::from_utf8_lossy(record);
         let mut lines = text.lines();
         let head = lines.next().unwrap_or_default();
         let mut actions = 0u32;
+        let mut ironwood_actions = 0u32;
         let mut t_inputs = 0u32;
+        let mut fee_zat = None;
         for part in head.split_whitespace() {
-            if let Some(v) = part.strip_prefix("actions=") {
+            if let Some(v) = part.strip_prefix("ironwood_actions=") {
+                ironwood_actions = v.parse().unwrap_or(0);
+            } else if let Some(v) = part.strip_prefix("actions=") {
                 actions = v.parse().unwrap_or(0);
             } else if let Some(v) = part.strip_prefix("t_inputs=") {
                 t_inputs = v.parse().unwrap_or(0);
+            } else if let Some(v) = part.strip_prefix("fee=") {
+                fee_zat = v.parse::<u64>().ok();
             }
         }
         out.push(ModulePcztSummary {
             orchard_actions: actions,
+            ironwood_actions,
             transparent_inputs: t_inputs,
+            fee_zat,
             output_lines: lines.map(str::to_owned).collect(),
         });
     }

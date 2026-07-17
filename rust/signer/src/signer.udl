@@ -22,7 +22,9 @@ interface QrSequenceDecodeError {
 
 dictionary ModulePcztSummary {
     u32 orchard_actions;
+    u32 ironwood_actions;
     u32 transparent_inputs;
+    u64? fee_zat;
     sequence<string> output_lines;
 };
 
