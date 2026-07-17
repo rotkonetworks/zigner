@@ -32,6 +32,26 @@ pub enum Error {
     Sign(String),
 }
 
+// The low-level Signer role requires the sign closure's error type to be
+// `From<..>` of the pczt rev's bundle re-parse error. The two pinned revs
+// differ: the NU6.3 valar fork uses `pczt::orchard::BundleParseError` (which
+// also carries the V6 consensus-branch check for the ironwood bundle); the
+// default 5333c01b rev uses `orchard::pczt::ParseError` directly. Provide the
+// `From` impl the active rev's bound needs. Both map into `Error::Parse`.
+#[cfg(zcash_unstable = "nu6.3")]
+impl From<pczt::orchard::BundleParseError> for Error {
+    fn from(e: pczt::orchard::BundleParseError) -> Self {
+        Error::Parse(format!("orchard bundle parse: {e:?}"))
+    }
+}
+
+#[cfg(not(zcash_unstable = "nu6.3"))]
+impl From<orchard::pczt::ParseError> for Error {
+    fn from(e: orchard::pczt::ParseError) -> Self {
+        Error::Parse(format!("orchard bundle parse: {e:?}"))
+    }
+}
+
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -190,47 +210,119 @@ pub fn sign_redacted_pczt(
     }
     .map_err(|e| Error::KeyDerivation(format!("{e:?}")))?;
 
-    let n_actions = pczt.orchard().actions().len();
-    #[cfg(zcash_unstable = "nu6.3")]
-    let n_ironwood = pczt.ironwood().actions().len();
     let n_transparent = pczt.transparent().inputs().len();
-    let mut signer = Signer::new(pczt).map_err(|e| Error::Sign(format!("{e:?}")))?;
 
-    // The Signer role reads each action's alpha from the PCZT and applies
-    // the randomization internally; we supply the spend authorizing key.
+    // The spend authorizing key signs orchard/ironwood spends; the full
+    // viewing key is reconstructed here so we never need it shipped in the
+    // PCZT (R3 viewing-key leak fix - see below).
     let ask = usk.orchard().to_bytes();
     let sk = orchard::keys::SpendingKey::from_bytes(*ask)
         .into_option()
         .ok_or_else(|| Error::KeyDerivation("orchard sk bytes".into()))?;
     let osak = orchard::keys::SpendAuthorizingKey::from(&sk);
+    // R3 viewing-key leak fix: the producer now STRIPS the spend `fvk` (the
+    // 96-byte orchard FullViewingKey - a viewing-key leak over the untrusted
+    // QR transport) from the redacted PCZT. The high-level `Signer` role is
+    // therefore unusable for the shielded spends: its `sign_orchard` /
+    // `sign_ironwood` hardcode `Spend::verify_nullifier(None)`, which requires
+    // the spend `fvk` and does NOT tolerate `MissingFullViewingKey`. We hold
+    // the seed, so we reconstruct the fvk from the same USK and drive the
+    // low-level Signer role, supplying the fvk to `verify_nullifier(Some(fvk))`
+    // ourselves (`fvk_for_validation` returns the caller-supplied fvk when the
+    // PCZT's own `fvk` field is absent). The actual `Action::sign` needs only
+    // `alpha` and `rk`, never the fvk, so signatures are unaffected.
+    let orchard_fvk = orchard::keys::FullViewingKey::from(&sk);
 
-    for index in 0..n_actions {
-        // Redacted PCZTs may include actions we don't control (multi-party);
-        // per-action failures for foreign spends are tolerated, matching
-        // Keystone semantics of "sign what is yours".
-        if let Err(e) = signer.sign_orchard(index, &osak) {
-            let msg = format!("{e:?}");
-            let foreign = msg.contains("Wrong") || msg.contains("Missing");
-            if !foreign {
-                return Err(Error::Sign(format!("action {index}: {msg}")));
+    // The shielded sighash is a function of tx *effects* only (it does not
+    // depend on any spend-auth signature), so we compute it once up front from
+    // the parsed PCZT and reuse it for every orchard and ironwood spend.
+    let shielded_sighash = Signer::new(pczt.clone())
+        .map_err(|e| Error::Sign(format!("{e:?}")))?
+        .shielded_sighash();
+
+    // Sign the orchard and ironwood spends via the low-level Signer role. Per
+    // action: verify the nullifier against the reconstructed fvk (tolerating
+    // the redacted note-plaintext fields exactly like the high-level Signer),
+    // then apply the spend-auth signature. Foreign / dummy spends whose key we
+    // do not hold error with a Wrong/Missing mismatch and are skipped -
+    // "sign what is yours".
+    use pczt::roles::low_level_signer::Signer as LowLevelSigner;
+    use rand_core::OsRng;
+
+    fn sign_actions_with_fvk(
+        pczt_ref: &Pczt,
+        bundle: &mut orchard::pczt::Bundle,
+        fvk: &orchard::keys::FullViewingKey,
+        osak: &orchard::keys::SpendAuthorizingKey,
+        sighash: [u8; 32],
+        label: &str,
+    ) -> Result<(), Error> {
+        let _ = pczt_ref;
+        for (index, action) in bundle.actions_mut().iter_mut().enumerate() {
+            // Consistency check with the caller-supplied fvk. Redacted spends
+            // (recipient/value/rho/rseed stripped) surface as Missing* and are
+            // tolerated, matching the high-level Signer's own mapping.
+            match action.spend().verify_nullifier(Some(fvk)) {
+                Ok(())
+                | Err(
+                    orchard::pczt::VerifyError::MissingRecipient
+                    | orchard::pczt::VerifyError::MissingValue
+                    | orchard::pczt::VerifyError::MissingRho
+                    | orchard::pczt::VerifyError::MissingRandomSeed,
+                ) => {}
+                Err(e) => {
+                    // A real mismatch (e.g. WrongFvkForNote / InvalidNullifier)
+                    // on a spend we do not own: skip it, do not abort the batch.
+                    let _ = e;
+                    continue;
+                }
+            }
+            match action.sign(sighash, osak, OsRng) {
+                Ok(()) => {}
+                Err(e) => {
+                    let msg = format!("{e:?}");
+                    // WrongSpendAuthorizingKey / MissingSpendAuthRandomizer are
+                    // foreign/dummy spends already handled elsewhere - skip.
+                    let foreign = msg.contains("Wrong") || msg.contains("Missing");
+                    if !foreign {
+                        return Err(Error::Sign(format!("{label} action {index}: {msg}")));
+                    }
+                }
             }
         }
+        Ok(())
     }
 
-    // Ironwood actions (NU6.3 / V6): same RedPallas spend-auth key material,
-    // second bundle. Dummy spends were already signed by the wallet's IO
-    // finalizer and error here with a Wrong-key mismatch, which is tolerated
-    // exactly like foreign orchard actions above - "sign what is yours".
+    let low = LowLevelSigner::new(pczt);
+    let low = low.sign_orchard_with(|pczt_ref, bundle, _tx_modifiable| {
+        sign_actions_with_fvk(
+            pczt_ref,
+            bundle,
+            &orchard_fvk,
+            &osak,
+            shielded_sighash,
+            "orchard",
+        )
+    })?;
+
     #[cfg(zcash_unstable = "nu6.3")]
-    for index in 0..n_ironwood {
-        if let Err(e) = signer.sign_ironwood(index, &osak) {
-            let msg = format!("{e:?}");
-            let foreign = msg.contains("Wrong") || msg.contains("Missing");
-            if !foreign {
-                return Err(Error::Sign(format!("ironwood action {index}: {msg}")));
-            }
-        }
-    }
+    let low = low.sign_ironwood_with(|pczt_ref, bundle, _tx_modifiable| {
+        sign_actions_with_fvk(
+            pczt_ref,
+            bundle,
+            &orchard_fvk,
+            &osak,
+            shielded_sighash,
+            "ironwood",
+        )
+    })?;
+
+    let pczt = low.finish();
+
+    // Transparent inputs are signed with the high-level Signer (they need no
+    // fvk). Re-parse via the role over the now spend-auth-signed shielded
+    // bundles.
+    let mut signer = Signer::new(pczt).map_err(|e| Error::Sign(format!("{e:?}")))?;
 
     // Transparent inputs: this pczt rev keeps bip32_derivation pub(crate),
     // so instead of reading paths we candidate-scan our account's keys on

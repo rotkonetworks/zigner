@@ -145,18 +145,34 @@ fn wallet_builds_v6_migration_device_signs() {
     let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
 
     // -- wallet side: redact + ship over the airgap (exactly vizor's
-    //    redact_pczt_for_signer for tx_version != 5) --
+    //    redact_pczt_for_signer). R3 viewing-key leak fix: the spend note
+    //    plaintext (recipient/value/rho/rseed) AND the spend `fvk` (the
+    //    wallet's 96-byte orchard FullViewingKey) are stripped from BOTH the
+    //    orchard and ironwood bundles so nothing that links the account's notes
+    //    crosses the airgap. This crate must still sign with those absent - it
+    //    reconstructs the fvk from the seed and supplies it to
+    //    `verify_nullifier(Some(fvk))` internally.
     let redacted = Redactor::new(pczt)
         .redact_global_with(|mut r| r.redact_proprietary("zcash_client_backend:proposal_info"))
         .redact_orchard_with(|mut r| {
             r.redact_actions(|mut ar| {
                 ar.clear_spend_witness();
+                ar.clear_spend_rseed();
+                ar.clear_spend_rho();
+                ar.clear_spend_recipient();
+                ar.clear_spend_value();
+                ar.clear_spend_fvk();
                 ar.redact_output_proprietary("zcash_client_backend:output_info");
             });
         })
         .redact_ironwood_with(|mut r| {
             r.redact_actions(|mut ar| {
                 ar.clear_spend_witness();
+                ar.clear_spend_rseed();
+                ar.clear_spend_rho();
+                ar.clear_spend_recipient();
+                ar.clear_spend_value();
+                ar.clear_spend_fvk();
                 ar.redact_output_proprietary("zcash_client_backend:output_info");
             });
         })
@@ -177,6 +193,17 @@ fn wallet_builds_v6_migration_device_signs() {
         zcash_protocol::constants::V6_TX_VERSION
     );
     let over_the_qr = redacted.serialize();
+
+    // R3 viewing-key leak fix: the spend fvk must be ABSENT from the bytes that
+    // cross the airgap. Assert the raw 96-byte fvk does not appear in the QR
+    // payload; the device reconstructs it from the seed to sign.
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        !needle.is_empty() && haystack.windows(needle.len()).any(|w| w == needle)
+    }
+    assert!(
+        !contains(&over_the_qr, &fvk.to_bytes()),
+        "redacted PCZT still leaks the spend viewing key (fvk) over the airgap"
+    );
 
     // -- device side: confirmation summary --
     let summary = pczt_signing::summarize(&over_the_qr).expect("summary");
