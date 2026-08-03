@@ -1,12 +1,22 @@
 <div align="center">
 
-# Zigner
+# Zafu Zigner
 
-Air-gapped cold signer for Penumbra, Zcash, and Substrate chains
+**Air-gapped hardware wallet for Zcash &amp; Penumbra — turn a spare Android or iOS phone into a cold signer.**
 
-Part of the [Zafu](https://github.com/rotkonetworks/zafu) ecosystem
+Sign transactions offline via QR codes; private keys never touch the network.
+Also signs Polkadot, Kusama, and Cosmos. Part of the [Zafu](https://github.com/rotkonetworks/zafu) ecosystem.
+
+[![Release](https://img.shields.io/github/v/release/rotkonetworks/zigner?color=f4a31e)](https://github.com/rotkonetworks/zigner/releases/latest)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-informational)](#building)
+[![Downloads](https://img.shields.io/github/downloads/rotkonetworks/zigner/total)](https://github.com/rotkonetworks/zigner/releases)
 
 </div>
+
+> Zafu Zigner is an open-source, air-gapped cold wallet / hardware signer. It keeps your
+> Zcash and Penumbra keys on an offline device and signs transactions through QR codes —
+> a DIY hardware wallet with FROST threshold multisig, built on a shared Rust core.
 
 ## Threat model
 

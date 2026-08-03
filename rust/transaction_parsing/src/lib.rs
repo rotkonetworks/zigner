@@ -81,6 +81,13 @@ fn handle_scanner_input(database: &sled::Db, payload: &str) -> Result<Transactio
     if &data_hex[2..4] == "04" {
         return match &data_hex[4..6] {
             "02" => process_zcash_sign_request(database, data_hex),
+            // PCZT requests (0x03 single / 0x04 batch) are handled by the
+            // protocol-module path in the app layer; reaching this branch
+            // means the app-side dispatcher missed them. Fail closed with
+            // a message that points at the module update path.
+            "03" | "04" => Err(Error::PayloadNotSupported(
+                "protocol module cannot parse this request - update your zigner module".to_string(),
+            )),
             _ => Err(Error::PayloadNotSupported(format!(
                 "zcash tx type {}",
                 &data_hex[4..6]
@@ -130,6 +137,16 @@ pub fn decode_payload(
     }
 
     if !enable_dynamic_derivations {
+        return Ok(DecodeSequenceResult::Other {
+            s: payload.to_string(),
+        });
+    }
+
+    // Zcash payloads (crypto type 0x04) are dispatched by the app layer
+    // (legacy digest 0x02, protocol-module PCZT 0x03/0x04). Without this
+    // early return a PCZT batch (530404) would collide with the substrate
+    // bulk-transactions tx_type below and fail to decode.
+    if &data_hex[2..4] == "04" {
         return Ok(DecodeSequenceResult::Other {
             s: payload.to_string(),
         });

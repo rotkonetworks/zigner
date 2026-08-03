@@ -22,7 +22,9 @@ interface QrSequenceDecodeError {
 
 dictionary ModulePcztSummary {
     u32 orchard_actions;
+    u32 ironwood_actions;
     u32 transparent_inputs;
+    u64? fee_zat;
     sequence<string> output_lines;
 };
 
@@ -605,6 +607,17 @@ namespace signer {
 
     [Throws=ErrorDisplayed]
     sequence<u8> module_sign_request([ByRef] sequence<u8> module_wasm, [ByRef] sequence<u8> payload, [ByRef] string seed_phrase, u32 account, boolean mainnet);
+
+    // Frame a module sign-response envelope as UR strings for animated QR
+    // display (ur:zigner-module). max_fragment_len: 0 = single QR.
+    [Throws=ErrorDisplayed]
+    sequence<string> module_response_to_ur([ByRef] sequence<u8> response, u32 max_fragment_len);
+
+    // Fountain-decode ur:zigner-module REQUEST frames to the raw prelude
+    // envelope bytes ([0x53][crypto][tx_type] || payload). No CBOR unwrap:
+    // the request side ships the bare envelope through the UR fountain.
+    [Throws=ErrorDisplayed]
+    sequence<u8> decode_ur_module_request(sequence<string> ur_parts);
 
 
     [Throws=ErrorDisplayed]

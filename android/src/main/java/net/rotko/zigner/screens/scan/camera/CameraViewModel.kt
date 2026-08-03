@@ -10,6 +10,7 @@ import net.rotko.zigner.domain.encodeHex
 import net.rotko.zigner.domain.submitErrorState
 import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
+import io.parity.signer.uniffi.decodeUrModuleRequest
 import io.parity.signer.uniffi.decodeUrZcashPczt
 import io.parity.signer.uniffi.zcashNotesScanProgress
 import io.parity.signer.uniffi.qrparserGetPacketsTotal
@@ -51,6 +52,12 @@ class CameraViewModel() : ViewModel() {
 	val zcashSimpleSignPayload: StateFlow<String?> =
 		_zcashSimpleSignPayload.asStateFlow()
 
+	// Zcash PCZT protocol-module request payload (530403 single / 530404 batch),
+	// routed to the wasm protocol module instead of the built-in parsers.
+	private val _zcashModulePcztPayload = MutableStateFlow<String?>(null)
+	val zcashModulePcztPayload: StateFlow<String?> =
+		_zcashModulePcztPayload.asStateFlow()
+
 	// UR backup frames (multipart UR QR codes starting with "ur:")
 	private val _urBackupFrames = MutableStateFlow<List<String>>(emptyList())
 	val urBackupFrames: StateFlow<List<String>> = _urBackupFrames.asStateFlow()
@@ -66,6 +73,10 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashPcztFrames = MutableStateFlow<List<String>>(emptyList())
 	private val _zcashPcztComplete = MutableStateFlow<List<String>?>(null)
 	val zcashPcztComplete: StateFlow<List<String>?> = _zcashPcztComplete.asStateFlow()
+
+	// UR zigner-module request frames (ur:zigner-module protocol-module PCZT
+	// request via animated QR); fountain-decoded to _zcashModulePcztPayload.
+	private val _zignerModuleFrames = MutableStateFlow<List<String>>(emptyList())
 
 	// JSON payloads (detected by {"frost":...} or {"auth":...} prefix)
 	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
@@ -298,6 +309,12 @@ class CameraViewModel() : ViewModel() {
 				return
 			}
 
+			if (isZcashModulePcztRequest(firstPayload)) {
+				resetScanValues()
+				_zcashModulePcztPayload.value = firstPayload
+				return
+			}
+
 			val payload = qrparserTryDecodeQrSequence(
 				data = completePayload,
 				password = null,
@@ -319,7 +336,13 @@ class CameraViewModel() : ViewModel() {
 
 				is DecodeSequenceResult.Other -> {
 					resetScanValues()
-					addPendingTransaction(payload.s)
+					// Multi-frame PCZT module requests arrive here after the
+					// Rust sequence decoder reassembles them into one hex payload.
+					if (isZcashModulePcztRequest(payload.s)) {
+						_zcashModulePcztPayload.value = payload.s
+					} else {
+						addPendingTransaction(payload.s)
+					}
 				}
 
 				is DecodeSequenceResult.DynamicDerivations -> {
@@ -359,8 +382,22 @@ class CameraViewModel() : ViewModel() {
 		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
 	}
 
+	/**
+	 * Check if hex payload is a Zcash PCZT protocol-module request:
+	 * prelude [0x53][crypto=0x04][tx_type], 0x03 single / 0x04 batch.
+	 */
+	private fun isZcashModulePcztRequest(hexPayload: String): Boolean {
+		if (hexPayload.length < 6) return false
+		val prefix = hexPayload.substring(0, 6).lowercase()
+		return prefix == "530403" || prefix == "530404"
+	}
+
 	fun resetZcashSimpleSign() {
 		_zcashSimpleSignPayload.value = null
+	}
+
+	fun resetZcashModulePczt() {
+		_zcashModulePcztPayload.value = null
 	}
 
 	/**
@@ -388,6 +425,35 @@ class CameraViewModel() : ViewModel() {
 					},
 				) { frames ->
 					_zcashPcztComplete.value = frames
+				}
+			}
+			// Protocol-module PCZT request over BC-UR fountain (ur:zigner-module).
+			// zafu animates the RAW prelude envelope [0x53][0x04][0x03]||pczt
+			// through the same fountain as ur:zcash-pczt but under this type so it
+			// reaches the ironwood-AWARE module path (not the blind zcash-pczt
+			// signer). Fountain-decode to the raw envelope, then dispatch on the
+			// 6-hex prelude exactly like the raw-byte / substrate multi-QR path.
+			normalizedUr.startsWith("ur:zigner-module") -> {
+				processUrFountainFrame(urString, normalizedUr, "ur:zigner-module", _zignerModuleFrames,
+					tryDecode = { frames ->
+						try { decodeUrModuleRequest(frames); true } catch (_: Exception) { false }
+					},
+				) { frames ->
+					try {
+						val decoded = decodeUrModuleRequest(frames)
+						val payloadHex =
+							ByteArray(decoded.size) { i -> decoded[i].toByte() }.encodeHex()
+						if (isZcashModulePcztRequest(payloadHex)) {
+							resetZignerModuleFrames()
+							_zcashModulePcztPayload.value = payloadHex
+						} else {
+							Timber.w("ur:zigner-module payload is not a module PCZT request; prelude=${payloadHex.take(6)}")
+							resetZignerModuleFrames()
+						}
+					} catch (e: Exception) {
+						Timber.e(e, "ur:zigner-module fountain decode failed")
+						resetZignerModuleFrames()
+					}
 				}
 			}
 			else -> {
@@ -514,12 +580,14 @@ class CameraViewModel() : ViewModel() {
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null
 		_zcashSimpleSignPayload.value = null
+		_zcashModulePcztPayload.value = null
 		_urBackupFrames.value = emptyList()
 		_urBackupComplete.value = null
 		_zcashNotesFrames.value = emptyList()
 		_zcashNotesComplete.value = null
 		_zcashPcztFrames.value = emptyList()
 		_zcashPcztComplete.value = null
+		_zignerModuleFrames.value = emptyList()
 		_frostPayload.value = null
 		_authPayload.value = null
 		_zidSignPayload.value = null
@@ -539,6 +607,10 @@ class CameraViewModel() : ViewModel() {
 	fun resetZcashPczt() {
 		_zcashPcztFrames.value = emptyList()
 		_zcashPcztComplete.value = null
+	}
+
+	fun resetZignerModuleFrames() {
+		_zignerModuleFrames.value = emptyList()
 	}
 
 	fun resetFrostPayload() {

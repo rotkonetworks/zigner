@@ -51,4 +51,4 @@ jobs:
           # module_host runtime tests need the pczt_signing wasm artifact;
           # apple clang can't compile secp256k1-sys for wasm32, so those
           # tests run on the Linux job only
-          cargo nextest run --retries 2 --locked -E 'not (package(module_host) and binary(runtime))'
+          cargo nextest run --retries 2 --locked --workspace --exclude qr_reader_pc -E 'not (package(module_host) and binary(runtime))'

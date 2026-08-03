@@ -1,0 +1,68 @@
+# SPIKE: pczt_signing retargeted to the Valar NU6.3 forks (V6 / Ironwood).
+#
+# This is a parallel Cargo config over the SAME source as ../pczt_signing
+# (see [lib] path below). The default 5333c01b-pinned build in
+# ../pczt_signing is untouched; this manifest exists to prove the V6 /
+# Ironwood signing path against the fork stack that vizor-wallet
+# (branch adam/qleak-pr73-orchard-librustzcash) ships.
+#
+# Build and test with the NU6.3 cfg the forks require:
+#   RUSTFLAGS='--cfg zcash_unstable="nu6.3"' cargo test
+#   RUSTFLAGS='--cfg zcash_unstable="nu6.3"' cargo build --target wasm32-unknown-unknown --release
+#
+# Pins mirror vizor-wallet rust/Cargo.toml on that branch:
+#   librustzcash: git https://github.com/valargroup/librustzcash
+#                 branch adam/qleak-pr44-orchard-dummy-ciphertexts
+#   orchard:      git https://github.com/zcash/orchard
+#                 branch adam/qleak-dummy-ciphertexts-on-pr505
+
+[package]
+name = "pczt_signing"
+version = "0.1.0"
+edition = "2021"
+description = "Valar NU6.3 fork build of pczt_signing: V6 / Ironwood PCZT signing spike"
+license = "MIT"
+publish = false
+
+[lib]
+path = "../pczt_signing/src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+# Standalone on purpose, same as ../pczt_signing: the zigner workspace is
+# resolver=1 with an older zcash stack.
+[workspace]
+
+[dependencies]
+pczt = { version = "0.7", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", default-features = false, features = ["orchard", "transparent", "signer"] }
+zcash_keys = { version = "0.14", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", default-features = false, features = ["orchard", "transparent-inputs"] }
+zcash_protocol = { version = "0.9", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", default-features = false }
+zcash_primitives = { version = "0.28", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", default-features = false, features = ["transparent-inputs"] }
+orchard = { version = "0.14", git = "https://github.com/zcash/orchard", branch = "adam/qleak-dummy-ciphertexts-on-pr505", default-features = false }
+zip32 = { version = "0.2", default-features = false }
+zcash_transparent = { version = "0.8", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", package = "zcash_transparent", default-features = false, features = ["transparent-inputs"] }
+bip39 = "2"
+sha2 = { version = "0.10", default-features = false }
+# pczt's signer role uses rand_core::OsRng; standalone we enable the flag
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+[dev-dependencies]
+# The wallet-side half of the contract for the V6 test: Creator,
+# IoFinalizer, Redactor over the fork's Builder pipeline. No zafu-wasm
+# here - it is pinned to the 5333c01b stack and its types cannot unify
+# with the fork's.
+pczt = { version = "0.7", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", default-features = false, features = ["io-finalizer", "zcp-builder"] }
+zcash_protocol = { version = "0.9", git = "https://github.com/valargroup/librustzcash", branch = "adam/qleak-pr44-orchard-dummy-ciphertexts", default-features = false, features = ["local-consensus"] }
+# The kernel-side wasmi runtime, so the V6 round-trip test can drive the
+# bundled nu6.3 module wasm through the EXACT runtime the Android device
+# uses (ModuleRuntime::summarize_request / sign_request). module_host has no
+# zcash deps (wasmi + rand_core + ed25519 + sha2), so it links cleanly
+# against this standalone fork stack.
+module_host = { path = "../module_host" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# wasmi module builds: randomness is a host capability (see the
+# zigner_host import in src/lib.rs).
+getrandom = { version = "0.2", features = ["custom"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(zcash_unstable, values("nu6.3"))'] }

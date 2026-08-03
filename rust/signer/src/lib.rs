@@ -4207,7 +4207,16 @@ ffi_support::define_string_destructor!(signer_destroy_string);
 /// wallet sent outside the PCZT.
 pub struct ModulePcztSummary {
     pub orchard_actions: u32,
+    /// Ironwood (NU6.3 / V6) actions present in the request. Nonzero marks a
+    /// turnstile migration; the confirm screen must surface this so the
+    /// ironwood destination is never signed invisibly. The default (non
+    /// NU6.3) module emits 0 here.
+    pub ironwood_actions: u32,
     pub transparent_inputs: u32,
+    /// Canonical fee in zatoshi (already includes the ironwood value balance),
+    /// or None when the module could not derive it from the PCZT. The screen
+    /// shows "unknown" for None rather than an understated number.
+    pub fee_zat: Option<u64>,
     pub output_lines: Vec<String>,
 }
 
@@ -4227,25 +4236,37 @@ pub fn module_summarize_request(
         .map_err(|e| ErrorDisplayed::Str {
             s: format!("{e:?}"),
         })?;
-    // module ABI: records separated by 0x1e; first line "actions=N t_inputs=M",
-    // following lines "label=value"
+    // module ABI: records separated by 0x1e; head line
+    // "actions=N ironwood_actions=I t_inputs=M fee=F" (fee is a zatoshi
+    // integer or the literal "unknown"), following lines "label=value".
+    // ironwood_actions/fee are absent from pre-ironwood modules; treat a
+    // missing ironwood_actions as 0 and a missing/"unknown" fee as None so
+    // old modules keep parsing.
     let mut out = Vec::new();
     for record in raw.split(|b| *b == 0x1e).filter(|r| !r.is_empty()) {
         let text = String::from_utf8_lossy(record);
         let mut lines = text.lines();
         let head = lines.next().unwrap_or_default();
         let mut actions = 0u32;
+        let mut ironwood_actions = 0u32;
         let mut t_inputs = 0u32;
+        let mut fee_zat = None;
         for part in head.split_whitespace() {
-            if let Some(v) = part.strip_prefix("actions=") {
+            if let Some(v) = part.strip_prefix("ironwood_actions=") {
+                ironwood_actions = v.parse().unwrap_or(0);
+            } else if let Some(v) = part.strip_prefix("actions=") {
                 actions = v.parse().unwrap_or(0);
             } else if let Some(v) = part.strip_prefix("t_inputs=") {
                 t_inputs = v.parse().unwrap_or(0);
+            } else if let Some(v) = part.strip_prefix("fee=") {
+                fee_zat = v.parse::<u64>().ok();
             }
         }
         out.push(ModulePcztSummary {
             orchard_actions: actions,
+            ironwood_actions,
             transparent_inputs: t_inputs,
+            fee_zat,
             output_lines: lines.map(str::to_owned).collect(),
         });
     }
@@ -4264,6 +4285,101 @@ pub fn module_sign_request(
         .map_err(|e| ErrorDisplayed::Str {
             s: format!("{e:?}"),
         })
+}
+
+/// Fountain-decode `ur:zigner-module` protocol-module REQUEST frames back to
+/// the raw prelude envelope bytes (`[0x53][crypto][tx_type] || payload`).
+///
+/// The emitting wallet (zafu) animates the module request over the SAME BC-UR
+/// fountain as `ur:zcash-pczt`, but wraps the RAW prelude envelope directly -
+/// there is NO CBOR `{1: bytes}` wrap on the request side (the wallet feeds the
+/// bare envelope to `ur_encode_frames`). So unlike `decode_ur_zcash_pczt` we
+/// return the fountain message verbatim without a CBOR unwrap; the scan
+/// dispatcher then routes on the 6-hex prelude exactly as for a raw-byte /
+/// substrate multi-QR request.
+fn decode_ur_module_request(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDisplayed> {
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "No UR parts provided".to_string(),
+        });
+    }
+
+    // Type guard: every part must be ur:zigner-module/... so a stray QR mid
+    // stream can never poison the fountain decoder.
+    for part in &ur_parts {
+        if !part.to_lowercase().starts_with("ur:zigner-module/") {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Expected ur:zigner-module/... got: {}",
+                    part.chars().take(30).collect::<String>()
+                ),
+            });
+        }
+    }
+
+    if ur_parts.len() == 1 {
+        let (_kind, bytes) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to decode UR: {e:?}"),
+        })?;
+        return Ok(bytes);
+    }
+
+    let mut decoder = ur::ur::Decoder::default();
+    for part in &ur_parts {
+        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to receive UR part: {e:?}"),
+        })?;
+        if decoder.complete() {
+            break;
+        }
+    }
+    if !decoder.complete() {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Incomplete UR sequence: received {} parts but not complete",
+                ur_parts.len()
+            ),
+        });
+    }
+    decoder
+        .message()
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to get UR message: {e:?}"),
+        })?
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: "UR decoder returned None despite being complete".to_string(),
+        })
+}
+
+/// Frame a module sign-response envelope (prelude || digests || signed
+/// PCZTs) as UR strings for animated QR display. Same CBOR `{1: bytes}`
+/// wrap and fountain encoder as the signed-PCZT path, but under a distinct
+/// UR type so wallets never mistake the envelope for a bare PCZT.
+pub fn module_response_to_ur(
+    response: &[u8],
+    max_fragment_len: u32,
+) -> Result<Vec<String>, ErrorDisplayed> {
+    const UR_TYPE: &str = "zigner-module";
+    let cbor_data = encode_pczt_to_cbor(response);
+
+    if max_fragment_len == 0 || cbor_data.len() <= max_fragment_len as usize {
+        return Ok(vec![ur::ur::encode(&cbor_data, &ur::Type::Custom(UR_TYPE))]);
+    }
+
+    let mut encoder = ur::ur::Encoder::new(&cbor_data, max_fragment_len as usize, UR_TYPE)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to create UR encoder: {e:?}"),
+        })?;
+
+    // 1.3x redundancy, matching encode_signed_pczt_ur (see comment there).
+    let total_parts = (encoder.fragment_count() * 13).div_ceil(10);
+    let mut parts = Vec::with_capacity(total_parts);
+    for _ in 0..total_parts {
+        parts.push(encoder.next_part().map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to encode UR part: {e:?}"),
+        })?);
+    }
+    Ok(parts)
 }
 
 #[cfg(test)]

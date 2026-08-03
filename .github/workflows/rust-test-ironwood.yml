@@ -1,0 +1,48 @@
+name: Rust NU6.3 ironwood signer (valar fork build)
+
+# Guards the cfg(zcash_unstable = "nu6.3") ironwood signing path:
+# rust/pczt_signing_valar is a parallel manifest over the SAME source as
+# rust/pczt_signing, pinned to the valargroup librustzcash / orchard forks.
+# The default build never sets the cfg, so this job is the only thing that
+# compiles the ironwood code - without it the path regresses silently.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  ironwood:
+    name: Cargo test + wasm build (nu6.3 cfg)
+    runs-on: ubuntu-22.04
+    env:
+      RUSTFLAGS: --cfg zcash_unstable="nu6.3"
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844 # v2.7.7
+        with:
+          workspaces: rust/pczt_signing_valar -> rust/pczt_signing_valar/target
+
+      # the E2E test loads the wasm artifact, so build it first
+      - name: cargo build (wasm32-unknown-unknown, release)
+        run: |
+          cd rust/pczt_signing_valar
+          cargo build --target wasm32-unknown-unknown --release --locked
+
+      - name: cargo test (native, V6/ironwood E2E)
+        run: |
+          cd rust/pczt_signing_valar
+          cargo test --locked
