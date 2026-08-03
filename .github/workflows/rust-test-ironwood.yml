@@ -36,12 +36,13 @@ jobs:
         with:
           workspaces: rust/pczt_signing_valar -> rust/pczt_signing_valar/target
 
-      - name: cargo test (native, V6/ironwood E2E)
-        run: |
-          cd rust/pczt_signing_valar
-          cargo test --locked
-
+      # the E2E test loads the wasm artifact, so build it first
       - name: cargo build (wasm32-unknown-unknown, release)
         run: |
           cd rust/pczt_signing_valar
           cargo build --target wasm32-unknown-unknown --release --locked
+
+      - name: cargo test (native, V6/ironwood E2E)
+        run: |
+          cd rust/pczt_signing_valar
+          cargo test --locked

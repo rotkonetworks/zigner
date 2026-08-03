@@ -4210,7 +4210,7 @@ pub struct ModulePcztSummary {
     /// Ironwood (NU6.3 / V6) actions present in the request. Nonzero marks a
     /// turnstile migration; the confirm screen must surface this so the
     /// ironwood destination is never signed invisibly. The default (non
-    /// nu6.3) module emits 0 here.
+    /// NU6.3) module emits 0 here.
     pub ironwood_actions: u32,
     pub transparent_inputs: u32,
     /// Canonical fee in zatoshi (already includes the ironwood value balance),
