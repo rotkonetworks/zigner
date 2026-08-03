@@ -4287,6 +4287,70 @@ pub fn module_sign_request(
         })
 }
 
+/// Fountain-decode `ur:zigner-module` protocol-module REQUEST frames back to
+/// the raw prelude envelope bytes (`[0x53][crypto][tx_type] || payload`).
+///
+/// The emitting wallet (zafu) animates the module request over the SAME BC-UR
+/// fountain as `ur:zcash-pczt`, but wraps the RAW prelude envelope directly -
+/// there is NO CBOR `{1: bytes}` wrap on the request side (the wallet feeds the
+/// bare envelope to `ur_encode_frames`). So unlike `decode_ur_zcash_pczt` we
+/// return the fountain message verbatim without a CBOR unwrap; the scan
+/// dispatcher then routes on the 6-hex prelude exactly as for a raw-byte /
+/// substrate multi-QR request.
+fn decode_ur_module_request(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDisplayed> {
+    if ur_parts.is_empty() {
+        return Err(ErrorDisplayed::Str {
+            s: "No UR parts provided".to_string(),
+        });
+    }
+
+    // Type guard: every part must be ur:zigner-module/... so a stray QR mid
+    // stream can never poison the fountain decoder.
+    for part in &ur_parts {
+        if !part.to_lowercase().starts_with("ur:zigner-module/") {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Expected ur:zigner-module/... got: {}",
+                    part.chars().take(30).collect::<String>()
+                ),
+            });
+        }
+    }
+
+    if ur_parts.len() == 1 {
+        let (_kind, bytes) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to decode UR: {e:?}"),
+        })?;
+        return Ok(bytes);
+    }
+
+    let mut decoder = ur::ur::Decoder::default();
+    for part in &ur_parts {
+        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to receive UR part: {e:?}"),
+        })?;
+        if decoder.complete() {
+            break;
+        }
+    }
+    if !decoder.complete() {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Incomplete UR sequence: received {} parts but not complete",
+                ur_parts.len()
+            ),
+        });
+    }
+    decoder
+        .message()
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to get UR message: {e:?}"),
+        })?
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: "UR decoder returned None despite being complete".to_string(),
+        })
+}
+
 /// Frame a module sign-response envelope (prelude || digests || signed
 /// PCZTs) as UR strings for animated QR display. Same CBOR `{1: bytes}`
 /// wrap and fountain encoder as the signed-PCZT path, but under a distinct

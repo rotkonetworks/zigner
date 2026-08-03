@@ -613,6 +613,12 @@ namespace signer {
     [Throws=ErrorDisplayed]
     sequence<string> module_response_to_ur([ByRef] sequence<u8> response, u32 max_fragment_len);
 
+    // Fountain-decode ur:zigner-module REQUEST frames to the raw prelude
+    // envelope bytes ([0x53][crypto][tx_type] || payload). No CBOR unwrap:
+    // the request side ships the bare envelope through the UR fountain.
+    [Throws=ErrorDisplayed]
+    sequence<u8> decode_ur_module_request(sequence<string> ur_parts);
+
 
     [Throws=ErrorDisplayed]
     void init_navigation([ByRef] string dbname, sequence<string> seed_names);
