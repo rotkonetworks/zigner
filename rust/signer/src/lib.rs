@@ -4363,10 +4363,7 @@ pub fn module_response_to_ur(
     let cbor_data = encode_pczt_to_cbor(response);
 
     if max_fragment_len == 0 || cbor_data.len() <= max_fragment_len as usize {
-        return Ok(vec![ur::ur::encode(
-            &cbor_data,
-            &ur::Type::Custom(UR_TYPE),
-        )]);
+        return Ok(vec![ur::ur::encode(&cbor_data, &ur::Type::Custom(UR_TYPE))]);
     }
 
     let mut encoder = ur::ur::Encoder::new(&cbor_data, max_fragment_len as usize, UR_TYPE)
