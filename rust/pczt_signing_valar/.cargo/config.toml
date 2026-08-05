@@ -1,0 +1,14 @@
+# This manifest exists to build the SAME source as ../pczt_signing against the
+# Valar NU6.3 forks, so the V6 / Ironwood signing path is actually compiled.
+#
+# That path is `#[cfg(zcash_unstable = "nu6.3")]`-gated in the shared source —
+# including the `From<pczt::orchard::BundleParseError>` impl that
+# `Signer::sign_orchard_with` requires on this rev. Without the cfg the wrong
+# `From` impl is selected and the crate fails to compile with a trait-bound
+# error that looks like a broken fork but is only a missing flag.
+#
+# Setting it here rather than relying on the caller's environment means
+# `cargo test` in this directory does the right thing, and CI cannot silently
+# build the non-ironwood variant and report it as passing.
+[build]
+rustflags = ["--cfg", 'zcash_unstable="nu6.3"']
