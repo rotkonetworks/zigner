@@ -19,19 +19,22 @@ ur = "0.4"
 # SHA-256 for seed fingerprint
 sha2 = "0.10"
 # PCZT (Partially Created Zcash Transaction) for Zashi hardware wallet signing
-# NU6.2 release stack — must match the pczt 0.7 format zafu/zcli now produce.
-# Note: requires transparent feature due to bug in pczt crate where signer role references transparent types
-pczt = { version = "0.7", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
-zcash_transparent = { version = "0.8", package = "zcash_transparent", features = ["transparent-inputs"] }
+# NU6.3 / Ironwood release stack. pczt 0.9.2 is the first crates.io release
+# carrying the Ironwood (V6) pool UNGATED - no `zcash_unstable` cfg, no fork -
+# so the shipped device can sign a V6 turnstile migration.
+# Note: requires transparent feature due to the signer role referencing
+# transparent types.
+pczt = { version = "0.9.2", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent"] }
+zcash_transparent = { version = "0.10", package = "zcash_transparent", features = ["transparent-inputs"] }
 # Orchard crate for SpendAuthorizingKey type - use same version as pczt
-orchard = "0.14"
+orchard = "0.15"
 # Address encoding for PCZT recipient display
-zcash_address = "0.12"
-zcash_protocol = "0.9"
+zcash_address = "0.13"
+zcash_protocol = "0.10"
 # gh #17 on-device FROST PCZT verify: recompute sighash (zcash_primitives) +
 # OVK-decode outputs (zcash_note_encryption). Both already in the build graph
 # transitively via pczt/orchard — direct deps add no new compilation.
-zcash_primitives = "0.28"
+zcash_primitives = "0.30"
 zcash_note_encryption = "0.4"
 # Auth identity derivation (HMAC-SHA512 KDF) and backup encryption
 hmac = "0.12"
@@ -74,6 +77,15 @@ oslog = "0.2"
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
 log = "0.4.21"
+
+# Test-only: the wallet-side half of the PCZT contract, so the V5
+# non-regression and V6/ironwood tests build REAL PCZTs and drive the shipped
+# inspect/sign code over them. Dev-dependencies are not compiled for
+# `cargo build`, so none of this reaches the Android artifact.
+[dev-dependencies]
+pczt = { version = "0.9.2", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent", "io-finalizer", "zcp-builder"] }
+zcash_protocol = { version = "0.10", features = ["local-consensus"] }
+
 
 [build-dependencies]
 definitions = {path = "../definitions"}

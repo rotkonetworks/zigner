@@ -1087,19 +1087,33 @@ pub struct ZcashSignContext {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZcashPcztInspection {
+    /// Number of actions in the Orchard bundle.
     pub action_count: u32,
+    /// Number of actions in the Ironwood bundle (NU6.3 / V6 pool). `0` for a
+    /// V5 transaction. A turnstile migration is exactly the case where this is
+    /// non-zero while the Orchard side looks like a pure spend, so a review
+    /// screen that only shows `action_count` renders a migration as money
+    /// leaving with no destination.
+    pub ironwood_action_count: u32,
+    /// Orchard spends first, then Ironwood spends.
     pub spends: Vec<ZcashPcztSpend>,
+    /// Orchard outputs first, then Ironwood outputs.
     pub outputs: Vec<ZcashPcztOutput>,
     /// True transaction fee = (transparent inputs − transparent outputs)
     ///                     + sapling value_balance
-    ///                     + orchard value_balance.
-    /// Honest across all three bundles. Was previously labeled "Fee" but only
+    ///                     + orchard value_balance
+    ///                     + ironwood value_balance.
+    /// Honest across all bundles. Was previously labeled "Fee" but only
     /// computed the Orchard component, which is wrong when transparent legs
-    /// (shielding / deshielding) exist.
+    /// (shielding / deshielding) exist — and, for a turnstile migration, would
+    /// report ~the entire migrated amount as the fee.
     pub fee_zat: i64,
     /// Net value of the Orchard bundle alone (kept for diagnostics; for the
     /// canonical fee see `fee_zat`).
     pub orchard_net_value: i64,
+    /// Net value of the Ironwood bundle alone (diagnostics; see `fee_zat`).
+    /// `0` for a V5 transaction.
+    pub ironwood_net_value: i64,
     pub verified_balance: u64,
     pub known_spends: u32,
     /// Transaction version (v5 = 5 for current NU6/NU6.1).

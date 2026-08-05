@@ -35,12 +35,23 @@ Transport is **redacted-PCZT in, full signed PCZT out**:
 
 ## Crate pins for interop
 
-Wallet side already exists: zcli `feat/pczt-builder` has producer +
-extractor + redactor + UR fountain decoder, pinned to
-`pczt` @ librustzcash rev `5333c01b` (features incl. `signer`),
-orchard 0.12. **Zigner's signer module must pin the same rev** - PCZT
-field-level compat matters more than crate age. NU6.3/Ironwood: rev bump to
-the Valar fork branches once stable; V6 sighash recompute comes with it.
+Both `rust/signer` (the shipped uniffi library) and `rust/pczt_signing`
+(the protocol module compiled to wasm) now track the RELEASED crates.io
+stack: `pczt` 0.9.2, orchard 0.15, `zcash_primitives` 0.30,
+`zcash_protocol` 0.10, `zcash_transparent` 0.10, `zcash_keys` 0.16.
+
+NU6.3 / Ironwood needs **no fork and no `zcash_unstable` build flag** any
+more:
+`pczt` 0.9.2 ships the Ironwood pool unconditionally, so the default build compiles
+and tests the V6 signing path. The `pczt_signing_valar` spike that used to
+prove this against the Valar fork branches has been deleted; its coverage
+moved into `rust/pczt_signing/tests/{v6_ironwood,v6_ironwood_module}.rs`.
+
+Wire-format note: since `pczt` 0.9 `Pczt::serialize` picks the minimal
+encoding - the v1 PCZT encoding whenever the PCZT is v1-representable (V5
+transaction with a canonical-empty Ironwood bundle), the v2 encoding
+otherwise. V5 responses therefore stay byte-format-compatible with wallets
+that predate the v2 encoding.
 
 ## Zigner implementation plan
 
@@ -77,11 +88,10 @@ Done in `rust/pczt_signing` (standalone crate, all tested):
   -> valid v5 tx
 
 Remaining:
-- Workspace merge: the legacy resolver-1 workspace pins orchard 0.10 and
-  several deps of the new stack are yanked on crates.io (orchard 0.12.0,
-  core2 0.3.x, halo2_gadgets 0.4.0 - locks seeded from zcli's
-  feat/pczt-builder lockfile bypass this). Merge lands together with the
-  NU6.3 rev bump.
+- Workspace merge: `pczt_signing` is still a standalone `[workspace]`
+  because the legacy resolver-1 workspace pins orchard 0.10 (via
+  `frost-spend`). `rust/signer` itself is now on orchard 0.15 alongside it,
+  so the two coexist in the same lockfile.
 - Kotlin: uniffi surface for summarize_request/sign_request + confirm
   screen rendering PcztSummary; scan dispatcher routes tx_type 0x03/0x04.
 - UR fountain framing on the response for large batches.
@@ -92,5 +102,7 @@ Remaining:
   signs everything through Ironwood activation.
 - Phase 1 (single PCZT verify+sign): after zcli `feat/pczt-builder` lands;
   no NU6.3 dependency for V5 txs.
-- Phase 2 (batch + Ironwood V6): when Valar crate branches stabilize;
-  before NU6.3 activation for migration UX.
+- Phase 2 (batch + Ironwood V6): DONE against released `pczt` 0.9.2 - no
+  fork, no build flag. Both the shipped `rust/signer` entry points
+  (`inspect_zcash_pczt` / `sign_zcash_pczt`) and the wasm protocol module
+  summarize and sign a V6 turnstile migration.

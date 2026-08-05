@@ -1,10 +1,16 @@
-name: Rust NU6.3 ironwood signer (valar fork build)
+name: Rust NU6.3 ironwood signer
 
-# Guards the cfg(zcash_unstable = "nu6.3") ironwood signing path:
-# rust/pczt_signing_valar is a parallel manifest over the SAME source as
-# rust/pczt_signing, pinned to the valargroup librustzcash / orchard forks.
-# The default build never sets the cfg, so this job is the only thing that
-# compiles the ironwood code - without it the path regresses silently.
+# Guards the ironwood (NU6.3 / V6) signing path in rust/pczt_signing.
+#
+# Ironwood used to require a fork of librustzcash plus
+# RUSTFLAGS='--cfg zcash_unstable="nu6.3"', built through the parallel
+# rust/pczt_signing_valar manifest. Released `pczt` 0.9.2 ships Ironwood
+# UNGATED, so there is no cfg and no fork any more: the default build compiles
+# the ironwood code and the ironwood tests run in the default suite.
+#
+# This job still exists because the wasmi round-trip test needs the module wasm
+# built FIRST (it skips loudly otherwise), and that is the artifact the Android
+# device actually loads as assets/modules/module0.wasm.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,10 +24,8 @@ on:
 
 jobs:
   ironwood:
-    name: Cargo test + wasm build (nu6.3 cfg)
+    name: Cargo test + wasm build (ironwood)
     runs-on: ubuntu-22.04
-    env:
-      RUSTFLAGS: --cfg zcash_unstable="nu6.3"
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -34,15 +38,15 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@27b8ea9368cf428f0bfe41b0876b1a7e809d9844 # v2.7.7
         with:
-          workspaces: rust/pczt_signing_valar -> rust/pczt_signing_valar/target
+          workspaces: rust/pczt_signing -> rust/pczt_signing/target
 
-      # the E2E test loads the wasm artifact, so build it first
+      # the E2E wasmi test loads the wasm artifact, so build it first
       - name: cargo build (wasm32-unknown-unknown, release)
         run: |
-          cd rust/pczt_signing_valar
+          cd rust/pczt_signing
           cargo build --target wasm32-unknown-unknown --release --locked
 
-      - name: cargo test (native, V6/ironwood E2E)
+      - name: cargo test (native, V5 + V6/ironwood E2E)
         run: |
-          cd rust/pczt_signing_valar
-          cargo test --locked
+          cd rust/pczt_signing
+          cargo test --release --locked

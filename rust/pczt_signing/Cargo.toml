@@ -8,27 +8,21 @@ license = "MIT"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# src/lib.rs carries cfg(zcash_unstable = "nu6.3") blocks that are only
-# compiled by the parallel Valar-fork manifest in ../pczt_signing_valar.
-# Declaring the cfg here keeps the default build warning-clean; it does
-# not change the dependency graph or any compiled code.
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(zcash_unstable, values("nu6.3"))'] }
-
 # Standalone on purpose: the zigner workspace is resolver=1 with an older
-# zcash stack (orchard 0.10). This crate pins the SAME librustzcash rev as
-# zcli feat/pczt-builder so PCZT field-level interop with zafu/zashi/vizor
-# is exact. Fold into the workspace when the legacy crates migrate.
+# zcash stack (orchard 0.10 via frost-spend). This crate tracks the released
+# crates.io stack (pczt 0.9.x / orchard 0.15 / zcash_primitives 0.30), which
+# ships Ironwood (NU6.3 / V6) UNGATED - no `zcash_unstable` cfg is required
+# any more. Fold into the workspace when the legacy crates migrate.
 [workspace]
 
 [dependencies]
-pczt = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["orchard", "transparent", "signer"] }
-zcash_keys = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["orchard", "transparent-inputs"] }
-zcash_protocol = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false }
-zcash_primitives = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", default-features = false, features = ["transparent-inputs"] }
-orchard = { version = "0.12", default-features = false }
+pczt = { version = "0.9.2", default-features = false, features = ["orchard", "transparent", "signer"] }
+zcash_keys = { version = "0.16.1", default-features = false, features = ["orchard", "transparent-inputs"] }
+zcash_protocol = { version = "0.10.4", default-features = false }
+zcash_primitives = { version = "0.30", default-features = false, features = ["transparent-inputs"] }
+orchard = { version = "0.15", default-features = false }
 zip32 = { version = "0.2", default-features = false }
-zcash_transparent = { git = "https://github.com/zcash/librustzcash", rev = "5333c01b", package = "zcash_transparent", default-features = false, features = ["transparent-inputs"] }
+zcash_transparent = { version = "0.10", package = "zcash_transparent", default-features = false, features = ["transparent-inputs"] }
 bip39 = "2"
 sha2 = { version = "0.10", default-features = false }
 # pczt's signer role uses rand_core::OsRng; the flag arrives via feature
@@ -36,10 +30,20 @@ sha2 = { version = "0.10", default-features = false }
 rand_core = { version = "0.6", features = ["getrandom"] }
 
 [dev-dependencies]
-# The wallet-side half of the contract - producer, redactor, extractor -
-# so the interop test proves the exact bytes zafu will ship.
-zafu-wasm = { git = "https://github.com/rotkonetworks/zcli.git", branch = "feat/pczt-builder", default-features = false }
+# The wallet-side half of the contract - Creator / IoFinalizer / Prover /
+# Redactor / SpendFinalizer / TransactionExtractor - driven straight from the
+# released `pczt` roles. (The previous `zafu-wasm` dev-dep is pinned to the
+# 5333c01b librustzcash rev and cannot unify with the 0.9.2 stack; the roles
+# it wrapped are the same upstream roles used directly here.)
+pczt = { version = "0.9.2", default-features = false, features = ["orchard", "transparent", "signer", "io-finalizer", "zcp-builder", "prover", "tx-extractor", "spend-finalizer"] }
+zcash_protocol = { version = "0.10.4", default-features = false, features = ["local-consensus"] }
+orchard = { version = "0.15", default-features = false, features = ["circuit"] }
 secp256k1 = "0.29"
+# The kernel-side wasmi runtime, so the V6 round-trip test can drive the
+# bundled module wasm through the EXACT runtime the Android device uses
+# (ModuleRuntime::summarize_request / sign_request). module_host has no zcash
+# deps (wasmi + rand_core + ed25519 + sha2), so it links cleanly here.
+module_host = { path = "../module_host" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # wasmi module builds: randomness is a host capability. RedPallas signing

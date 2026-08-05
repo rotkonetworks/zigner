@@ -33,21 +33,13 @@ pub enum Error {
 }
 
 // The low-level Signer role requires the sign closure's error type to be
-// `From<..>` of the pczt rev's bundle re-parse error. The two pinned revs
-// differ: the NU6.3 valar fork uses `pczt::orchard::BundleParseError` (which
-// also carries the V6 consensus-branch check for the ironwood bundle); the
-// default 5333c01b rev uses `orchard::pczt::ParseError` directly. Provide the
-// `From` impl the active rev's bound needs. Both map into `Error::Parse`.
-#[cfg(zcash_unstable = "nu6.3")]
-impl From<pczt::orchard::BundleParseError> for Error {
-    fn from(e: pczt::orchard::BundleParseError) -> Self {
-        Error::Parse(format!("orchard bundle parse: {e:?}"))
-    }
-}
-
-#[cfg(not(zcash_unstable = "nu6.3"))]
-impl From<orchard::pczt::ParseError> for Error {
-    fn from(e: orchard::pczt::ParseError) -> Self {
+// `From` of the bundle re-parse error. Since pczt 0.9 that is a single
+// `low_level_signer::OrchardParseError` shared by BOTH the orchard and the
+// ironwood entry points - it carries the structural parse failure, the
+// unsupported-consensus-branch case, and the "signing closure added, removed
+// or reordered actions" guard. All of them map into `Error::Parse`.
+impl From<pczt::roles::low_level_signer::OrchardParseError> for Error {
+    fn from(e: pczt::roles::low_level_signer::OrchardParseError) -> Self {
         Error::Parse(format!("orchard bundle parse: {e:?}"))
     }
 }
@@ -70,9 +62,8 @@ pub struct PcztSummary {
     /// Number of orchard actions we will spend-auth sign.
     pub orchard_actions: usize,
     /// Number of ironwood actions (NU6.3 / V6 pool, orchard-shaped) present.
-    /// Only exists when built against a NU6.3-capable stack; the default
-    /// 5333c01b-pinned build never sets the cfg and compiles this out.
-    #[cfg(zcash_unstable = "nu6.3")]
+    /// Always populated: the released `pczt` stack models the Ironwood bundle
+    /// unconditionally, so a V5 PCZT simply reports 0 here.
     pub ironwood_actions: usize,
     /// Number of transparent inputs we will sign.
     pub transparent_inputs: usize,
@@ -111,11 +102,11 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
         }
     }
 
-    // Ironwood (NU6.3 / V6): the fork models the new pool as a second
-    // orchard-shaped bundle, so display extraction is identical.
-    #[cfg(zcash_unstable = "nu6.3")]
+    // Ironwood (NU6.3 / V6): upstream models the new pool as a second
+    // orchard-shaped bundle, so display extraction is identical. A V5 PCZT
+    // carries the canonical empty Ironwood bundle, so this loop is a no-op
+    // there and `ironwood_actions` is 0.
     let ironwood_actions = pczt.ironwood().actions().len();
-    #[cfg(zcash_unstable = "nu6.3")]
     for action in pczt.ironwood().actions() {
         let out = action.output();
         let label = match out.recipient() {
@@ -142,18 +133,22 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     // computation reads (redaction only clears witnesses/proofs, not the
     // value commitments), so this succeeds on exactly the bytes we display.
     //
-    // Gated to the nu6.3 build: it is the ironwood/turnstile path where an
-    // omitted ironwood value_sum would understate the fee. The default
-    // 5333c01b build keeps its prior behaviour (fee_zat = None) for normal
-    // orchard sends and is untouched - per FIX-B "do not touch that path".
-    #[cfg(zcash_unstable = "nu6.3")]
-    let fee_zat = compute_fee_zat(pczt_bytes);
-    #[cfg(not(zcash_unstable = "nu6.3"))]
-    let fee_zat = None;
+    // Scoped to PCZTs that actually carry an ironwood bundle: it is the
+    // ironwood/turnstile path where an omitted ironwood value_sum would
+    // understate the fee. A V5 / ironwood-empty PCZT keeps the shipped
+    // behaviour EXACTLY (fee_zat = None, rendered "unknown") - per FIX-B
+    // "do not touch that path". This condition replaces the old
+    // `cfg(zcash_unstable = "nu6.3")` gate one-for-one: under the released
+    // stack the cfg no longer exists, and the old default build could never
+    // see a non-empty ironwood bundle in the first place.
+    let fee_zat = if ironwood_actions > 0 {
+        compute_fee_zat(pczt_bytes)
+    } else {
+        None
+    };
 
     Ok(PcztSummary {
         orchard_actions,
-        #[cfg(zcash_unstable = "nu6.3")]
         ironwood_actions,
         transparent_inputs,
         outputs,
@@ -168,7 +163,6 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
 /// input whose prevout value we cannot supply). A `None` fee renders as
 /// "unknown" on the device rather than a wrong number - fail-closed for the
 /// confirmation screen.
-#[cfg(zcash_unstable = "nu6.3")]
 fn compute_fee_zat(pczt_bytes: &[u8]) -> Option<u64> {
     let pczt = Pczt::parse(pczt_bytes).ok()?;
     let effects = pczt.into_effects().ok()?;
@@ -305,7 +299,9 @@ pub fn sign_redacted_pczt(
         )
     })?;
 
-    #[cfg(zcash_unstable = "nu6.3")]
+    // Ironwood spends: identical treatment. On a V5 PCZT the ironwood bundle
+    // is empty, so the closure iterates zero actions and the PCZT round-trips
+    // through `reserialize()` unchanged.
     let low = low.sign_ironwood_with(|pczt_ref, bundle, _tx_modifiable| {
         sign_actions_with_fvk(
             pczt_ref,
@@ -355,7 +351,13 @@ pub fn sign_redacted_pczt(
     }
 
     let pczt = signer.finish();
-    Ok(pczt.serialize())
+    // Since pczt 0.9, `serialize` picks the MINIMAL encoding that can carry the
+    // content: the v1 encoding whenever the PCZT is v1-representable (V5 tx and
+    // canonical-empty ironwood bundle), the v2 encoding otherwise. So a V5
+    // signing response still goes back over the QR as v1 bytes - unchanged for
+    // every wallet that predates v2 - while a V6 / ironwood response uses v2.
+    pczt.serialize()
+        .map_err(|e| Error::Sign(format!("serialize: {e:?}")))
 }
 
 #[derive(Debug)]
@@ -471,14 +473,11 @@ mod wasm_abi {
                     // device confirmation head reflects a turnstile migration;
                     // an ironwood-blind head (orchard actions only) would let a
                     // migration render as an empty/zero-action transaction. The
-                    // default 5333c01b build has no ironwood pool and emits
+                    // A V5 PCZT has no ironwood actions and emits
                     // ironwood_actions=0. `fee` is the canonical fee that
                     // already includes the ironwood value balance (see
                     // compute_fee_zat); "unknown" when not derivable.
-                    #[cfg(zcash_unstable = "nu6.3")]
                     let ironwood_actions = s.ironwood_actions;
-                    #[cfg(not(zcash_unstable = "nu6.3"))]
-                    let ironwood_actions = 0usize;
                     let fee = match s.fee_zat {
                         Some(v) => v.to_string(),
                         None => "unknown".to_string(),

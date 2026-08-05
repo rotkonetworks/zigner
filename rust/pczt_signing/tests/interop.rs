@@ -1,18 +1,32 @@
-//! End-to-end interop: zafu's wallet pipeline produces and redacts the
-//! PCZT, THIS crate signs it as the cold signer, and zafu's extractor
-//! turns the result into a broadcastable transaction. This is the exact
-//! seam Keystone occupies for zashi/vizor.
+//! End-to-end interop for the V5 (orchard) path: the wallet pipeline
+//! produces and redacts the PCZT, THIS crate signs it as the cold signer,
+//! and the extractor turns the result into a broadcastable transaction.
+//! This is the exact seam Keystone occupies for zashi/vizor.
+//!
+//! The redaction is zafu's `redact_pczt_for_signer`, mirrored in
+//! `tests/common/mod.rs` (see the note there on why it is no longer a
+//! `zafu-wasm` dev-dependency).
+//!
+//! V5 ANTI-REGRESSION: this is the test that pins the shipped orchard
+//! money path. It must keep passing byte-for-byte in behaviour across the
+//! pczt 0.7 -> 0.9.2 move.
 //!
 //! Slow test: builds the orchard proving key + one Halo2 proof.
 
+mod common;
+
+use common::{redact_pczt_for_signer, MNEMONIC};
 use pczt::{
-    roles::{creator::Creator, io_finalizer::IoFinalizer, prover::Prover, spend_finalizer::SpendFinalizer},
+    roles::{
+        creator::Creator, io_finalizer::IoFinalizer, prover::Prover,
+        spend_finalizer::SpendFinalizer, tx_extractor::TransactionExtractor,
+    },
     Pczt,
 };
 use rand_core::OsRng;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_primitives::transaction::{
-    builder::{BuildConfig, Builder},
+    builder::{BuildConfig, Builder, BundlePadding},
     fees::zip317,
 };
 use zcash_protocol::{consensus::MainNetwork, memo::MemoBytes, value::Zatoshis};
@@ -21,8 +35,6 @@ use zcash_transparent::{
     keys::{NonHardenedChildIndex, TransparentKeyScope},
 };
 use zip32::AccountId;
-
-const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 #[test]
 fn wallet_produces_device_signs_wallet_extracts() {
@@ -50,12 +62,22 @@ fn wallet_produces_device_signs_wallet_extracts() {
         .address_at(0u32, orchard::keys::Scope::External);
 
     // ── wallet side: build ──
+    // Target height sits in the NU6.2 window (mainnet NU6.2 = 3_364_600,
+    // NU6.3 = 3_428_143), so the builder targets consensus branch Nu6_2 and
+    // produces a TxVersion::V5 transaction with an `orchard_v2` bundle. That
+    // is the shipped V5 shape this test exists to pin. (The old height of
+    // 10_000_000 predated NU6.3 having an activation height at all; with the
+    // 0.9.2 stack it would now suggest V6.)
     let mut builder = Builder::new(
         params,
-        10_000_000.into(),
+        3_400_000.into(),
         BuildConfig::Standard {
             sapling_anchor: None,
             orchard_anchor: Some(orchard::Anchor::empty_tree()),
+            // V5: no ironwood bundle at all.
+            ironwood_anchor: None,
+            orchard_padding: BundlePadding::DEFAULT,
+            ironwood_padding: BundlePadding::DEFAULT,
         },
     );
     builder
@@ -86,13 +108,25 @@ fn wallet_produces_device_signs_wallet_extracts() {
     let pczt = Creator::build_from_parts(parts).expect("Creator");
     let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
     let pczt = Prover::new(pczt)
-        .create_orchard_proof(&orchard::circuit::ProvingKey::build())
+        .create_orchard_proof(&orchard::circuit::ProvingKey::build(
+            orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+        ))
         .expect("orchard prove")
         .finish();
 
     // ── wallet side: redact + ship over the airgap ──
-    let redacted = zafu_wasm::redact_pczt_for_signer(pczt);
-    let over_the_qr = redacted.serialize();
+    let redacted = redact_pczt_for_signer(pczt);
+    let over_the_qr = redacted.serialize().expect("serialize redacted PCZT");
+    // V5 wire-format anti-regression: a V5 PCZT with an empty ironwood bundle
+    // must still serialize in the v1 PCZT encoding, so wallets that predate
+    // the v2 encoding keep working. (`Pczt::serialize` picks the minimal
+    // encoding; PCZT_VERSION_1 == 1 in the 4-byte LE version after the
+    // 4-byte magic.)
+    assert_eq!(
+        &over_the_qr[4..8],
+        &[1, 0, 0, 0],
+        "V5 PCZT must still use the v1 encoding over the QR"
+    );
 
     // ── device side: THIS crate, through the full QR envelope ──
     use pczt_signing::envelope::{self, RequestMessage, SignRequest};
@@ -136,8 +170,14 @@ fn wallet_produces_device_signs_wallet_extracts() {
     let finalized = SpendFinalizer::new(signed)
         .finalize_spends()
         .expect("SpendFinalizer - fails if the device did not actually sign");
-    let tx_bytes = zafu_wasm::extract_signed_tx_from_pczt_bytes(&finalized.serialize())
+    let tx = TransactionExtractor::new(finalized)
+        .with_orchard(&orchard::circuit::VerifyingKey::build(
+            orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+        ))
+        .extract()
         .expect("extract broadcastable tx");
+    let mut tx_bytes = Vec::new();
+    tx.write(&mut tx_bytes).expect("serialize tx");
 
     assert!(tx_bytes.len() > 1000, "extracted tx suspiciously small");
     // v5 header sanity: version 5 | 1<<31 little-endian

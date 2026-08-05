@@ -2004,6 +2004,21 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
     }
     let action_count = action_count_raw as u32;
 
+    // Ironwood (NU6.3 / V6) is a second, orchard-shaped bundle. A V5 PCZT
+    // carries the canonical EMPTY ironwood bundle, so everything below is a
+    // no-op there and every ironwood-derived value is 0 — the V5 inspection
+    // is unchanged. The same allocation cap applies.
+    let ironwood = pczt.ironwood();
+    let ironwood_count_raw = ironwood.actions().len();
+    if ironwood_count_raw > MAX_ORCHARD_ACTIONS {
+        return Err(ErrorDisplayed::Str {
+            s: format!(
+                "Ironwood bundle has {ironwood_count_raw} actions, exceeds cap {MAX_ORCHARD_ACTIONS}"
+            ),
+        });
+    }
+    let ironwood_action_count = ironwood_count_raw as u32;
+
     // Load verified notes for cross-reference. Used by the known_spends warning
     // (zigner's distinguishing safety guard over a Keystone-equivalent signer —
     // we can warn when the PCZT spends notes we haven't verified) and to derive
@@ -2071,14 +2086,37 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
             known,
         });
     }
+    // Ironwood spends are appended to the SAME list: they are orchard-shaped,
+    // the verified-note store is keyed by nullifier regardless of pool, and the
+    // review screen must show every note the transaction consumes. Empty for V5.
+    for action in ironwood.actions() {
+        let nullifier_hex = hex::encode(action.spend().nullifier());
+        let known = verified_nullifiers.contains(&nullifier_hex);
+        let value = if known {
+            known_spends += 1;
+            verified_notes_values
+                .get(&nullifier_hex)
+                .copied()
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        spends.push(ZcashPcztSpend {
+            value,
+            nullifier_hex,
+            known,
+        });
+    }
 
     // Extract output details with human-readable addresses
     let mut outputs = Vec::new();
-    for action in orchard.actions() {
+    for action in orchard.actions().iter().chain(ironwood.actions().iter()) {
         let value = action.output().value().unwrap_or(0);
         let recipient_hex = match action.output().recipient() {
             Some(raw_bytes) => {
-                // Decode raw 43-byte Orchard address to unified address string
+                // Decode raw 43-byte Orchard address to unified address string.
+                // Ironwood receivers are the same 43-byte raw orchard address,
+                // so the same encoding applies.
                 encode_orchard_recipient(raw_bytes, is_mainnet)
                     .unwrap_or_else(|| hex::encode(raw_bytes))
             }
@@ -2098,15 +2136,27 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
     } else {
         value_sum_magnitude as i64
     };
+    let &(iw_magnitude, iw_is_negative) = ironwood.value_sum();
+    let ironwood_net_value: i64 = if iw_is_negative {
+        -(iw_magnitude as i64)
+    } else {
+        iw_magnitude as i64
+    };
 
-    // True fee = Σ over all three bundles of (in − out).
+    // True fee = Σ over ALL bundles of (in − out).
     // - transparent: explicit input.value − output.value sum
     // - sapling: bundle exposes value_sum (i128) — same sign convention
     // - orchard: orchard_net_value above
+    // - ironwood: ironwood_net_value above
     //
     // For shielded-only txs the transparent + sapling terms are zero and the
     // fee equals orchard_net_value, so the old code accidentally worked.
     // For shielding / deshielding it didn't.
+    //
+    // The ironwood term is load-bearing for a turnstile migration: the migrated
+    // value LEAVES the orchard pool, so orchard_net_value alone is ~the whole
+    // migrated amount. Omitting the ironwood value_sum would display that as
+    // the fee. It is exactly 0 for a V5 transaction, so V5 fees are unchanged.
     let transparent = pczt.transparent();
     let transparent_in: u64 = transparent.inputs().iter().map(|i| *i.value()).sum();
     let transparent_out: u64 = transparent.outputs().iter().map(|o| *o.value()).sum();
@@ -2122,7 +2172,8 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
     };
     let fee_zat: i64 = transparent_balance
         .saturating_add(sapling_balance)
-        .saturating_add(orchard_net_value);
+        .saturating_add(orchard_net_value)
+        .saturating_add(ironwood_net_value);
 
     // Global tx metadata. Cold device displays these so the user knows
     // which consensus fork + expiry window they're authorizing.
@@ -2133,10 +2184,12 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
 
     Ok(ZcashPcztInspection {
         action_count,
+        ironwood_action_count,
         spends,
         outputs,
         fee_zat,
         orchard_net_value,
+        ironwood_net_value,
         verified_balance,
         known_spends,
         tx_version,
@@ -2185,6 +2238,12 @@ fn sign_zcash_pczt(
     // PCZT-embedded ASK for those.
     let action_count = inspection.action_count as usize;
     let known_action_indices: Vec<usize> = (0..action_count).collect();
+    // Ironwood (NU6.3 / V6) spends carry the SAME orchard spend-auth key: the
+    // pool reuses the orchard key tree, so the one `ask` below authorizes both
+    // bundles. 0 for a V5 transaction, which therefore takes exactly the path
+    // it took before.
+    let ironwood_action_count = inspection.ironwood_action_count as usize;
+    let ironwood_action_indices: Vec<usize> = (0..ironwood_action_count).collect();
 
     // Parse the PCZT to get action count first
     let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
@@ -2223,11 +2282,18 @@ fn sign_zcash_pczt(
             signed_count += 1;
         }
     }
-    if signed_count == 0 && !known_action_indices.is_empty() {
+    // Same try-and-skip over the ironwood bundle. Loop body never runs for V5.
+    for action_index in &ironwood_action_indices {
+        if signer.sign_ironwood(*action_index, &ask).is_ok() {
+            signed_count += 1;
+        }
+    }
+    if signed_count == 0 && !(known_action_indices.is_empty() && ironwood_action_indices.is_empty())
+    {
         return Err(ErrorDisplayed::Str {
             s: format!(
                 "Could not sign any of the {} action(s) — none match the user's spending key.",
-                known_action_indices.len()
+                known_action_indices.len() + ironwood_action_indices.len()
             ),
         });
     }
@@ -2235,8 +2301,15 @@ fn sign_zcash_pczt(
     // Finish signing and get the signed PCZT
     let signed_pczt = signer.finish();
 
-    // Serialize back to bytes
-    Ok(signed_pczt.serialize())
+    // Serialize back to bytes. Since pczt 0.9 `serialize` picks the MINIMAL
+    // encoding that can carry the content: the v1 PCZT encoding whenever the
+    // PCZT is v1-representable (V5 tx + canonical-empty ironwood bundle), the
+    // v2 encoding otherwise. A V5 response therefore still goes back to
+    // Zashi/zafu as v1 bytes, byte-identical in format to what shipped; only a
+    // V6 / ironwood response needs v2.
+    signed_pczt.serialize().map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to serialize signed PCZT: {:?}", e),
+    })
 }
 
 /// Encode signed PCZT as UR string(s) for QR display
@@ -4385,4 +4458,342 @@ pub fn module_response_to_ur(
 #[cfg(test)]
 mod tests {
     //use super::*;
+}
+
+/// PCZT money-path tests for the SHIPPED signer entry points
+/// (`inspect_zcash_pczt` / `sign_zcash_pczt`), driven over real PCZTs built
+/// with the wallet-side roles.
+///
+/// Two axes, both mandatory:
+///   * V5 NON-REGRESSION - an ordinary orchard send must inspect and sign
+///     exactly as before the pczt 0.7 -> 0.9.2 move, and the signed response
+///     must still be a v1-encoded PCZT.
+///   * V6 / IRONWOOD - a turnstile migration must be visible on the review
+///     screen (ironwood action count, destination, honest fee) and every
+///     ironwood action must come back signed.
+///
+/// These tests intentionally do NOT strip the spend `fvk`: the high-level
+/// `pczt::roles::signer::Signer` used here needs it (its `verify_nullifier`
+/// runs with `None` and does not tolerate `MissingFullViewingKey`). That is
+/// the Zashi-style redaction this entry point has always assumed. The
+/// fvk-stripped ("R3") transport is the wasm module's path and is covered in
+/// `rust/pczt_signing`.
+#[cfg(test)]
+mod zcash_pczt_tests {
+    use super::{inspect_zcash_pczt, sign_zcash_pczt};
+    use pczt::roles::{creator::Creator, io_finalizer::IoFinalizer};
+    use pczt::Pczt;
+    use transaction_signing::zcash::OrchardSpendingKey;
+    use zcash_primitives::transaction::{
+        builder::{BuildConfig, Builder, BundlePadding},
+        fees::zip317,
+        TxVersion,
+    };
+    use zcash_protocol::{
+        consensus::BlockHeight, local_consensus::LocalNetwork, memo::MemoBytes, value::Zatoshis,
+    };
+
+    /// 24 words: `bip32` 0.5 (what the shipped `OrchardSpendingKey` derivation
+    /// uses) only accepts 256-bit entropy, i.e. 24-word mnemonics.
+    const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                            abandon abandon abandon abandon abandon abandon abandon abandon \
+                            abandon abandon abandon abandon abandon abandon abandon art";
+    const NOTE_VALUE: u64 = 1_000_000;
+
+    /// Regtest params with every upgrade live from height 1. `nu6_3` selects
+    /// whether the builder targets branch `Nu6_3` (`TxVersion::V6`, Ironwood
+    /// available) or `Nu6_2` (`TxVersion::V5`, the shipped path).
+    fn params(nu6_3: bool) -> LocalNetwork {
+        let h = |x: u32| Some(BlockHeight::from_u32(x));
+        LocalNetwork {
+            overwinter: h(1),
+            sapling: h(1),
+            blossom: h(1),
+            heartwood: h(1),
+            canopy: h(1),
+            nu5: h(1),
+            nu6: h(1),
+            nu6_1: h(1),
+            nu6_2: h(1),
+            nu6_3: if nu6_3 { h(1) } else { None },
+        }
+    }
+
+    /// The exact orchard key the signer derives from `MNEMONIC` at account 0.
+    /// Deriving it through the SHIPPED path means a key-derivation change
+    /// would break these tests rather than silently produce fixtures
+    /// this key cannot sign.
+    fn wallet_keys() -> (orchard::keys::SpendingKey, orchard::keys::FullViewingKey) {
+        let sk = OrchardSpendingKey::from_seed_phrase(MNEMONIC, 0)
+            .expect("derive orchard spending key")
+            .to_spending_key()
+            .expect("orchard spending key");
+        let fvk = orchard::keys::FullViewingKey::from(&sk);
+        (sk, fvk)
+    }
+
+    /// A spendable orchard note owned by the wallet, plus its witness/anchor.
+    fn wallet_note(
+        fvk: &orchard::keys::FullViewingKey,
+    ) -> (orchard::Note, orchard::tree::MerklePath, orchard::Anchor) {
+        let rho = orchard::note::Rho::from_bytes(&[1u8; 32]).unwrap();
+        let rseed = (0u8..=255)
+            .find_map(|b| orchard::note::RandomSeed::from_bytes([b; 32], &rho).into_option())
+            .expect("test rseed");
+        let note: orchard::Note = Option::from(orchard::Note::from_parts(
+            fvk.address_at(0u32, orchard::keys::Scope::External),
+            orchard::value::NoteValue::from_raw(NOTE_VALUE),
+            rho,
+            rseed,
+            orchard::note::NoteVersion::V2,
+        ))
+        .expect("test note");
+
+        let zero = Option::from(orchard::tree::MerkleHashOrchard::from_bytes(&[0u8; 32]))
+            .expect("zero merkle hash");
+        let witness = orchard::tree::MerklePath::from_parts(0, [zero; 32]);
+        let cmx: orchard::note::ExtractedNoteCommitment = note.commitment().into();
+        let anchor = witness.root(cmx);
+        (note, witness, anchor)
+    }
+
+    /// Wallet-side: an ordinary V5 orchard send to an external recipient.
+    /// Returns `(pczt_bytes, fee, sent_value)`.
+    fn build_v5_send() -> (Vec<u8>, u64, u64) {
+        let net = params(false);
+        let (_sk, fvk) = wallet_keys();
+        let (note, witness, anchor) = wallet_note(&fvk);
+
+        let recipient_sk = orchard::keys::SpendingKey::from_bytes([9u8; 32]).unwrap();
+        let recipient = orchard::keys::FullViewingKey::from(&recipient_sk)
+            .address_at(0u32, orchard::keys::Scope::External);
+
+        let make = |sent: u64| {
+            let mut b = Builder::new(
+                net,
+                BlockHeight::from_u32(100),
+                BuildConfig::Standard {
+                    sapling_anchor: None,
+                    orchard_anchor: Some(anchor),
+                    ironwood_anchor: None,
+                    orchard_padding: BundlePadding::DEFAULT,
+                    ironwood_padding: BundlePadding::DEFAULT,
+                },
+            );
+            b.propose_version::<zip317::FeeRule>(TxVersion::V5)
+                .expect("propose V5");
+            b.add_orchard_spend::<zip317::FeeRule>(fvk.clone(), note, witness.clone())
+                .expect("orchard spend");
+            b.add_orchard_output::<zip317::FeeRule>(
+                None,
+                recipient,
+                Zatoshis::const_from_u64(sent),
+                MemoBytes::empty(),
+            )
+            .expect("orchard output");
+            b
+        };
+
+        let fee = u64::from(
+            make(1)
+                .get_fee(&zip317::FeeRule::standard())
+                .expect("estimate fee"),
+        );
+        let sent = NOTE_VALUE - fee;
+        let parts = make(sent)
+            .build_for_pczt(rand::rngs::OsRng, &zip317::FeeRule::standard())
+            .expect("build_for_pczt")
+            .pczt_parts;
+        assert_eq!(parts.version, TxVersion::V5);
+        let pczt = Creator::build_from_parts(parts).expect("Creator");
+        let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
+        (pczt.serialize().expect("serialize"), fee, sent)
+    }
+
+    /// Wallet-side: a V6 orchard -> ironwood turnstile migration into the
+    /// wallet's own internal address. Returns
+    /// `(pczt_bytes, fee, migrated, ironwood_recipient_raw)`.
+    fn build_v6_migration() -> (Vec<u8>, u64, u64, [u8; 43]) {
+        let net = params(true);
+        let (_sk, fvk) = wallet_keys();
+        let (note, witness, anchor) = wallet_note(&fvk);
+
+        let recipient = fvk.address_at(0u32, orchard::keys::Scope::Internal);
+        let internal_ovk = Some(fvk.to_ovk(orchard::keys::Scope::Internal));
+
+        let make = |migrated: u64| {
+            let mut b = Builder::new(
+                net,
+                BlockHeight::from_u32(100),
+                BuildConfig::Standard {
+                    sapling_anchor: None,
+                    orchard_anchor: Some(anchor),
+                    ironwood_anchor: Some(orchard::Anchor::empty_tree()),
+                    orchard_padding: BundlePadding::DEFAULT,
+                    ironwood_padding: BundlePadding::DEFAULT,
+                },
+            );
+            b.propose_version::<zip317::FeeRule>(TxVersion::V6)
+                .expect("propose V6");
+            b.add_orchard_spend::<zip317::FeeRule>(fvk.clone(), note, witness.clone())
+                .expect("orchard migration spend");
+            b.add_ironwood_output::<zip317::FeeRule>(
+                internal_ovk.clone(),
+                recipient,
+                Zatoshis::const_from_u64(migrated),
+                MemoBytes::empty(),
+            )
+            .expect("ironwood migration output");
+            b
+        };
+
+        let fee = u64::from(
+            make(1)
+                .get_fee(&zip317::FeeRule::standard())
+                .expect("estimate fee"),
+        );
+        let migrated = NOTE_VALUE - fee;
+        let parts = make(migrated)
+            .build_for_pczt(rand::rngs::OsRng, &zip317::FeeRule::standard())
+            .expect("build_for_pczt")
+            .pczt_parts;
+        assert_eq!(parts.version, TxVersion::V6);
+        let pczt = Creator::build_from_parts(parts).expect("Creator");
+        let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
+        (
+            pczt.serialize().expect("serialize"),
+            fee,
+            migrated,
+            recipient.to_raw_address_bytes(),
+        )
+    }
+
+    #[test]
+    fn v5_orchard_send_inspects_and_signs_unchanged() {
+        let (bytes, fee, sent) = build_v5_send();
+
+        let i = inspect_zcash_pczt(bytes.clone()).expect("inspect V5");
+        assert_eq!(i.tx_version, 5, "V5 transaction");
+        assert_eq!(
+            i.ironwood_action_count, 0,
+            "a V5 PCZT has no ironwood actions"
+        );
+        assert_eq!(
+            i.ironwood_net_value, 0,
+            "a V5 PCZT contributes nothing from the ironwood bundle"
+        );
+        assert!(i.action_count >= 1, "orchard actions present");
+        assert_eq!(
+            i.spends.len(),
+            i.action_count as usize,
+            "V5 spend list is orchard-only"
+        );
+        assert_eq!(
+            i.outputs.len(),
+            i.action_count as usize,
+            "V5 output list is orchard-only"
+        );
+        // The whole point of the multi-bundle fee: it is the real network fee.
+        assert_eq!(
+            i.fee_zat, fee as i64,
+            "V5 fee unchanged by the ironwood term"
+        );
+        assert_eq!(
+            i.fee_zat, i.orchard_net_value,
+            "shielded-only V5: fee is exactly the orchard value balance"
+        );
+        let recipient_total: u64 = i.outputs.iter().map(|o| o.value).sum();
+        assert_eq!(recipient_total, sent, "recipient value visible for review");
+
+        let signed_bytes = sign_zcash_pczt(MNEMONIC, 0, bytes).expect("sign V5");
+        assert_eq!(
+            &signed_bytes[4..8],
+            &[1, 0, 0, 0],
+            "a V5 response must still be a v1-encoded PCZT for pre-v2 wallets"
+        );
+        let signed = Pczt::parse(&signed_bytes).expect("signed V5 PCZT parses");
+        assert_eq!(
+            *signed.global().tx_version(),
+            zcash_protocol::constants::V5_TX_VERSION
+        );
+        assert!(signed.ironwood().actions().is_empty());
+        for (n, a) in signed.orchard().actions().iter().enumerate() {
+            assert!(
+                a.spend().spend_auth_sig().is_some(),
+                "V5 orchard action {} left unsigned",
+                n
+            );
+        }
+    }
+
+    #[test]
+    fn v6_ironwood_migration_is_visible_and_signed() {
+        let (bytes, fee, migrated, ironwood_recipient) = build_v6_migration();
+
+        let i = inspect_zcash_pczt(bytes.clone()).expect("inspect V6");
+        assert_eq!(
+            i.tx_version,
+            zcash_protocol::constants::V6_TX_VERSION,
+            "V6 transaction"
+        );
+        assert!(
+            i.ironwood_action_count >= 1,
+            "the migration destination pool must be visible on the review screen"
+        );
+
+        // Honest fee: the migrated value LEAVES the orchard pool, so the
+        // orchard bundle alone reports ~the whole amount. Only summing the
+        // ironwood value balance too gives the real network fee. This is the
+        // ironwood-blind bug this wiring exists to prevent.
+        assert_eq!(i.fee_zat, fee as i64, "review shows the real network fee");
+        assert!(
+            i.fee_zat < migrated as i64,
+            "fee ({}) must be far below the migrated value ({}) - an \
+             ironwood-blind fee reports ~the whole amount",
+            i.fee_zat,
+            migrated
+        );
+        assert!(
+            i.orchard_net_value > i.fee_zat,
+            "sanity: the orchard-only balance is the ironwood-blind (wrong) number"
+        );
+
+        // The migration destination is displayed against the ironwood outputs.
+        // `inspect_zcash_pczt` reads the network flag from the verified-note
+        // store; with no DB open in the test it defaults to mainnet, so encode
+        // the expected receiver the same way.
+        let encoded = super::encode_orchard_recipient(&ironwood_recipient, true)
+            .unwrap_or_else(|| hex::encode(ironwood_recipient));
+        let dest = i
+            .outputs
+            .iter()
+            .find(|o| o.recipient == encoded)
+            .expect("ironwood destination present in the review outputs");
+        assert_eq!(
+            dest.value, migrated,
+            "migrated value shown at the destination"
+        );
+
+        let signed_bytes = sign_zcash_pczt(MNEMONIC, 0, bytes).expect("sign V6");
+        let signed = Pczt::parse(&signed_bytes).expect("signed V6 PCZT parses");
+        assert_eq!(
+            *signed.global().tx_version(),
+            zcash_protocol::constants::V6_TX_VERSION
+        );
+        assert!(!signed.ironwood().actions().is_empty());
+        for (n, a) in signed.orchard().actions().iter().enumerate() {
+            assert!(
+                a.spend().spend_auth_sig().is_some(),
+                "orchard action {} left unsigned",
+                n
+            );
+        }
+        for (n, a) in signed.ironwood().actions().iter().enumerate() {
+            assert!(
+                a.spend().spend_auth_sig().is_some(),
+                "ironwood action {} left unsigned",
+                n
+            );
+        }
+    }
 }

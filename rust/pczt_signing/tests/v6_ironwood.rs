@@ -1,22 +1,20 @@
-//! V6 / Ironwood interop (Valar NU6.3 forks): the wallet side builds a
-//! V6 PCZT in the orchard -> ironwood migration shape (one orchard spend,
-//! outputs into the new Ironwood pool), redacts it exactly the way
-//! vizor's redact_pczt_for_signer does, and THIS crate signs it as the
-//! cold signer through pczt_signing::sign_redacted_pczt.
+//! V6 / Ironwood interop: the wallet side builds a V6 PCZT in the orchard ->
+//! ironwood migration shape (one orchard spend, outputs into the new Ironwood
+//! pool), redacts it exactly the way zafu's `redact_pczt_for_signer` does, and
+//! THIS crate signs it as the cold signer through
+//! `pczt_signing::sign_redacted_pczt`.
 //!
-//! Mirrors tests/interop.rs in ../pczt_signing, minus proving and tx
-//! extraction: the Signer role recomputes the sighash from effects, so
-//! spend-auth signing is provable without building the Halo2 keys.
+//! Mirrors tests/interop.rs, minus proving and tx extraction: the Signer role
+//! recomputes the sighash from effects, so spend-auth signing is provable
+//! without building the Halo2 keys.
 //!
 //! The producer/redaction half lives in tests/common/mod.rs so the wasmi
-//! module_host round-trip test (tests/v6_ironwood_module.rs) drives the
-//! exact same redacted PCZT bytes.
+//! module_host round-trip test (tests/v6_ironwood_module.rs) drives the exact
+//! same redacted PCZT bytes.
 //!
-//! Only meaningful when built the way the forks require:
-//!   RUSTFLAGS='--cfg zcash_unstable="nu6.3"' cargo test
-//! Without the cfg this file compiles to nothing.
-
-#![cfg(zcash_unstable = "nu6.3")]
+//! Was previously the `pczt_signing_valar` spike, which needed a fork of
+//! librustzcash and `RUSTFLAGS='--cfg zcash_unstable="nu6.3"'`. Released
+//! `pczt` 0.9.2 ships Ironwood ungated, so this now runs in the default build.
 
 mod common;
 

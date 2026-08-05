@@ -1,52 +1,54 @@
 //! RELEASE-GATING round-trip: a REAL V6 orchard->ironwood turnstile PCZT
 //! driven through the wasmi protocol-module runtime (`module_host`), which is
 //! byte-for-byte the runtime the Android device uses (it loads the same
-//! nu6.3 module wasm as android/src/main/assets/modules/module0.wasm).
+//! module wasm as android/src/main/assets/modules/module0.wasm).
 //!
-//! This proves the bundled nu6.3 module *itself* summarizes + signs ironwood
-//! inside the wasmi sandbox - not just the native rlib. The producer half
-//! (build + redact of the migration PCZT) is shared with the native test via
+//! This proves the bundled module *itself* summarizes + signs ironwood inside
+//! the wasmi sandbox - not just the native rlib. The producer half (build +
+//! redact of the migration PCZT) is shared with the native test via
 //! tests/common/mod.rs, so both sign the exact same redacted-for-signer bytes.
 //!
-//! Build the module wasm first, then run under the NU6.3 cfg:
-//!   (cd . && RUSTFLAGS='--cfg zcash_unstable="nu6.3"' \
-//!       cargo build --target wasm32-unknown-unknown --release --locked)
-//!   RUSTFLAGS='--cfg zcash_unstable="nu6.3"' \
-//!       cargo test --release --test v6_ironwood_module
+//! Build the module wasm first, then run:
+//!   cargo build --target wasm32-unknown-unknown --release
+//!   cargo test --release --test v6_ironwood_module
 //!
-//! Without the cfg this file compiles to nothing.
-
-#![cfg(zcash_unstable = "nu6.3")]
+//! The test SKIPS (rather than fails) when the wasm has not been built, so a
+//! plain `cargo test` stays green; CI must build the wasm first. It reports
+//! that skip loudly - a silently-zero suite is what hid the ironwood gap.
 
 mod common;
 
 use common::{build_redacted_v6_migration, MNEMONIC};
-use module_host::{HostError, ModuleRuntime};
+use module_host::ModuleRuntime;
 use pczt::Pczt;
 
-/// The nu6.3 module wasm - the same artifact bundled at
+/// The module wasm - the same artifact bundled at
 /// android/src/main/assets/modules/module0.wasm.
-const NU63_MODULE_WASM: &str = concat!(
+const MODULE_WASM: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/target/wasm32-unknown-unknown/release/pczt_signing.wasm"
-);
-
-/// The OLD default (pre-nu6.3, 5333c01b-pinned) module wasm, for the
-/// ironwood-blind contrast. Optional: only asserted if it has been built.
-const DEFAULT_MODULE_WASM: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../pczt_signing/target/wasm32-unknown-unknown/release/pczt_signing.wasm"
 );
 
 fn load_module(path: &str) -> ModuleRuntime {
     let wasm = std::fs::read(path).unwrap_or_else(|e| {
         panic!(
-            "build the nu6.3 module wasm first (missing {path}): {e}\n\
-             cd rust/pczt_signing_valar && RUSTFLAGS='--cfg zcash_unstable=\"nu6.3\"' \
-             cargo build --target wasm32-unknown-unknown --release --locked"
+            "build the module wasm first (missing {path}): {e}\n\
+             cd rust/pczt_signing && cargo build --target wasm32-unknown-unknown --release"
         )
     });
-    ModuleRuntime::load(&wasm).expect("instantiate nu6.3 module under wasmi")
+    ModuleRuntime::load(&wasm).expect("instantiate module under wasmi")
+}
+
+/// Returns false (and prints why) when the module wasm has not been built.
+fn module_wasm_available() -> bool {
+    if std::fs::metadata(MODULE_WASM).is_err() {
+        eprintln!(
+            "SKIPPED: module wasm not built at {MODULE_WASM}\n\
+             build it with: cargo build --target wasm32-unknown-unknown --release"
+        );
+        return false;
+    }
+    true
 }
 
 /// The summarize ABI returns a text head per message, records split by 0x1e:
@@ -106,13 +108,16 @@ fn single_request(redacted_pczt: &[u8]) -> Vec<u8> {
 
 #[test]
 fn nu63_module_summarizes_and_signs_ironwood_under_wasmi() {
+    if !module_wasm_available() {
+        return;
+    }
     // 1. Real redacted V6 turnstile PCZT (orchard spend -> ironwood output,
     //    branch id 0x37a5165b) from the shared producer.
     let fx = build_redacted_v6_migration();
     let ironwood_hex: String = fx.ironwood_recipient.iter().map(|b| format!("{b:02x}")).collect();
 
-    // 2. Load the nu6.3 valar wasm into the wasmi ModuleRuntime.
-    let mut rt = load_module(NU63_MODULE_WASM);
+    // 2. Load the module wasm into the wasmi ModuleRuntime.
+    let mut rt = load_module(MODULE_WASM);
 
     // 3. Summarize under wasmi.
     let payload = single_request(&fx.redacted_pczt);
@@ -220,37 +225,72 @@ fn nu63_module_summarizes_and_signs_ironwood_under_wasmi() {
     }
 }
 
-/// Contrast: the OLD default (pre-nu6.3) module0 is ironwood-blind. Built
-/// without the nu6.3 cfg, its ABI can only ever emit ironwood_actions=0, and
-/// its 5333c01b pczt rev cannot even parse a V6 turnstile PCZT. Either way it
-/// must NOT report ironwood_actions>=1 on the same bytes - this is the exact
-/// regression the nu6.3 module fixes. Skipped when the default wasm is absent.
+/// V5 NON-REGRESSION under the SAME module: the ironwood-capable module must
+/// still handle an ordinary V5 orchard send exactly as before - ironwood
+/// invisible (`ironwood_actions=0`), fee "unknown" (the shipped V5 behaviour,
+/// which the fee computation is deliberately scoped away from), every orchard
+/// action signed, and the response still a v1-encoded PCZT.
+///
+/// This replaces the old `old_default_module_is_ironwood_blind_contrast`
+/// spike test, whose premise (a second, ironwood-blind module build) no longer
+/// exists now that the single default module ships ironwood.
 #[test]
-fn old_default_module_is_ironwood_blind_contrast() {
-    if std::fs::metadata(DEFAULT_MODULE_WASM).is_err() {
-        eprintln!("skipping contrast: default module wasm not built at {DEFAULT_MODULE_WASM}");
+fn module_still_handles_v5_orchard_send_unchanged() {
+    if !module_wasm_available() {
         return;
     }
-    let fx = build_redacted_v6_migration();
+    let fx = common::build_redacted_v5_send();
     let payload = single_request(&fx.redacted_pczt);
-    let mut rt = load_module(DEFAULT_MODULE_WASM);
+    let mut rt = load_module(MODULE_WASM);
 
-    match rt.summarize_request(&payload) {
-        Ok(blob) => {
-            // If the old module somehow parsed it, it must be ironwood-blind.
-            let summaries = parse_module_summaries(&blob);
-            for s in &summaries {
-                assert_eq!(
-                    s.ironwood_actions, 0,
-                    "OLD default module must be ironwood-blind (ironwood_actions=0), \
-                     the nu6.3 module is what makes ironwood visible"
-                );
-            }
-        }
-        Err(HostError::Module(msg)) => {
-            // Expected: the 5333c01b pczt rev rejects the V6 tx version.
-            eprintln!("OLD default module rejects the V6 turnstile PCZT (expected): {msg}");
-        }
-        Err(other) => panic!("unexpected wasmi failure from default module: {other:?}"),
+    let blob = rt
+        .summarize_request(&payload)
+        .expect("module summarizes a V5 orchard send");
+    let summaries = parse_module_summaries(&blob);
+    assert_eq!(summaries.len(), 1);
+    let s = &summaries[0];
+    assert_eq!(s.ironwood_actions, 0, "V5 send has no ironwood actions");
+    assert!(s.orchard_actions >= 1, "V5 orchard actions visible");
+    assert_eq!(s.t_inputs, 0);
+    assert_eq!(
+        s.fee, None,
+        "V5 fee stays 'unknown' - shipped behaviour, unchanged by the ironwood fee fix"
+    );
+    let orchard_out: u64 = s
+        .outputs
+        .iter()
+        .filter(|(l, _)| l.starts_with("orchard:"))
+        .map(|(_, v)| v)
+        .sum();
+    assert_eq!(orchard_out, fx.migrated, "V5 recipient value visible");
+
+    let resp = rt
+        .sign_request(&payload, MNEMONIC, 0, false)
+        .expect("module signs a V5 orchard send");
+    let messages =
+        pczt_signing::envelope::parse_response(&resp).expect("module response envelope parses");
+    assert_eq!(messages.len(), 1);
+    let signed_bytes = &messages[0].signed_pczt;
+    assert_eq!(
+        messages[0].digest,
+        pczt_signing::envelope::integrity_digest(signed_bytes)
+    );
+    assert_eq!(
+        &signed_bytes[4..8],
+        &[1, 0, 0, 0],
+        "the V5 signing response must still be a v1-encoded PCZT"
+    );
+
+    let signed = Pczt::parse(signed_bytes).expect("module-signed V5 PCZT parses");
+    assert_eq!(
+        *signed.global().tx_version(),
+        zcash_protocol::constants::V5_TX_VERSION
+    );
+    assert!(signed.ironwood().actions().is_empty());
+    for (i, action) in signed.orchard().actions().iter().enumerate() {
+        assert!(
+            action.spend().spend_auth_sig().is_some(),
+            "V5 orchard action {i} left unsigned by the module"
+        );
     }
 }

@@ -1550,17 +1550,30 @@ dictionary ZcashSignContext {
 // (PCZT is ground truth; signature happens after user review of
 // recipient + amount + fee).
 dictionary ZcashPcztInspection {
+    // Number of actions in the Orchard bundle.
     u32 action_count;
-    // spends: list of (value_zatoshis, nullifier_is_known) pairs
+    // Number of actions in the Ironwood bundle (NU6.3 / V6 pool). 0 for a
+    // V5 transaction. A turnstile migration is exactly the case where this
+    // is non-zero while the Orchard side looks like a pure spend - showing
+    // only action_count would render a migration as money leaving with no
+    // destination.
+    u32 ironwood_action_count;
+    // spends: list of (value_zatoshis, nullifier_is_known) pairs.
+    // Orchard spends first, then Ironwood spends.
     sequence<ZcashPcztSpend> spends;
-    // outputs: list of (value_zatoshis, recipient_hex) pairs
+    // outputs: list of (value_zatoshis, recipient_hex) pairs.
+    // Orchard outputs first, then Ironwood outputs.
     sequence<ZcashPcztOutput> outputs;
     // True fee across all bundles: (transparent in - transparent out)
-    //   + sapling value_balance + orchard value_balance.
+    //   + sapling value_balance + orchard value_balance
+    //   + ironwood value_balance.
     i64 fee_zat;
     // Net value of the Orchard bundle alone (diagnostic; for canonical
     // fee use fee_zat).
     i64 orchard_net_value;
+    // Net value of the Ironwood bundle alone (diagnostic; for canonical
+    // fee use fee_zat). 0 for a V5 transaction.
+    i64 ironwood_net_value;
     // our verified balance (0 if no notes stored)
     u64 verified_balance;
     // how many spend nullifiers match our verified notes

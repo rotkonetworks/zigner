@@ -53,16 +53,30 @@ enum class PcztState {
 	ERROR,
 }
 
+/** Total shielded actions across both orchard-protocol pools. `actionCount` is
+ *  the Orchard bundle alone; a NU6.3 turnstile migration puts its destination in
+ *  the Ironwood bundle, so anything comparing against the spend/output lists
+ *  (which carry both) must use this. 0 ironwood actions for a V5 tx. */
+internal val ZcashPcztInspection.totalActionCount: UInt
+	get() = actionCount + ironwoodActionCount
+
 /** Aggregate value spent from notes this device hasn't verified, inferred from
- *  the value balance: orchardNetValue (= total spent − total output) + outputs
- *  − verified spends = total spent − verified spent. 0 means every unrecognized
- *  spend is a 0-value Orchard dummy (padding); > 0 means real unverified value
- *  is being spent. The pczt crate hides per-spend value, so this aggregate is
- *  the signal — enough to tell "padding only" from "real unverified value." */
+ *  the value balance: (orchardNetValue + ironwoodNetValue) (= total spent −
+ *  total output, across both pools) + outputs − verified spends = total spent −
+ *  verified spent. 0 means every unrecognized spend is a 0-value dummy
+ *  (padding); > 0 means real unverified value is being spent. The pczt crate
+ *  hides per-spend value, so this aggregate is the signal — enough to tell
+ *  "padding only" from "real unverified value."
+ *
+ *  The ironwood term is required for correctness on a turnstile migration:
+ *  `outputs` includes the ironwood destination, so omitting ironwoodNetValue
+ *  (which is negative by ~the migrated amount) would inflate the apparent
+ *  unverified spend by the whole migrated value. It is 0 for a V5 tx. */
 internal fun unverifiedSpendValueZat(insp: ZcashPcztInspection): Long {
 	val outputs = insp.outputs.sumOf { it.value.toLong() }
 	val verifiedSpends = insp.spends.filter { it.known }.sumOf { it.value.toLong() }
-	return (insp.orchardNetValue + outputs - verifiedSpends).coerceAtLeast(0L)
+	return (insp.orchardNetValue + insp.ironwoodNetValue + outputs - verifiedSpends)
+		.coerceAtLeast(0L)
 }
 
 /** Soft safety signal (rotkonetworks/zigner#16): the tx spends real value from
@@ -389,7 +403,11 @@ private fun VerificationCard(insp: ZcashPcztInspection) {
 private fun PcztGlossaryNote(insp: ZcashPcztInspection) {
 	val outputCount = insp.outputs.size
 	val msg = buildString {
-		appendLine("• ${insp.actionCount} action(s) = ${insp.actionCount} spend(s) + $outputCount output(s) (Orchard bundles them).")
+		val actions = insp.totalActionCount
+		appendLine("• $actions action(s) = $actions spend(s) + $outputCount output(s) (Orchard bundles them).")
+		if (insp.ironwoodActionCount > 0u) {
+			appendLine("• ${insp.ironwoodActionCount} of those are Ironwood (NU6.3) actions — this transaction moves value into the new pool.")
+		}
 		if (outputCount >= 2) {
 			appendLine("• Outputs include both your destination AND change back to your wallet (different diversifier of your UFVK).")
 		}
@@ -458,7 +476,11 @@ private fun UnrecognizedSpendsPage(
 // Advanced tab — raw PCZT internals for cross-checking against the coordinator.
 @Composable
 private fun PcztAdvancedContent(insp: ZcashPcztInspection, urParts: List<String>) {
-	DetailRow(label = "Actions", value = "${insp.actionCount}")
+	DetailRow(label = "Actions", value = "${insp.actionCount} orchard")
+	if (insp.ironwoodActionCount > 0u) {
+		DetailRow(label = "Ironwood actions", value = "${insp.ironwoodActionCount}")
+		DetailRow(label = "Ironwood net value", value = "${insp.ironwoodNetValue}")
+	}
 	DetailRow(label = "Tx version", value = "v${insp.txVersion}")
 	DetailRow(label = "Branch ID", value = "0x${insp.consensusBranchIdHex}")
 	DetailRow(label = "Expiry height", value = "${insp.expiryHeight}")

@@ -116,6 +116,11 @@ digest fallback path; when NU6.3 crates stabilize, the V6-capable
 module is a 60-second camera update - "your signer learned the new
 pool through its camera" is the launch story, not a recall.
 
+Status: the NU6.3 crates DID stabilize (`pczt` 0.9.2 ships Ironwood
+unconditionally on crates.io), so module #0 is now V6-capable and bundled as
+`android/src/main/assets/modules/module0.wasm`. The camera-update path
+remains the mechanism for the NEXT protocol change, not this one.
+
 ## Build sequencing
 
 1. `pczt_signing` -> wasm32 target check; strip to sighash+parse+sign

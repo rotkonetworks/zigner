@@ -74,9 +74,16 @@ struct ZcashPcztView: View {
                             .foregroundColor(.textAndIconsPrimary)
                     }
 
-                    // Warnings
-                    if inspection.knownSpends < inspection.actionCount {
-                        warningCard("\(inspection.actionCount - inspection.knownSpends) spend(s) not in verified notes.")
+                    // Warnings. `actionCount` is the Orchard bundle alone; the
+                    // spend list (and `knownSpends`) covers Orchard AND
+                    // Ironwood, so compare against the total or a NU6.3
+                    // turnstile migration underflows this UInt subtraction.
+                    let totalActions = inspection.actionCount + inspection.ironwoodActionCount
+                    if inspection.knownSpends < totalActions {
+                        warningCard("\(totalActions - inspection.knownSpends) spend(s) not in verified notes.")
+                    }
+                    if inspection.ironwoodActionCount > 0 {
+                        warningCard("\(inspection.ironwoodActionCount) Ironwood (NU6.3) action(s): this moves value into the new pool.")
                     }
                     if inspection.verifiedBalance == 0 {
                         warningCard("No verified balance. Sync notes first (zcli export-notes).")
@@ -195,9 +202,10 @@ struct ZcashPcztView: View {
 
     private func verificationCard(inspection: ZcashPcztInspection) -> some View {
         VStack(alignment: .leading, spacing: Spacing.extraSmall) {
-            Text("\(inspection.knownSpends)/\(inspection.actionCount) spends verified")
+            let totalActions = inspection.actionCount + inspection.ironwoodActionCount
+            Text("\(inspection.knownSpends)/\(totalActions) spends verified")
                 .font(PrimaryFont.captionM.font)
-                .foregroundColor(inspection.knownSpends == inspection.actionCount ? .textAndIconsSecondary : .accentRed300)
+                .foregroundColor(inspection.knownSpends == totalActions ? .textAndIconsSecondary : .accentRed300)
             let balZec = Double(inspection.verifiedBalance) / 100_000_000.0
             Text(String(format: "Verified balance: %.8f ZEC", balZec))
                 .font(PrimaryFont.captionM.font)
