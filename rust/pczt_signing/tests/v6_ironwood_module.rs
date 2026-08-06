@@ -12,9 +12,12 @@
 //!   cargo build --target wasm32-unknown-unknown --release
 //!   cargo test --release --test v6_ironwood_module
 //!
-//! The test SKIPS (rather than fails) when the wasm has not been built, so a
-//! plain `cargo test` stays green; CI must build the wasm first. It reports
-//! that skip loudly - a silently-zero suite is what hid the ironwood gap.
+//! The tests drive `android/src/main/assets/modules/module0.wasm` - the
+//! artifact that actually ships in the APK - and FAIL when it is missing, so a
+//! suite that asserted nothing can never report green. Set
+//! `ZIGNER_ALLOW_MISSING_MODULE_WASM=1` to skip instead. When the build output
+//! is also present the two are asserted byte-identical, so a stale bundled
+//! asset cannot pass by proxy.
 
 mod common;
 
@@ -22,12 +25,24 @@ use common::{build_redacted_v6_migration, MNEMONIC};
 use module_host::ModuleRuntime;
 use pczt::Pczt;
 
-/// The module wasm - the same artifact bundled at
-/// android/src/main/assets/modules/module0.wasm.
-const MODULE_WASM: &str = concat!(
+/// The module wasm the DEVICE actually loads: the artifact bundled into the
+/// Android APK. Tests drive this file, not the build output, so a stale asset
+/// cannot pass by proxy.
+const BUNDLED_MODULE_WASM: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../android/src/main/assets/modules/module0.wasm"
+);
+
+/// The freshly built module wasm, when present.
+const BUILT_MODULE_WASM: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/target/wasm32-unknown-unknown/release/pczt_signing.wasm"
 );
+
+/// Set to 1 to let these tests skip when the bundled module wasm is missing.
+/// Absent this, a missing artifact is a FAILURE, not a silent green run - a
+/// suite that quietly asserts nothing is what hid the ironwood gap.
+const SKIP_ENV: &str = "ZIGNER_ALLOW_MISSING_MODULE_WASM";
 
 fn load_module(path: &str) -> ModuleRuntime {
     let wasm = std::fs::read(path).unwrap_or_else(|e| {
@@ -39,14 +54,41 @@ fn load_module(path: &str) -> ModuleRuntime {
     ModuleRuntime::load(&wasm).expect("instantiate module under wasmi")
 }
 
-/// Returns false (and prints why) when the module wasm has not been built.
+/// Returns false only when the bundled module wasm is missing AND the operator
+/// explicitly opted into skipping. Otherwise a missing artifact FAILS the test.
+///
+/// Also pins the bundled APK asset against the build output when both exist:
+/// the device runs the bundle, so a drifted bundle means these tests prove
+/// nothing about what ships.
 fn module_wasm_available() -> bool {
-    if std::fs::metadata(MODULE_WASM).is_err() {
-        eprintln!(
-            "SKIPPED: module wasm not built at {MODULE_WASM}\n\
-             build it with: cargo build --target wasm32-unknown-unknown --release"
+    let bundled = std::fs::read(BUNDLED_MODULE_WASM);
+    let bundled = match bundled {
+        Ok(b) => b,
+        Err(e) => {
+            if std::env::var(SKIP_ENV).as_deref() == Ok("1") {
+                eprintln!(
+                    "SKIPPED ({SKIP_ENV}=1): bundled module wasm missing at \
+                     {BUNDLED_MODULE_WASM}: {e}"
+                );
+                return false;
+            }
+            panic!(
+                "bundled module wasm missing at {BUNDLED_MODULE_WASM}: {e}\n\
+                 build it with: cd rust/pczt_signing && \
+                 cargo build --target wasm32-unknown-unknown --release && \
+                 cp target/wasm32-unknown-unknown/release/pczt_signing.wasm \
+                 ../../android/src/main/assets/modules/module0.wasm\n\
+                 (set {SKIP_ENV}=1 to skip instead of failing)"
+            );
+        }
+    };
+    if let Ok(built) = std::fs::read(BUILT_MODULE_WASM) {
+        assert!(
+            built == bundled,
+            "the module wasm bundled into the APK ({BUNDLED_MODULE_WASM}) differs \
+             from the freshly built one ({BUILT_MODULE_WASM}) - the device would \
+             run code these tests never exercised. Re-copy the build output."
         );
-        return false;
     }
     true
 }
@@ -117,7 +159,7 @@ fn nu63_module_summarizes_and_signs_ironwood_under_wasmi() {
     let ironwood_hex: String = fx.ironwood_recipient.iter().map(|b| format!("{b:02x}")).collect();
 
     // 2. Load the module wasm into the wasmi ModuleRuntime.
-    let mut rt = load_module(MODULE_WASM);
+    let mut rt = load_module(BUNDLED_MODULE_WASM);
 
     // 3. Summarize under wasmi.
     let payload = single_request(&fx.redacted_pczt);
@@ -226,10 +268,10 @@ fn nu63_module_summarizes_and_signs_ironwood_under_wasmi() {
 }
 
 /// V5 NON-REGRESSION under the SAME module: the ironwood-capable module must
-/// still handle an ordinary V5 orchard send exactly as before - ironwood
-/// invisible (`ironwood_actions=0`), fee "unknown" (the shipped V5 behaviour,
-/// which the fee computation is deliberately scoped away from), every orchard
-/// action signed, and the response still a v1-encoded PCZT.
+/// still handle an ordinary V5 orchard send - ironwood invisible
+/// (`ironwood_actions=0`), the real recipient value and the real fee on the
+/// confirmation screen, every orchard action signed, and the response still a
+/// v1-encoded PCZT.
 ///
 /// This replaces the old `old_default_module_is_ironwood_blind_contrast`
 /// spike test, whose premise (a second, ironwood-blind module build) no longer
@@ -241,7 +283,7 @@ fn module_still_handles_v5_orchard_send_unchanged() {
     }
     let fx = common::build_redacted_v5_send();
     let payload = single_request(&fx.redacted_pczt);
-    let mut rt = load_module(MODULE_WASM);
+    let mut rt = load_module(BUNDLED_MODULE_WASM);
 
     let blob = rt
         .summarize_request(&payload)
@@ -253,8 +295,10 @@ fn module_still_handles_v5_orchard_send_unchanged() {
     assert!(s.orchard_actions >= 1, "V5 orchard actions visible");
     assert_eq!(s.t_inputs, 0);
     assert_eq!(
-        s.fee, None,
-        "V5 fee stays 'unknown' - shipped behaviour, unchanged by the ironwood fee fix"
+        s.fee,
+        Some(fx.fee),
+        "V5 fee is now shown, not 'unknown': the fee is one of the three things \
+         the user must confirm on an ordinary orchard send"
     );
     let orchard_out: u64 = s
         .outputs
@@ -293,4 +337,73 @@ fn module_still_handles_v5_orchard_send_unchanged() {
             "V5 orchard action {i} left unsigned by the module"
         );
     }
+}
+
+/// TAMPER DETECTION inside the wasmi sandbox, on the artifact that ships in
+/// the APK: an inflated output `value` - the number the confirmation screen
+/// displays - must be refused by both module entry points, not displayed.
+#[test]
+fn module_rejects_a_tampered_output_value() {
+    if !module_wasm_available() {
+        return;
+    }
+    let fx = common::build_redacted_v5_send();
+    let mut rt = load_module(BUNDLED_MODULE_WASM);
+
+    // Honest control: the same module summarizes the untampered PCZT.
+    rt.summarize_request(&single_request(&fx.redacted_pczt))
+        .expect("module summarizes the honest PCZT");
+
+    // Option<u64> on the wire: 0x01 tag + LEB128; same-length replacement.
+    let varint = |mut v: u64| {
+        let mut out = Vec::new();
+        loop {
+            let b = (v & 0x7f) as u8;
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                return out;
+            }
+            out.push(b | 0x80);
+        }
+    };
+    let mut needle = vec![0x01];
+    needle.extend_from_slice(&varint(fx.migrated));
+    let mut replacement = vec![0x01];
+    replacement.extend_from_slice(&varint(fx.migrated + 1));
+    assert_eq!(needle.len(), replacement.len());
+
+    let mut tampered = fx.redacted_pczt.clone();
+    let mut hits = 0;
+    let mut i = 0;
+    while i + needle.len() <= tampered.len() {
+        if tampered[i..i + needle.len()] == needle[..] {
+            tampered[i..i + needle.len()].copy_from_slice(&replacement);
+            hits += 1;
+            i += needle.len();
+        } else {
+            i += 1;
+        }
+    }
+    assert!(hits > 0, "output value field not found in the wire bytes");
+    let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+    assert!(
+        parsed
+            .orchard()
+            .actions()
+            .iter()
+            .any(|a| a.output().value() == &Some(fx.migrated + 1)),
+        "the displayed value was not actually changed"
+    );
+
+    let payload = single_request(&tampered);
+    assert!(
+        rt.summarize_request(&payload).is_err(),
+        "the module must refuse to DISPLAY a PCZT whose amount contradicts its \
+         note commitment"
+    );
+    assert!(
+        rt.sign_request(&payload, MNEMONIC, 0, false).is_err(),
+        "the module must refuse to SIGN a PCZT it refused to display"
+    );
 }

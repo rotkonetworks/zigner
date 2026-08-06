@@ -1969,6 +1969,67 @@ fn encode_orchard_recipient(raw: &[u8; 43], mainnet: bool) -> Option<String> {
 const MAX_PCZT_BYTES: usize = 1024 * 1024; // 1 MiB — far above any real PCZT
 const MAX_ORCHARD_ACTIONS: usize = 4096; // far above any real bundle (~tens)
 
+/// Confirm that the recipient + amount the review screen is about to DISPLAY
+/// are the ones the transaction actually pays.
+///
+/// A cold wallet's whole value is that the screen cannot lie. The `recipient`
+/// and `value` fields of an orchard output are plaintext metadata the wallet
+/// puts in the PCZT for exactly this display; nothing in the signing path
+/// reads them, so on their own a hostile wallet could show any recipient and
+/// any amount while the transaction pays somebody else. What the transaction
+/// is actually bound to is the note commitment `cmx`, which is committed to by
+/// the sighash we sign.
+///
+/// `Output::verify_note_commitment` recomputes `cmx` from
+/// (recipient, value, rho = nf_old, rseed) and compares. zafu's
+/// `redact_pczt_for_signer` deliberately KEEPS all of those on the output side
+/// (only spend-side note plaintext and the fvk are stripped), so this check
+/// runs on exactly the bytes that cross the airgap.
+///
+/// Fail-closed on a proven mismatch; silent no-op when the check is not
+/// possible (fields absent, unknown consensus branch, unparsable bundle) so
+/// this never turns a viewable PCZT into an unviewable one.
+fn verify_displayed_outputs(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
+    use pczt::roles::verifier::{OrchardError, Verifier};
+
+    fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<()>> {
+        for action in bundle.actions() {
+            match action.output().verify_note_commitment(action.spend()) {
+                Ok(()) => {}
+                // The check needs recipient + value + rseed. A producer that
+                // withholds any of them gets no display guarantee, but also no
+                // false alarm.
+                Err(
+                    orchard::pczt::VerifyError::MissingRecipient
+                    | orchard::pczt::VerifyError::MissingValue
+                    | orchard::pczt::VerifyError::MissingRandomSeed,
+                ) => {}
+                Err(e) => return Err(OrchardError::Verify(e)),
+            }
+        }
+        Ok(())
+    }
+
+    let outcome = Verifier::new(pczt.clone())
+        .with_orchard(check)
+        .and_then(|v| v.with_ironwood(check));
+
+    match outcome {
+        Ok(_) => Ok(()),
+        // A PROVEN lie: the displayed recipient/amount do not produce the note
+        // commitment this transaction pays out to. Refuse.
+        Err(OrchardError::Verify(e)) => Err(ErrorDisplayed::Str {
+            s: format!(
+                "PCZT output does not match what it claims to pay ({e:?}) — \
+                 refusing to display or sign it."
+            ),
+        }),
+        // Not verifiable here (structural parse, unrecognized consensus branch).
+        // Signing has its own guards; don't block review.
+        Err(_) => Ok(()),
+    }
+}
+
 fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorDisplayed> {
     use pczt::Pczt;
 
@@ -2018,6 +2079,10 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         });
     }
     let ironwood_action_count = ironwood_count_raw as u32;
+
+    // Screen-honesty gate: everything below feeds the review screen, so refuse
+    // before building a summary that provably misstates what is being paid.
+    verify_displayed_outputs(&pczt)?;
 
     // Load verified notes for cross-reference. Used by the known_spends warning
     // (zigner's distinguishing safety guard over a Keystone-equivalent signer —
@@ -2198,6 +2263,84 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
     })
 }
 
+/// Error type for the low-level Signer role closures used by
+/// [`sign_zcash_pczt`]. The role requires the closure's error to be `From` of
+/// its bundle re-parse error; `ErrorDisplayed` is a foreign type here, so it
+/// cannot carry that impl.
+#[derive(Debug)]
+struct LowLevelSignError(String);
+
+impl From<pczt::roles::low_level_signer::OrchardParseError> for LowLevelSignError {
+    fn from(e: pczt::roles::low_level_signer::OrchardParseError) -> Self {
+        LowLevelSignError(format!("orchard-shaped bundle parse: {e:?}"))
+    }
+}
+
+impl std::fmt::Display for LowLevelSignError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// `tx_modifiable` bits the PCZT spec clears once a shielded spend has been
+/// authorized (the signature commits to every transaction effect). The `pczt`
+/// crate keeps its own copies `pub(crate)`, so they are restated here; the
+/// high-level `Signer` role clears exactly these three after each successful
+/// `sign_orchard` / `sign_ironwood`, and the low-level role leaves it to us.
+const PCZT_FLAG_TRANSPARENT_INPUTS_MODIFIABLE: u8 = 0b0000_0001;
+const PCZT_FLAG_TRANSPARENT_OUTPUTS_MODIFIABLE: u8 = 0b0000_0010;
+const PCZT_FLAG_SHIELDED_MODIFIABLE: u8 = 0b1000_0000;
+
+/// Spend-auth sign every action of one orchard-shaped bundle (orchard or
+/// ironwood) that this seed controls, with the full viewing key supplied by
+/// the caller rather than read from the PCZT.
+///
+/// Skips, rather than aborts on, actions that are not ours: dummy/padding
+/// spends carry an ephemeral key the user does not hold (the wallet's
+/// IoFinalizer already signed them), and a foreign spend in a multi-party
+/// PCZT belongs to someone else. `signed` counts the actions we actually
+/// authorized, so the caller can refuse a PCZT it contributed nothing to.
+fn sign_orchard_shaped_bundle(
+    bundle: &mut orchard::pczt::Bundle,
+    fvk: &orchard::keys::FullViewingKey,
+    ask: &orchard::keys::SpendAuthorizingKey,
+    shielded_sighash: [u8; 32],
+    tx_modifiable: &mut u8,
+    signed: &mut usize,
+) -> Result<(), LowLevelSignError> {
+    for action in bundle.actions_mut().iter_mut() {
+        // Consistency check against the caller-supplied fvk. The redaction
+        // that crosses the airgap also strips the spent note's plaintext, so
+        // recipient/value/rho/rseed surface as `Missing*`; tolerate exactly
+        // the set the high-level `Signer` tolerates. Anything else (a real
+        // `WrongFvkForNote` / `InvalidNullifier` on a note we do not own) is
+        // a skip, not a hard failure.
+        match action.spend().verify_nullifier(Some(fvk)) {
+            Ok(())
+            | Err(
+                orchard::pczt::VerifyError::MissingRecipient
+                | orchard::pczt::VerifyError::MissingValue
+                | orchard::pczt::VerifyError::MissingRho
+                | orchard::pczt::VerifyError::MissingRandomSeed,
+            ) => {}
+            Err(_) => continue,
+        }
+        // `Action::sign` re-derives `rk` from `ask` and `alpha` and refuses
+        // unless it matches the PCZT's `rk`. That check — not the fvk — is
+        // what binds the signature to a note this seed controls.
+        if action
+            .sign(shielded_sighash, ask, rand::rngs::OsRng)
+            .is_ok()
+        {
+            *signed += 1;
+            *tx_modifiable &= !(PCZT_FLAG_TRANSPARENT_INPUTS_MODIFIABLE
+                | PCZT_FLAG_TRANSPARENT_OUTPUTS_MODIFIABLE
+                | PCZT_FLAG_SHIELDED_MODIFIABLE);
+        }
+    }
+    Ok(())
+}
+
 /// This function:
 /// 1. Parses the PCZT to extract orchard actions
 /// 2. Signs each action with the spending key derived from seed
@@ -2207,6 +2350,7 @@ fn sign_zcash_pczt(
     account_index: u32,
     pczt_bytes: Vec<u8>,
 ) -> Result<Vec<u8>, ErrorDisplayed> {
+    use pczt::roles::low_level_signer::Signer as LowLevelSigner;
     use pczt::roles::signer::Signer;
     use pczt::Pczt;
     use transaction_signing::zcash::OrchardSpendingKey;
@@ -2232,18 +2376,11 @@ fn sign_zcash_pczt(
     // unknown labels (see ZcashPcztScreen).
     let inspection = inspect_zcash_pczt(pczt_bytes.clone())?;
 
-    // Sign every action try-and-skip. Dummy Orchard actions are spent
-    // under an ephemeral key the user doesn't hold, so sign_orchard will
-    // fail on them — that's expected; signer.finish() falls back to the
-    // PCZT-embedded ASK for those.
-    let action_count = inspection.action_count as usize;
-    let known_action_indices: Vec<usize> = (0..action_count).collect();
     // Ironwood (NU6.3 / V6) spends carry the SAME orchard spend-auth key: the
     // pool reuses the orchard key tree, so the one `ask` below authorizes both
-    // bundles. 0 for a V5 transaction, which therefore takes exactly the path
-    // it took before.
-    let ironwood_action_count = inspection.ironwood_action_count as usize;
-    let ironwood_action_indices: Vec<usize> = (0..ironwood_action_count).collect();
+    // bundles. 0 for a V5 transaction.
+    let total_actions =
+        inspection.action_count as usize + inspection.ironwood_action_count as usize;
 
     // Parse the PCZT to get action count first
     let pczt = Pczt::parse(&pczt_bytes).map_err(|e| ErrorDisplayed::Str {
@@ -2265,41 +2402,80 @@ fn sign_zcash_pczt(
             s: format!("Failed to get orchard spending key: {}", e),
         })?;
 
-    // Create signer
-    let mut signer = Signer::new(pczt).map_err(|e| ErrorDisplayed::Str {
-        s: format!("Failed to create PCZT signer: {:?}", e),
-    })?;
-
-    // The signer needs the ask (spend authorizing key) derived from sk
+    // The signer needs the ask (spend authorizing key) derived from sk.
     let ask = orchard::keys::SpendAuthorizingKey::from(&orchard_sk);
+    // ...and the matching full viewing key, RECONSTRUCTED FROM THE SEED. The
+    // wallet-side redaction (zafu/zcli `redact_pczt_for_signer`) strips the
+    // spend `fvk` from the PCZT before it crosses the airgap — it is the
+    // account's 96-byte orchard FullViewingKey and shipping it over the QR
+    // transport is a viewing-key leak. The high-level `pczt::roles::signer`
+    // role cannot sign such a PCZT: `sign_orchard` / `sign_ironwood` hardcode
+    // `Spend::verify_nullifier(None)`, which returns `MissingFullViewingKey`
+    // and is NOT in the tolerated-Missing* set, so every action fails and the
+    // device refuses a perfectly valid transaction. We hold the seed, so we
+    // reconstruct the fvk and drive the LOW-LEVEL Signer role, passing it to
+    // `verify_nullifier(Some(fvk))` ourselves (`fvk_for_validation` returns
+    // the caller-supplied key when the PCZT's own field is absent). This is
+    // the same construction the wasmi protocol module uses
+    // (`pczt_signing::sign_redacted_pczt`), so both shipped signing paths
+    // accept the identical redaction. `Action::sign` itself never reads the
+    // fvk — the real ownership binding is `rk == alpha * ak`, which still
+    // holds and still rejects notes this seed does not control.
+    let orchard_fvk = orchard::keys::FullViewingKey::from(&orchard_sk);
 
-    // Try-and-skip: ignore per-action sign failures (dummy actions can't
-    // be signed with the user's ASK; signer.finish() handles those).
-    // Refuse only if we couldn't sign anything at all.
+    // The shielded sighash is a function of transaction EFFECTS only (it does
+    // not depend on any spend-auth signature), so compute it once from the
+    // parsed PCZT and reuse it for both bundles.
+    let shielded_sighash = Signer::new(pczt.clone())
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to create PCZT signer: {:?}", e),
+        })?
+        .shielded_sighash();
+
+    // Try-and-skip: ignore per-action sign failures (dummy actions are spent
+    // under an ephemeral key the user doesn't hold; the wallet's IoFinalizer
+    // already signed those). Refuse only if we couldn't sign anything at all.
     let mut signed_count = 0usize;
-    for action_index in &known_action_indices {
-        if signer.sign_orchard(*action_index, &ask).is_ok() {
-            signed_count += 1;
-        }
-    }
-    // Same try-and-skip over the ironwood bundle. Loop body never runs for V5.
-    for action_index in &ironwood_action_indices {
-        if signer.sign_ironwood(*action_index, &ask).is_ok() {
-            signed_count += 1;
-        }
-    }
-    if signed_count == 0 && !(known_action_indices.is_empty() && ironwood_action_indices.is_empty())
-    {
+    let low = LowLevelSigner::new(pczt);
+    let low = low
+        .sign_orchard_with(|_pczt, bundle, tx_modifiable| {
+            sign_orchard_shaped_bundle(
+                bundle,
+                &orchard_fvk,
+                &ask,
+                shielded_sighash,
+                tx_modifiable,
+                &mut signed_count,
+            )
+        })
+        .map_err(|e: LowLevelSignError| ErrorDisplayed::Str {
+            s: format!("Failed to sign orchard bundle: {e}"),
+        })?;
+    // Same treatment for the ironwood bundle. Empty (zero iterations) for V5.
+    let low = low
+        .sign_ironwood_with(|_pczt, bundle, tx_modifiable| {
+            sign_orchard_shaped_bundle(
+                bundle,
+                &orchard_fvk,
+                &ask,
+                shielded_sighash,
+                tx_modifiable,
+                &mut signed_count,
+            )
+        })
+        .map_err(|e: LowLevelSignError| ErrorDisplayed::Str {
+            s: format!("Failed to sign ironwood bundle: {e}"),
+        })?;
+    if signed_count == 0 && total_actions > 0 {
         return Err(ErrorDisplayed::Str {
             s: format!(
-                "Could not sign any of the {} action(s) — none match the user's spending key.",
-                known_action_indices.len() + ironwood_action_indices.len()
+                "Could not sign any of the {total_actions} action(s) — none match the user's spending key."
             ),
         });
     }
 
     // Finish signing and get the signed PCZT
-    let signed_pczt = signer.finish();
+    let signed_pczt = low.finish();
 
     // Serialize back to bytes. Since pczt 0.9 `serialize` picks the MINIMAL
     // encoding that can carry the content: the v1 PCZT encoding whenever the
@@ -4557,9 +4733,32 @@ mod zcash_pczt_tests {
         (note, witness, anchor)
     }
 
+    /// Everything a V5 orchard-send test needs to assert against.
+    struct V5Fixture {
+        /// Serialized PCZT as it would cross the airgap.
+        pczt: Vec<u8>,
+        /// Network fee in zatoshi.
+        fee: u64,
+        /// Value paid to the external recipient.
+        sent: u64,
+        /// Raw 43-byte orchard receiver of that recipient.
+        recipient_raw: [u8; 43],
+        /// The wallet's 96-byte orchard FVK — must NOT appear in a redacted PCZT.
+        fvk_bytes: Vec<u8>,
+    }
+
     /// Wallet-side: an ordinary V5 orchard send to an external recipient.
     /// Returns `(pczt_bytes, fee, sent_value)`.
     fn build_v5_send() -> (Vec<u8>, u64, u64) {
+        let fx = build_v5_fixture(false, false);
+        (fx.pczt, fx.fee, fx.sent)
+    }
+
+    /// Wallet-side V5 orchard send. `redact` applies zafu's
+    /// `redact_pczt_for_signer` (including the fvk strip) before serializing;
+    /// `prove` runs the Halo2 Prover first, which the wallet must do before the
+    /// PCZT crosses the airgap if it is going to be extracted afterwards.
+    fn build_v5_fixture(redact: bool, prove: bool) -> V5Fixture {
         let net = params(false);
         let (_sk, fvk) = wallet_keys();
         let (note, witness, anchor) = wallet_note(&fvk);
@@ -4607,13 +4806,98 @@ mod zcash_pczt_tests {
         assert_eq!(parts.version, TxVersion::V5);
         let pczt = Creator::build_from_parts(parts).expect("Creator");
         let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
-        (pczt.serialize().expect("serialize"), fee, sent)
+        // Proving is the wallet's job and must happen before redaction, since
+        // the Prover consumes fields the redaction strips.
+        let pczt = if prove {
+            pczt::roles::prover::Prover::new(pczt)
+                .create_orchard_proof(&orchard::circuit::ProvingKey::build(
+                    orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+                ))
+                .expect("orchard prove")
+                .finish()
+        } else {
+            pczt
+        };
+        let pczt = if redact {
+            redact_for_signer(pczt)
+        } else {
+            pczt
+        };
+        V5Fixture {
+            pczt: pczt.serialize().expect("serialize"),
+            fee,
+            sent,
+            recipient_raw: recipient.to_raw_address_bytes(),
+            fvk_bytes: fvk.to_bytes().to_vec(),
+        }
+    }
+
+    /// Line-for-line mirror of zafu's `redact_pczt_for_signer`
+    /// (zcli `crates/zcash-wasm/src/lib.rs`) — what the wallet strips before
+    /// the PCZT crosses the airgap. Note the asymmetry the device depends on:
+    /// the SPEND side loses its note plaintext AND the 96-byte orchard `fvk`;
+    /// the OUTPUT side keeps `recipient` / `value` / `rseed`, because in an
+    /// ordinary send the orchard output IS what the user must confirm.
+    ///
+    /// Kept in sync by hand with zcli and with
+    /// `rust/pczt_signing/tests/common/mod.rs`.
+    fn redact_for_signer(pczt: Pczt) -> Pczt {
+        use pczt::roles::redactor::Redactor;
+        Redactor::new(pczt)
+            .redact_global_with(|mut g| {
+                g.clear_proprietary();
+            })
+            .redact_orchard_with(|mut o| {
+                o.redact_actions(|mut a| {
+                    a.clear_spend_witness();
+                    a.clear_spend_zip32_derivation();
+                    a.clear_spend_dummy_sk();
+                    a.clear_spend_proprietary();
+                    a.clear_spend_rseed();
+                    a.clear_spend_rho();
+                    a.clear_spend_recipient();
+                    a.clear_spend_value();
+                    a.clear_spend_fvk();
+                    a.clear_output_zip32_derivation();
+                    a.clear_output_user_address();
+                    a.clear_output_proprietary();
+                });
+            })
+            .redact_ironwood_with(|mut o| {
+                o.redact_actions(|mut a| {
+                    a.clear_spend_witness();
+                    a.clear_spend_zip32_derivation();
+                    a.clear_spend_dummy_sk();
+                    a.clear_spend_proprietary();
+                    a.clear_spend_rseed();
+                    a.clear_spend_rho();
+                    a.clear_spend_recipient();
+                    a.clear_spend_value();
+                    a.clear_spend_fvk();
+                });
+            })
+            .redact_transparent_with(|mut t| {
+                t.redact_outputs(|mut o| {
+                    o.clear_user_address();
+                    o.clear_proprietary();
+                });
+            })
+            .finish()
+    }
+
+    /// `needle` occurs in `haystack`?
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        !needle.is_empty() && haystack.windows(needle.len()).any(|w| w == needle)
     }
 
     /// Wallet-side: a V6 orchard -> ironwood turnstile migration into the
     /// wallet's own internal address. Returns
     /// `(pczt_bytes, fee, migrated, ironwood_recipient_raw)`.
     fn build_v6_migration() -> (Vec<u8>, u64, u64, [u8; 43]) {
+        build_v6_migration_inner(false)
+    }
+
+    fn build_v6_migration_inner(redact: bool) -> (Vec<u8>, u64, u64, [u8; 43]) {
         let net = params(true);
         let (_sk, fvk) = wallet_keys();
         let (note, witness, anchor) = wallet_note(&fvk);
@@ -4660,6 +4944,11 @@ mod zcash_pczt_tests {
         assert_eq!(parts.version, TxVersion::V6);
         let pczt = Creator::build_from_parts(parts).expect("Creator");
         let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
+        let pczt = if redact {
+            redact_for_signer(pczt)
+        } else {
+            pczt
+        };
         (
             pczt.serialize().expect("serialize"),
             fee,
@@ -4795,5 +5084,282 @@ mod zcash_pczt_tests {
                 n
             );
         }
+    }
+
+    /// RELEASE-GATING for the orchard cold wallet: a V5 orchard SPEND, redacted
+    /// exactly the way zafu redacts it (fvk stripped), must inspect honestly and
+    /// sign through the SHIPPED `inspect_zcash_pczt` / `sign_zcash_pczt`.
+    ///
+    /// Before the low-level-Signer fix this failed outright: the high-level
+    /// `pczt::roles::signer` role calls `Spend::verify_nullifier(None)`, which
+    /// returns `MissingFullViewingKey` on an fvk-stripped spend, so every action
+    /// failed and the device refused the transaction.
+    #[test]
+    fn zafu_redacted_v5_orchard_spend_inspects_and_signs() {
+        let fx = build_v5_fixture(true, false);
+
+        // R3 anti-regression: the viewing key really is gone from the wire.
+        assert!(
+            !contains(&fx.pczt, &fx.fvk_bytes),
+            "redacted PCZT still leaks the 96-byte orchard FVK over the airgap"
+        );
+        Pczt::parse(&fx.pczt).expect("redacted PCZT parses");
+
+        // ── what the user SEES ──
+        let i = inspect_zcash_pczt(fx.pczt.clone()).expect("inspect fvk-stripped V5");
+        assert_eq!(i.tx_version, zcash_protocol::constants::V5_TX_VERSION);
+        assert_eq!(i.ironwood_action_count, 0);
+        assert!(i.action_count >= 1);
+        assert_eq!(i.spends.len(), i.action_count as usize);
+        assert_eq!(i.outputs.len(), i.action_count as usize);
+        assert_eq!(i.fee_zat, fx.fee as i64, "the screen shows the real fee");
+        let displayed_total: u64 = i.outputs.iter().map(|o| o.value).sum();
+        assert_eq!(displayed_total, fx.sent, "the screen shows the real amount");
+        let expected_recipient = super::encode_orchard_recipient(&fx.recipient_raw, true)
+            .unwrap_or_else(|| hex::encode(fx.recipient_raw));
+        let shown = i
+            .outputs
+            .iter()
+            .find(|o| o.recipient == expected_recipient)
+            .expect("the screen shows the real recipient");
+        assert_eq!(shown.value, fx.sent);
+
+        // ── what the device SIGNS ──
+        let signed_bytes = sign_zcash_pczt(MNEMONIC, 0, fx.pczt).expect(
+            "SHIPPED sign path must handle zafu's fvk-stripped redaction — \
+             this is the cold-signing release gate",
+        );
+        assert_eq!(
+            &signed_bytes[4..8],
+            &[1, 0, 0, 0],
+            "a V5 response must still be a v1-encoded PCZT"
+        );
+        let signed = Pczt::parse(&signed_bytes).expect("signed PCZT parses");
+        assert!(signed.ironwood().actions().is_empty());
+        for (n, a) in signed.orchard().actions().iter().enumerate() {
+            assert!(
+                a.spend().spend_auth_sig().is_some(),
+                "orchard action {} left unsigned",
+                n
+            );
+        }
+    }
+
+    /// The ironwood/turnstile path must survive the same redaction. Not the
+    /// release-critical pool, but a non-regression guard on the fvk fix.
+    #[test]
+    fn zafu_redacted_v6_migration_inspects_and_signs() {
+        let (bytes, fee, migrated, _recipient) = build_v6_migration_inner(true);
+        let i = inspect_zcash_pczt(bytes.clone()).expect("inspect fvk-stripped V6");
+        assert_eq!(i.tx_version, zcash_protocol::constants::V6_TX_VERSION);
+        assert!(i.ironwood_action_count >= 1);
+        assert_eq!(i.fee_zat, fee as i64);
+        assert!(i.fee_zat < migrated as i64);
+
+        let signed_bytes = sign_zcash_pczt(MNEMONIC, 0, bytes).expect("sign fvk-stripped V6");
+        let signed = Pczt::parse(&signed_bytes).expect("signed PCZT parses");
+        for (n, a) in signed
+            .orchard()
+            .actions()
+            .iter()
+            .chain(signed.ironwood().actions().iter())
+            .enumerate()
+        {
+            assert!(
+                a.spend().spend_auth_sig().is_some(),
+                "action {} left unsigned",
+                n
+            );
+        }
+    }
+
+    /// Full airgap round trip for the release-critical flow: wallet builds +
+    /// proves + redacts a V5 orchard SPEND, the SHIPPED device entry points
+    /// inspect and sign it, and the wallet finalizes + extracts a real V5
+    /// transaction from the result.
+    ///
+    /// `SpendFinalizer::finalize_spends` is the load-bearing assertion: it fails
+    /// unless the device actually produced spend-auth signatures.
+    ///
+    /// Slow: builds the Halo2 orchard proving + verifying keys.
+    #[test]
+    fn redacted_v5_orchard_spend_round_trips_to_an_extractable_transaction() {
+        use pczt::roles::{spend_finalizer::SpendFinalizer, tx_extractor::TransactionExtractor};
+
+        let fx = build_v5_fixture(true, true);
+        let i = inspect_zcash_pczt(fx.pczt.clone()).expect("inspect");
+        assert_eq!(i.fee_zat, fx.fee as i64);
+
+        let signed_bytes = sign_zcash_pczt(MNEMONIC, 0, fx.pczt).expect("device signs");
+        let signed = Pczt::parse(&signed_bytes).expect("signed PCZT parses");
+
+        let finalized = SpendFinalizer::new(signed)
+            .finalize_spends()
+            .expect("SpendFinalizer — fails if the device did not actually sign");
+        let tx = TransactionExtractor::new(finalized)
+            .with_orchard(&orchard::circuit::VerifyingKey::build(
+                orchard::circuit::OrchardCircuitVersion::FixedPostNu6_2,
+            ))
+            .extract()
+            .expect("extract a transaction");
+
+        let mut tx_bytes = Vec::new();
+        tx.write(&mut tx_bytes).expect("serialize tx");
+        // v5 header: (version | 1<<31) LE, then the V5 version group id LE.
+        assert_eq!(&tx_bytes[0..4], &[0x05, 0x00, 0x00, 0x80], "V5 tx version");
+        assert_eq!(
+            &tx_bytes[4..8],
+            &zcash_protocol::constants::V5_VERSION_GROUP_ID.to_le_bytes(),
+            "V5 version group id"
+        );
+        assert!(tx_bytes.len() > 1000, "extracted tx suspiciously small");
+    }
+
+    /// Pins the upstream constraint that forces `sign_zcash_pczt` to drive the
+    /// LOW-LEVEL Signer role: `pczt::roles::signer::Signer` hardcodes
+    /// `Spend::verify_nullifier(None)`, and `MissingFullViewingKey` is not in
+    /// the tolerated-`Missing*` set, so it cannot sign an fvk-stripped spend at
+    /// all. If a future `pczt` release lifts this, the fvk workaround can be
+    /// reconsidered — and this test will tell us.
+    #[test]
+    fn upstream_high_level_signer_cannot_sign_an_fvk_stripped_spend() {
+        let fx = build_v5_fixture(true, false);
+        let pczt = Pczt::parse(&fx.pczt).expect("parse");
+        let n_actions = pczt.orchard().actions().len();
+        assert!(n_actions >= 1);
+        let (sk, _fvk) = wallet_keys();
+        let ask = orchard::keys::SpendAuthorizingKey::from(&sk);
+        let mut signer = pczt::roles::signer::Signer::new(pczt).expect("high-level Signer");
+        for index in 0..n_actions {
+            let err = signer
+                .sign_orchard(index, &ask)
+                .expect_err("high-level Signer must fail without the spend fvk");
+            let msg = format!("{err:?}");
+            assert!(
+                msg.contains("MissingFullViewingKey"),
+                "unexpected error from the high-level Signer: {}",
+                msg
+            );
+        }
+    }
+
+    /// LEB128, the varint postcard uses for `u64`.
+    fn varint(mut v: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        loop {
+            let b = (v & 0x7f) as u8;
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                return out;
+            }
+            out.push(b | 0x80);
+        }
+    }
+
+    /// Replace every occurrence of `needle` with `replacement` (same length).
+    /// Returns the patched bytes and the number of substitutions.
+    fn patch_all(bytes: &[u8], needle: &[u8], replacement: &[u8]) -> (Vec<u8>, usize) {
+        assert_eq!(needle.len(), replacement.len());
+        let mut out = bytes.to_vec();
+        let mut n = 0;
+        let mut i = 0;
+        while i + needle.len() <= out.len() {
+            if &out[i..i + needle.len()] == needle {
+                out[i..i + needle.len()].copy_from_slice(replacement);
+                n += 1;
+                i += needle.len();
+            } else {
+                i += 1;
+            }
+        }
+        (out, n)
+    }
+
+    /// TAMPER DETECTION: a hostile wallet inflates the output `value` field —
+    /// the plaintext number the review screen displays — while the transaction
+    /// still pays what the note commitment says. The device must not display
+    /// the lie, and must not sign it.
+    #[test]
+    fn tampered_output_value_is_rejected() {
+        let fx = build_v5_fixture(true, false);
+        inspect_zcash_pczt(fx.pczt.clone()).expect("honest PCZT inspects");
+
+        // Option<u64> on the wire: 0x01 tag + LEB128. Same-length replacement
+        // keeps every following offset intact.
+        let mut needle = vec![0x01];
+        needle.extend_from_slice(&varint(fx.sent));
+        let mut replacement = vec![0x01];
+        replacement.extend_from_slice(&varint(fx.sent + 1));
+        assert_eq!(needle.len(), replacement.len());
+        let (tampered, n) = patch_all(&fx.pczt, &needle, &replacement);
+        assert!(n > 0, "output value field not found in the wire bytes");
+
+        // The patch really did change the field the screen reads.
+        let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+        assert!(
+            parsed
+                .orchard()
+                .actions()
+                .iter()
+                .any(|a| a.output().value() == &Some(fx.sent + 1)),
+            "the value the review screen would display was not actually changed"
+        );
+
+        let err = inspect_zcash_pczt(tampered.clone()).expect_err(
+            "a PCZT whose displayed amount contradicts its note commitment must be refused",
+        );
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("does not match what it claims to pay"),
+            "unexpected rejection reason: {}",
+            msg
+        );
+        assert!(
+            sign_zcash_pczt(MNEMONIC, 0, tampered).is_err(),
+            "the device must refuse to sign a PCZT it refused to display"
+        );
+    }
+
+    /// TAMPER DETECTION: a hostile wallet swaps the displayed recipient for one
+    /// the user trusts while the transaction pays somebody else.
+    #[test]
+    fn tampered_output_recipient_is_rejected() {
+        let fx = build_v5_fixture(true, false);
+        inspect_zcash_pczt(fx.pczt.clone()).expect("honest PCZT inspects");
+
+        // A different, well-formed orchard receiver.
+        let decoy_sk = orchard::keys::SpendingKey::from_bytes([11u8; 32]).unwrap();
+        let decoy = orchard::keys::FullViewingKey::from(&decoy_sk)
+            .address_at(0u32, orchard::keys::Scope::External)
+            .to_raw_address_bytes();
+        assert_ne!(decoy, fx.recipient_raw);
+
+        let (tampered, n) = patch_all(&fx.pczt, &fx.recipient_raw, &decoy);
+        assert!(n > 0, "output recipient not found in the wire bytes");
+
+        let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+        assert!(
+            parsed
+                .orchard()
+                .actions()
+                .iter()
+                .any(|a| a.output().recipient() == &Some(decoy)),
+            "the recipient the review screen would display was not actually changed"
+        );
+
+        let err = inspect_zcash_pczt(tampered.clone()).expect_err(
+            "a PCZT whose displayed recipient contradicts its note commitment must be refused",
+        );
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("does not match what it claims to pay"),
+            "unexpected rejection reason: {}",
+            msg
+        );
+        assert!(
+            sign_zcash_pczt(MNEMONIC, 0, tampered).is_err(),
+            "the device must refuse to sign a PCZT it refused to display"
+        );
     }
 }

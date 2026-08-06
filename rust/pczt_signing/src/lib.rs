@@ -73,9 +73,56 @@ pub struct PcztSummary {
     pub fee_zat: Option<u64>,
 }
 
+/// Confirm that the recipient + amount this summary is about to DISPLAY are
+/// the ones the transaction actually pays.
+///
+/// A cold signer's whole value is that the screen cannot lie. An orchard
+/// output's `recipient` and `value` are plaintext metadata the wallet supplies
+/// purely for this display - nothing in the signing path reads them - so on
+/// their own a hostile wallet could show any recipient and any amount while
+/// the transaction pays somebody else. What the transaction is bound to is the
+/// note commitment `cmx`, which the sighash covers.
+/// `Output::verify_note_commitment` recomputes `cmx` from
+/// (recipient, value, rho = nf_old, rseed); zafu's `redact_pczt_for_signer`
+/// deliberately keeps all of those on the output side, so the check runs on
+/// exactly the bytes that cross the airgap.
+///
+/// Fail-closed on a proven mismatch; no-op when the check is impossible
+/// (fields absent, unknown consensus branch, unparsable bundle).
+fn verify_displayed_outputs(pczt: &Pczt) -> Result<(), Error> {
+    use pczt::roles::verifier::{OrchardError, Verifier};
+
+    fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<()>> {
+        for action in bundle.actions() {
+            match action.output().verify_note_commitment(action.spend()) {
+                Ok(()) => {}
+                Err(
+                    orchard::pczt::VerifyError::MissingRecipient
+                    | orchard::pczt::VerifyError::MissingValue
+                    | orchard::pczt::VerifyError::MissingRandomSeed,
+                ) => {}
+                Err(e) => return Err(OrchardError::Verify(e)),
+            }
+        }
+        Ok(())
+    }
+
+    match Verifier::new(pczt.clone())
+        .with_orchard(check)
+        .and_then(|v| v.with_ironwood(check))
+    {
+        Ok(_) => Ok(()),
+        Err(OrchardError::Verify(e)) => Err(Error::Parse(format!(
+            "output does not match what it claims to pay ({e:?})"
+        ))),
+        Err(_) => Ok(()),
+    }
+}
+
 /// Parse a redacted PCZT and produce the confirmation summary.
 pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     let pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
+    verify_displayed_outputs(&pczt)?;
 
     let orchard_actions = pczt.orchard().actions().len();
     let transparent_inputs = pczt.transparent().inputs().len();
@@ -133,19 +180,20 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     // computation reads (redaction only clears witnesses/proofs, not the
     // value commitments), so this succeeds on exactly the bytes we display.
     //
-    // Scoped to PCZTs that actually carry an ironwood bundle: it is the
-    // ironwood/turnstile path where an omitted ironwood value_sum would
-    // understate the fee. A V5 / ironwood-empty PCZT keeps the shipped
-    // behaviour EXACTLY (fee_zat = None, rendered "unknown") - per FIX-B
-    // "do not touch that path". This condition replaces the old
-    // `cfg(zcash_unstable = "nu6.3")` gate one-for-one: under the released
-    // stack the cfg no longer exists, and the old default build could never
-    // see a non-empty ironwood bundle in the first place.
-    let fee_zat = if ironwood_actions > 0 {
-        compute_fee_zat(pczt_bytes)
-    } else {
-        None
-    };
+    // Run for EVERY PCZT, not just ironwood-carrying ones. The fee is one of
+    // the three things a cold-wallet user must confirm (recipient, amount,
+    // fee); rendering it "unknown" on an ordinary orchard send means they
+    // cannot confirm it at all, and the ORCHARD send is the release-critical
+    // flow. `compute_fee_zat` is already fail-closed - it returns None (still
+    // "unknown") whenever the effects cannot be reconstructed or a transparent
+    // prevout value is unavailable - so widening the scope can only turn an
+    // "unknown" into a correct number, never into a wrong one.
+    //
+    // This also removes a divergence: the native FFI path
+    // (`signer::inspect_zcash_pczt`) has always shown a real fee for V5, so
+    // the same PCZT used to display differently depending on which shipped
+    // entry point handled it.
+    let fee_zat = compute_fee_zat(pczt_bytes);
 
     Ok(PcztSummary {
         orchard_actions,
@@ -187,6 +235,9 @@ pub fn sign_redacted_pczt(
     mainnet: bool,
 ) -> Result<Vec<u8>, Error> {
     let pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
+    // Refuse to sign anything we would have refused to display. `sign_request`
+    // does not re-run `summarize`, so this must be checked here too.
+    verify_displayed_outputs(&pczt)?;
 
     let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, seed_phrase)
         .map_err(|e| Error::Seed(e.to_string()))?;

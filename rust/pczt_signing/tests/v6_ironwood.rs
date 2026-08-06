@@ -127,3 +127,118 @@ fn wallet_builds_v6_migration_device_signs() {
         );
     }
 }
+
+/// TAMPER DETECTION on the module crate's shipped entry points: a hostile
+/// wallet inflates the plaintext `value` of an orchard output - the number the
+/// confirmation screen displays - while the transaction still pays what the
+/// note commitment says. `summarize` must refuse to display it and
+/// `sign_redacted_pczt` must refuse to sign it.
+#[test]
+fn tampered_output_value_is_rejected() {
+    let fx = common::build_redacted_v5_send();
+    pczt_signing::summarize(&fx.redacted_pczt).expect("honest PCZT summarizes");
+
+    // Option<u64> on the wire: 0x01 tag + LEB128. A same-length replacement
+    // keeps every following offset intact.
+    let mut needle = vec![0x01];
+    needle.extend_from_slice(&varint(fx.migrated));
+    let mut replacement = vec![0x01];
+    replacement.extend_from_slice(&varint(fx.migrated + 1));
+    assert_eq!(needle.len(), replacement.len());
+    let (tampered, n) = patch_all(&fx.redacted_pczt, &needle, &replacement);
+    assert!(n > 0, "output value field not found in the wire bytes");
+
+    let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+    assert!(
+        parsed
+            .orchard()
+            .actions()
+            .iter()
+            .any(|a| a.output().value() == &Some(fx.migrated + 1)),
+        "the value the confirmation screen would display was not actually changed"
+    );
+
+    let err = pczt_signing::summarize(&tampered).expect_err(
+        "a PCZT whose displayed amount contradicts its note commitment must be refused",
+    );
+    assert!(
+        format!("{err}").contains("does not match what it claims to pay"),
+        "unexpected rejection reason: {err}"
+    );
+    assert!(
+        pczt_signing::sign_redacted_pczt(&tampered, MNEMONIC, 0, false).is_err(),
+        "the device must refuse to sign a PCZT it refused to display"
+    );
+}
+
+/// TAMPER DETECTION: the displayed recipient is swapped for one the user
+/// trusts while the transaction pays somebody else.
+#[test]
+fn tampered_output_recipient_is_rejected() {
+    let fx = common::build_redacted_v5_send();
+    pczt_signing::summarize(&fx.redacted_pczt).expect("honest PCZT summarizes");
+
+    let decoy_sk = orchard::keys::SpendingKey::from_bytes([11u8; 32]).unwrap();
+    let decoy = orchard::keys::FullViewingKey::from(&decoy_sk)
+        .address_at(0u32, orchard::keys::Scope::External)
+        .to_raw_address_bytes();
+    assert_ne!(decoy, fx.ironwood_recipient);
+
+    let (tampered, n) = patch_all(&fx.redacted_pczt, &fx.ironwood_recipient, &decoy);
+    assert!(n > 0, "output recipient not found in the wire bytes");
+
+    let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+    assert!(
+        parsed
+            .orchard()
+            .actions()
+            .iter()
+            .any(|a| a.output().recipient() == &Some(decoy)),
+        "the recipient the confirmation screen would display was not actually changed"
+    );
+
+    let err = pczt_signing::summarize(&tampered).expect_err(
+        "a PCZT whose displayed recipient contradicts its note commitment must be refused",
+    );
+    assert!(
+        format!("{err}").contains("does not match what it claims to pay"),
+        "unexpected rejection reason: {err}"
+    );
+    assert!(
+        pczt_signing::sign_redacted_pczt(&tampered, MNEMONIC, 0, false).is_err(),
+        "the device must refuse to sign a PCZT it refused to display"
+    );
+}
+
+/// LEB128, the varint postcard uses for `u64`.
+fn varint(mut v: u64) -> Vec<u8> {
+    let mut out = Vec::new();
+    loop {
+        let b = (v & 0x7f) as u8;
+        v >>= 7;
+        if v == 0 {
+            out.push(b);
+            return out;
+        }
+        out.push(b | 0x80);
+    }
+}
+
+/// Replace every occurrence of `needle` with the same-length `replacement`.
+/// Returns the patched bytes and the substitution count.
+fn patch_all(bytes: &[u8], needle: &[u8], replacement: &[u8]) -> (Vec<u8>, usize) {
+    assert_eq!(needle.len(), replacement.len());
+    let mut out = bytes.to_vec();
+    let mut n = 0;
+    let mut i = 0;
+    while i + needle.len() <= out.len() {
+        if &out[i..i + needle.len()] == needle {
+            out[i..i + needle.len()].copy_from_slice(replacement);
+            n += 1;
+            i += needle.len();
+        } else {
+            i += 1;
+        }
+    }
+    (out, n)
+}
