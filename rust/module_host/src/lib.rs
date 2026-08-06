@@ -164,3 +164,46 @@ impl ModuleRuntime {
     }
 }
 pub mod manifest;
+
+// ── kernel trust anchors (update architecture v1) ───────────────────────
+
+/// Kernel (host API) version. Modules declare `min_kernel_version`; the
+/// verifier refuses modules needing a newer kernel. Additive-only host API
+/// changes bump this.
+pub const KERNEL_VERSION: u32 = 1;
+
+/// The 2-of-3 release verifying keys, baked at build time per the update
+/// architecture. PLACEHOLDER (all-zero) until the offline key ceremony -
+/// `release_keys()` returns None for placeholders, so the kernel FAILS
+/// CLOSED: no module package can verify until real pubkeys land here.
+/// Rotation requires a kernel (store/USB) update by design.
+pub const RELEASE_KEY_BYTES: [[u8; 32]; 3] = [[0u8; 32], [0u8; 32], [0u8; 32]];
+
+/// Decode the baked release keys. None while the placeholder is in place
+/// (all-zero is not a valid ed25519 point encoding wouldn't matter - we
+/// refuse it explicitly before parsing).
+pub fn release_keys() -> Option<[ed25519_dalek::VerifyingKey; 3]> {
+    if RELEASE_KEY_BYTES.iter().all(|k| k.iter().all(|b| *b == 0)) {
+        return None;
+    }
+    let mut keys = Vec::with_capacity(3);
+    for kb in &RELEASE_KEY_BYTES {
+        keys.push(ed25519_dalek::VerifyingKey::from_bytes(kb).ok()?);
+    }
+    keys.try_into().ok()
+}
+
+/// Kernel-side module self-test: instantiate the wasm and probe the ABI
+/// with an unknown-tx-type envelope. A healthy module reports the named
+/// module error; anything else (trap, instantiation failure, silence)
+/// fails the test. Run before activating a staged slot - a bad module
+/// can never brick signing.
+pub fn self_test(wasm_bytes: &[u8]) -> bool {
+    let Ok(mut rt) = ModuleRuntime::load(wasm_bytes) else {
+        return false;
+    };
+    match rt.summarize_request(&[0x53, 0x04, 0x77, 0, 0, 0]) {
+        Err(HostError::Module(msg)) => msg.contains("unknown zcash tx type"),
+        _ => false,
+    }
+}

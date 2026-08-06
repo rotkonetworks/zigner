@@ -4674,6 +4674,55 @@ pub fn module_summarize_request(
     Ok(out)
 }
 
+/// Result of verifying a signed module package: everything the confirm
+/// screen shows, plus the wasm ready for the slot store. Only returned
+/// when 2-of-3 release signatures, the hash, the kernel version gate and
+/// the anti-rollback check ALL pass.
+pub struct ModulePackageInfo {
+    pub module_version: u32,
+    pub min_kernel_version: u32,
+    pub description: String,
+    /// Full sha256 of the module wasm, hex - the UI shows a prefix and the
+    /// user cross-checks it against the publisher's display.
+    pub module_hash_hex: String,
+    pub wasm: Vec<u8>,
+}
+
+/// Verify a module package against the kernel trust anchors. Fails closed
+/// while the release keys are unprovisioned placeholders.
+pub fn module_verify_package(
+    package: &[u8],
+    last_installed_version: u32,
+) -> Result<ModulePackageInfo, ErrorDisplayed> {
+    use sha2::Digest;
+    let keys = module_host::release_keys().ok_or(ErrorDisplayed::Str {
+        s: "release keys not provisioned - module updates disabled in this build".to_string(),
+    })?;
+    let v = module_host::manifest::verify_package(
+        package,
+        &keys,
+        module_host::KERNEL_VERSION,
+        last_installed_version,
+    )
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("module package rejected: {e:?}"),
+    })?;
+    let hash = sha2::Sha256::digest(v.module_bytes);
+    Ok(ModulePackageInfo {
+        module_version: v.module_version,
+        min_kernel_version: v.min_kernel_version,
+        description: v.description,
+        module_hash_hex: hex::encode(hash),
+        wasm: v.module_bytes.to_vec(),
+    })
+}
+
+/// Kernel self-test for a staged module: instantiate + ABI probe. Run
+/// before activation; a failing module never becomes the active slot.
+pub fn module_self_test(wasm: &[u8]) -> bool {
+    module_host::self_test(wasm)
+}
+
 pub fn module_sign_request(
     module_wasm: &[u8],
     payload: &[u8],

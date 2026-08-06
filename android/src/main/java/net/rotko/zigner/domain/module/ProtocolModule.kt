@@ -8,9 +8,10 @@ import io.parity.signer.uniffi.moduleSummarizeRequest
 /**
  * Protocol module access (docs/update-architecture.md).
  *
- * v1 wiring: Module #0 ships as an APK asset and is the only slot.
- * The A/B slot store + camera-update installer replace [loadActive]'s
- * body without touching call sites.
+ * The active module comes from [ModuleSlotStore] (A/B slots, signed
+ * packages, anti-rollback, self-test). When no slot is active - or the
+ * active slot fails verification - the baked-in Module #0 asset is the
+ * fallback, so signing always works.
  */
 object ProtocolModule {
 	private const val MODULE0_ASSET = "modules/module0.wasm"
@@ -19,8 +20,14 @@ object ProtocolModule {
 	private var cached: ByteArray? = null
 
 	fun loadActive(context: Context): ByteArray =
-		cached ?: context.assets.open(MODULE0_ASSET).use { it.readBytes() }
+		cached ?: (ModuleSlotStore.loadActiveVerified(context)
+			?: context.assets.open(MODULE0_ASSET).use { it.readBytes() })
 			.also { cached = it }
+
+	/** Drop the cache after slot activation/revert. */
+	fun invalidate() {
+		cached = null
+	}
 
 	/** Confirmation data for a scanned PCZT payload (tx_type 0x03/0x04). */
 	fun summarize(context: Context, payload: ByteArray): List<ModulePcztSummary> =
@@ -50,6 +57,6 @@ object ProtocolModule {
 			(payload[2] == 0x03.toByte() || payload[2] == 0x04.toByte())
 }
 
-private fun ByteArray.toUByteList(): List<UByte> = map { it.toUByte() }
-private fun List<UByte>.toByteArray(): ByteArray =
+internal fun ByteArray.toUByteList(): List<UByte> = map { it.toUByte() }
+internal fun List<UByte>.toByteArray(): ByteArray =
 	ByteArray(size) { i -> this[i].toByte() }

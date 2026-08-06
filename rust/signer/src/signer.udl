@@ -20,6 +20,14 @@ interface QrSequenceDecodeError {
     GenericError(string s);
 };
 
+dictionary ModulePackageInfo {
+    u32 module_version;
+    u32 min_kernel_version;
+    string description;
+    string module_hash_hex;
+    sequence<u8> wasm;
+};
+
 dictionary ModulePcztSummary {
     u32 orchard_actions;
     u32 ironwood_actions;
@@ -604,6 +612,14 @@ namespace signer {
     // arrives with the update installer.
     [Throws=ErrorDisplayed]
     sequence<ModulePcztSummary> module_summarize_request([ByRef] sequence<u8> module_wasm, [ByRef] sequence<u8> payload);
+
+    // Verify a signed module package (2-of-3 manifest, hash, kernel gate,
+    // anti-rollback). Fails closed while release keys are placeholders.
+    [Throws=ErrorDisplayed]
+    ModulePackageInfo module_verify_package([ByRef] sequence<u8> package, u32 last_installed_version);
+
+    // Instantiate + ABI-probe a staged module before activation.
+    boolean module_self_test([ByRef] sequence<u8> wasm);
 
     [Throws=ErrorDisplayed]
     sequence<u8> module_sign_request([ByRef] sequence<u8> module_wasm, [ByRef] sequence<u8> payload, [ByRef] string seed_phrase, u32 account, boolean mainnet);

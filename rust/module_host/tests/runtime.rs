@@ -42,3 +42,24 @@ fn sign_request_error_path_round_trips() {
     let err = rt.sign_request(&payload, "abandon", 0, true).unwrap_err();
     assert!(matches!(err, HostError::Module(_)));
 }
+
+#[test]
+fn release_keys_placeholder_fails_closed() {
+    // all-zero baked keys = unprovisioned; the kernel must refuse to
+    // return trust anchors so no package can ever verify
+    assert!(module_host::release_keys().is_none());
+}
+
+#[test]
+fn self_test_passes_on_real_module_and_fails_on_garbage() {
+    let wasm = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../pczt_signing/target/wasm32-unknown-unknown/release/pczt_signing.wasm"
+    ))
+    .expect("build pczt_signing for wasm32 first");
+    assert!(module_host::self_test(&wasm));
+    assert!(!module_host::self_test(b"not wasm"));
+    // a structurally valid but ABI-less wasm must also fail
+    let empty_module = wat::parse_str("(module)").unwrap();
+    assert!(!module_host::self_test(&empty_module));
+}
