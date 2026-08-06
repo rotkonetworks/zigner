@@ -1,4 +1,4 @@
-503
+510
 "
 0x02
 0x03
@@ -502,3 +502,10 @@ zpub
 zQ3sh
 zviewo
 —
+Finalizer
+IoFinalizer
+LEB128
+nf_old
+rseed
+unparsable
+unprovable
