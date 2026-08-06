@@ -1987,10 +1987,10 @@ const MAX_ORCHARD_ACTIONS: usize = 4096; // far above any real bundle (~tens)
 /// runs on exactly the bytes that cross the airgap.
 ///
 /// The rule is keyed on what is DISPLAYED, not on which field happens to be
-/// present: **anything the screen shows must be proven; only an output that
-/// shows nothing may skip verification.**
+/// present: **EVERY output must be proven against its note commitment. There
+/// is no skip.**
 ///
-/// The previous version of this gate skipped whenever
+/// The original version of this gate skipped whenever
 /// `verify_note_commitment` reported `MissingRecipient` / `MissingValue` /
 /// `MissingRandomSeed` — "a producer that withholds a field gets no display
 /// guarantee, but also no false alarm". That made the control bypassable by an
@@ -2004,45 +2004,53 @@ const MAX_ORCHARD_ACTIONS: usize = 4096; // far above any real bundle (~tens)
 /// regardless of whether verification ran, so the skip was a silent no-op on
 /// attacker-chosen input.
 ///
-/// So: an output that renders a recipient, or a non-zero amount, MUST verify —
-/// a missing field there is a REFUSAL. Only a fully-blank output (no recipient
-/// AND no/zero value — nothing meaningful on screen) may skip. zafu's
-/// `redact_pczt_for_signer` keeps `recipient`, `value` and `rseed` on every
-/// output, dummy/padding actions included, so an honestly-redacted PCZT
-/// verifies every action and is unaffected.
+/// An intermediate fix keyed the skip on whether anything was DISPLAYED —
+/// refuse an unprovable output that renders a recipient or a non-zero amount,
+/// allow one that renders nothing. That escape hatch was itself reachable by a
+/// hostile producer: strip `recipient`, `value` AND `rseed` from every output
+/// and the review screen renders a blank recipient and 0 for each of them
+/// while the transaction still pays a real amount bound by `cmx`, with a
+/// plausible producer-supplied fee alongside. A device that displays "nothing,
+/// 0" and then signs a real payment has failed at its only job.
+///
+/// So there is no skip. Any output this device cannot prove — for any reason,
+/// including a withheld field — is a REFUSAL naming the action index and the
+/// reason. zafu's `redact_pczt_for_signer` keeps `recipient`, `value` and
+/// `rseed` on every output, dummy/padding actions included, and all of them
+/// verify, so an honestly-redacted PCZT is unaffected (pinned by the
+/// `zafu_redacted_*` fixtures). A third-party producer that redacts output
+/// plaintext is refused — loudly, at review time, with the failing action
+/// named. That is the correct failure direction: the alternative fails
+/// silently and invisibly, which is how the original bug survived.
 ///
 /// Still a silent no-op when the bundle cannot be reached at all (unparsable,
 /// unknown consensus branch) — signing fails on those paths anyway.
-fn verify_displayed_outputs(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
+///
+/// The second half of this gate covers the FEE — see [`verify_value_balance`].
+fn verify_displayed_summary(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
     use pczt::roles::verifier::{OrchardError, Verifier};
 
     fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<String>> {
         for (index, action) in bundle.actions().iter().enumerate() {
-            let output = action.output();
-            // Exactly what the review screen renders for this action.
-            let shows_recipient = output.recipient().is_some();
-            let shows_amount = output.value().map(|v| v.inner()).unwrap_or(0) != 0;
-
-            match output.verify_note_commitment(action.spend()) {
+            match action.output().verify_note_commitment(action.spend()) {
                 Ok(()) => {}
-                // Not verifiable because a field is absent.
+                // Not verifiable because the producer withheld a field the
+                // check needs. Unconditional refusal — see above.
                 Err(
                     e @ (orchard::pczt::VerifyError::MissingRecipient
                     | orchard::pczt::VerifyError::MissingValue
                     | orchard::pczt::VerifyError::MissingRandomSeed),
                 ) => {
-                    if shows_recipient || shows_amount {
-                        return Err(OrchardError::Custom(format!("action {index}: {e:?}")));
-                    }
-                    // Nothing displayed for this action, so nothing to lie
-                    // about. (Padding actions in an honestly redacted PCZT
-                    // still verify; this is the only skip.)
+                    return Err(OrchardError::Custom(format!(
+                        "output cannot be proven against its note commitment \
+                         (action {index}: {e:?})"
+                    )))
                 }
                 // A PROVEN lie.
                 Err(e) => return Err(OrchardError::Verify(e)),
             }
         }
-        Ok(())
+        verify_value_balance(bundle).map_err(OrchardError::Custom)
     }
 
     let outcome = Verifier::new(pczt.clone())
@@ -2059,17 +2067,94 @@ fn verify_displayed_outputs(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
                  refusing to display or sign it."
             ),
         }),
-        // Something the screen WOULD show, that cannot be proven at all
-        // because the producer withheld a field the check needs.
-        Err(OrchardError::Custom(detail)) => Err(ErrorDisplayed::Str {
-            s: format!(
-                "what this PCZT output would display cannot be proven against the \
-                 note commitment ({detail}) — refusing to display or sign it."
-            ),
+        // Something the review screen would show that this device cannot
+        // prove: an output missing a field the commitment check needs, or a
+        // declared value balance the commitments contradict.
+        Err(OrchardError::Custom(reason)) => Err(ErrorDisplayed::Str {
+            s: format!("PCZT {reason} — refusing to display or sign it."),
         }),
         // Not verifiable here (structural parse, unrecognized consensus branch).
         // Signing has its own guards; don't block review.
         Err(_) => Ok(()),
+    }
+}
+
+/// Confirm that a bundle's declared `value_sum` — the number the displayed FEE
+/// is computed from — matches the action value commitments.
+///
+/// `value_sum` is plaintext metadata the producer writes into the PCZT.
+/// Nothing in the note-commitment check above constrains it, so on its own a
+/// hostile wallet could pay the user's expected recipient the expected amount
+/// (both now provably displayed) while declaring a `value_sum` that renders a
+/// trivial fee, and route the rest of a large spent note to the miner. An
+/// inflated fee is fund loss, not a cosmetic error.
+///
+/// It is provable without any spend-side note plaintext — which matters,
+/// because zafu's redaction strips ALL of it (spend `value`, `recipient`,
+/// `rho`, `rseed` and the `fvk`), so `Spend::verify_nullifier` and
+/// `Action::verify_cv_net` are both unusable here and a
+/// `fee = Σ spend − Σ output` derivation is impossible. What survives is the
+/// relation the IO Finalizer established and consensus later re-checks via the
+/// binding signature:
+///
+/// ```text
+///     Σ cv_net − ValueCommit(value_sum, 0) == VerificationKey::from(bsk)
+/// ```
+///
+/// `cv_net` is present on every action and is covered by the sighash this
+/// device signs; `bsk` survives redaction (zafu clears spend note plaintext
+/// and the fvk, not the binding key). Forging a `bsk'` for a different
+/// `value_sum'` means finding the discrete log of `[value_sum − value_sum']V`
+/// in base `R`, so a producer cannot move the declared balance and stay
+/// consistent. This is a genuinely independent derivation, not the same
+/// metadata re-read by another route.
+///
+/// A missing `bsk` is a REFUSAL, not a skip — otherwise withholding one field
+/// would disable this check exactly the way withholding `rseed` disabled the
+/// output check. An action-less bundle (the canonical-empty Ironwood bundle a
+/// V5 PCZT carries) has no commitments to check against, so its `value_sum`
+/// must be exactly zero; a non-zero one would shift the displayed fee with
+/// nothing backing it, since `fee_zat` sums the ironwood term unconditionally.
+///
+/// SCOPE: this binds the orchard and ironwood terms of the fee, which for a
+/// shielded-only transaction is the entire fee. The transparent and sapling
+/// terms are NOT bound — see the note on `fee_zat` in `inspect_zcash_pczt`.
+fn verify_value_balance(bundle: &orchard::pczt::Bundle) -> Result<(), String> {
+    use orchard::value::{ValueCommitTrapdoor, ValueCommitment};
+
+    if bundle.actions().is_empty() {
+        return if *bundle.value_sum() == orchard::value::ValueSum::default() {
+            Ok(())
+        } else {
+            Err(format!(
+                "bundle declares a value balance of {:?} but has no actions to back it",
+                bundle.value_sum()
+            ))
+        };
+    }
+
+    let bsk = bundle.bsk().as_ref().ok_or_else(|| {
+        "declared value balance (the displayed fee) cannot be proven: binding key absent"
+            .to_string()
+    })?;
+
+    // ValueCommit(v, 0) — the zero trapdoor is not public API, but a 32-byte
+    // zero scalar is the same thing.
+    let zero_rcv = ValueCommitTrapdoor::from_bytes([0u8; 32])
+        .into_option()
+        .ok_or_else(|| "zero value-commitment trapdoor".to_string())?;
+    let sum_cv: ValueCommitment = bundle.actions().iter().map(|a| a.cv_net()).sum();
+    let bvk = (sum_cv - ValueCommitment::derive(*bundle.value_sum(), zero_rcv)).to_bytes();
+    let expected: [u8; 32] = (&orchard::primitives::redpallas::VerificationKey::from(bsk)).into();
+
+    if bvk == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "declared value balance {:?} (which the displayed fee is derived from) \
+             does not match the action value commitments",
+            bundle.value_sum()
+        ))
     }
 }
 
@@ -2125,7 +2210,7 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
 
     // Screen-honesty gate: everything below feeds the review screen, so refuse
     // before building a summary that provably misstates what is being paid.
-    verify_displayed_outputs(&pczt)?;
+    verify_displayed_summary(&pczt)?;
 
     // Load verified notes for cross-reference. Used by the known_spends warning
     // (zigner's distinguishing safety guard over a Keystone-equivalent signer —
@@ -2265,6 +2350,30 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
     // value LEAVES the orchard pool, so orchard_net_value alone is ~the whole
     // migrated amount. Omitting the ironwood value_sum would display that as
     // the fee. It is exactly 0 for a V5 transaction, so V5 fees are unchanged.
+    //
+    // HOW FAR THIS FEE IS TRUSTED (read before relying on it, and note that an
+    // inflated fee is fund loss, not a cosmetic error):
+    //
+    // Every term below is plaintext metadata in the PCZT, so for each one the
+    // question is whether anything binds it to what will actually be mined.
+    //
+    // * orchard + ironwood: BOUND. `verify_value_balance`, called via
+    //   `verify_displayed_summary` above before any of this runs, proves each
+    //   bundle's value_sum against Σ cv_net and bsk; a producer cannot move it
+    //   without solving a discrete log, and an action-less bundle must declare
+    //   exactly zero. For a shielded-only transaction — the release-critical
+    //   flow — that is the WHOLE fee, so the number displayed is trustworthy.
+    // * transparent: NOT bound. `input.value` is taken at face value here.
+    //   Those amounts are covered by the per-input transparent sighash we sign,
+    //   but nothing cross-checks them before the review screen renders.
+    // * sapling: NOT bound. The sapling bundle carries its own bsk and the same
+    //   relation would prove it, but there is no sapling display path or
+    //   fixture here, and the i128→i64 clamp below silently yields 0 on an
+    //   out-of-range value_sum, which a hostile producer can force.
+    //
+    // So a PCZT carrying transparent or sapling components can still show a
+    // partly producer-supplied fee. Extending the same binding to those
+    // bundles is the next step if either becomes a supported flow.
     let transparent = pczt.transparent();
     let transparent_in: u64 = transparent.inputs().iter().map(|i| *i.value()).sum();
     let transparent_out: u64 = transparent.outputs().iter().map(|o| *o.value()).sum();
@@ -5433,6 +5542,115 @@ mod zcash_pczt_tests {
         assert!(
             sign_zcash_pczt(MNEMONIC, 0, tampered).is_err(),
             "the device must refuse to sign a PCZT it refused to display"
+        );
+    }
+
+    /// TAMPER DETECTION, the blank-output variant — the reason there is NO
+    /// skip, not even for an output that renders nothing.
+    ///
+    /// An intermediate version of the gate allowed an output to skip
+    /// verification when it displayed nothing (no recipient, no/zero value),
+    /// on the grounds that there was nothing to lie about. There was: a
+    /// hostile producer strips `recipient`, `value` AND `rseed` from every
+    /// output, so each renders blank/0 while the transaction still pays a real
+    /// amount bound by `cmx`, alongside a plausible producer-supplied fee. The
+    /// device would display nothing and sign a real payment.
+    #[test]
+    fn fully_blank_output_is_refused_rather_than_skipped() {
+        let fx = build_v5_fixture(true, false);
+        let honest = inspect_zcash_pczt(fx.pczt.clone()).expect("honest PCZT inspects");
+        assert!(
+            honest.outputs.iter().any(|o| o.value == fx.sent),
+            "the honest review screen shows the real payment: {:?}",
+            honest
+        );
+
+        // Strip every field the screen reads AND the one the proof needs, so
+        // the output renders blank and cannot be verified.
+        let blanked =
+            pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.pczt).expect("parse honest PCZT"))
+                .redact_orchard_with(|mut o| {
+                    o.redact_actions(|mut a| {
+                        a.clear_output_rseed();
+                        a.clear_output_recipient();
+                        a.clear_output_value();
+                    });
+                })
+                .finish()
+                .serialize()
+                .expect("serialize blanked PCZT");
+
+        let err = inspect_zcash_pczt(blanked.clone())
+            .expect_err("an output this device cannot prove must be refused, blank or not");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("cannot be proven"),
+            "unexpected rejection reason: {}",
+            msg
+        );
+        assert!(
+            sign_zcash_pczt(MNEMONIC, 0, blanked).is_err(),
+            "the device must refuse to sign a payment it cannot display"
+        );
+    }
+
+    /// FEE TAMPERING: the review screen's fee comes from each bundle's
+    /// `value_sum`, plaintext metadata the producer writes into the PCZT.
+    /// Nothing in the note-commitment check constrains it, so a hostile wallet
+    /// could pay the expected recipient the expected amount — both now provably
+    /// displayed — while declaring a `value_sum` that renders a trivial fee and
+    /// routing the rest of a large spent note to the miner.
+    #[test]
+    fn tampered_value_sum_is_rejected() {
+        let fx = build_v5_fixture(true, false);
+        let honest = inspect_zcash_pczt(fx.pczt.clone()).expect("honest PCZT inspects");
+        assert_eq!(honest.fee_zat, fx.fee as i64, "honest fee: {honest:?}");
+
+        // For this shielded-only send the orchard value_sum IS the fee.
+        let (tampered, n) = patch_all(&fx.pczt, &varint(fx.fee), &varint(fx.fee + 1));
+        assert!(n > 0, "value_sum varint not found in the wire bytes");
+
+        let err = inspect_zcash_pczt(tampered.clone())
+            .expect_err("a declared value balance the commitments contradict must be refused");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("does not match the action value commitments"),
+            "unexpected rejection reason: {}",
+            msg
+        );
+        assert!(
+            sign_zcash_pczt(MNEMONIC, 0, tampered).is_err(),
+            "the device must refuse to sign a fee it refused to display"
+        );
+    }
+
+    /// The fee check must not be disableable by withholding `bsk`, the way the
+    /// output check was disableable by withholding `rseed`.
+    #[test]
+    fn stripped_bsk_does_not_disable_the_fee_check() {
+        let fx = build_v5_fixture(true, false);
+        inspect_zcash_pczt(fx.pczt.clone()).expect("honest PCZT inspects");
+
+        let no_bsk =
+            pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.pczt).expect("parse honest PCZT"))
+                .redact_orchard_with(|mut o| {
+                    o.clear_bsk();
+                })
+                .finish()
+                .serialize()
+                .expect("serialize bsk-stripped PCZT");
+
+        let err = inspect_zcash_pczt(no_bsk.clone())
+            .expect_err("without bsk the declared fee is unprovable and must be refused");
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("binding key absent"),
+            "unexpected rejection reason: {}",
+            msg
+        );
+        assert!(
+            sign_zcash_pczt(MNEMONIC, 0, no_bsk).is_err(),
+            "the device must refuse to sign a fee it refused to display"
         );
     }
 

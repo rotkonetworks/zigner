@@ -282,6 +282,109 @@ fn stripped_output_rseed_does_not_disable_the_display_gate() {
     );
 }
 
+/// TAMPER DETECTION, the blank-output variant: the reason there is NO skip.
+///
+/// An intermediate version of the gate allowed an output to skip verification
+/// when it rendered nothing (no recipient, no/zero value), on the grounds that
+/// there was nothing to lie about. There was: a hostile producer strips
+/// `recipient`, `value` AND `rseed` from every output, so each renders as
+/// ("orchard:shielded", 0) while the transaction still pays a real amount
+/// bound by `cmx`, alongside a plausible producer-supplied fee. The device
+/// would display "shielded, 0" and sign a real payment.
+#[test]
+fn fully_blank_output_is_refused_rather_than_skipped() {
+    let fx = common::build_redacted_v5_send();
+    let honest = pczt_signing::summarize(&fx.redacted_pczt).expect("honest PCZT summarizes");
+    assert!(
+        honest.outputs.iter().any(|(_, v)| *v == fx.migrated),
+        "the honest summary shows the real payment: {honest:?}"
+    );
+
+    // Strip every field the display reads AND the one the proof needs, so the
+    // output renders blank and cannot be verified.
+    let blanked =
+        pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.redacted_pczt).expect("parse"))
+            .redact_orchard_with(|mut o| {
+                o.redact_actions(|mut a| {
+                    a.clear_output_rseed();
+                    a.clear_output_recipient();
+                    a.clear_output_value();
+                });
+            })
+            .finish()
+            .serialize()
+            .expect("serialize blanked PCZT");
+
+    let err = pczt_signing::summarize(&blanked)
+        .expect_err("an output this device cannot prove must be refused, blank or not");
+    assert!(
+        format!("{err}").contains("cannot be proven"),
+        "unexpected rejection reason: {err}"
+    );
+    assert!(
+        pczt_signing::sign_redacted_pczt(&blanked, MNEMONIC, 0, false).is_err(),
+        "the device must refuse to sign a payment it cannot display"
+    );
+}
+
+/// FEE TAMPERING: the displayed fee is derived from each bundle's `value_sum`,
+/// which is plaintext metadata the producer writes into the PCZT. Nothing in
+/// the note-commitment check constrains it, so a hostile wallet could pay the
+/// user's expected recipient the expected amount (both now provably displayed)
+/// while declaring a `value_sum` that renders a trivial fee, and route the
+/// rest of a large spent note to the miner.
+///
+/// `verify_value_balance` proves `value_sum` against `sum(cv_net)` and `bsk`,
+/// none of which the producer can move without solving a discrete log.
+#[test]
+fn tampered_value_sum_is_rejected() {
+    let fx = common::build_redacted_v5_send();
+    let honest = pczt_signing::summarize(&fx.redacted_pczt).expect("honest PCZT summarizes");
+    assert_eq!(honest.fee_zat, Some(fx.fee), "honest fee: {honest:?}");
+
+    // For this shielded-only send the orchard value_sum IS the fee.
+    let (tampered, n) = patch_all(&fx.redacted_pczt, &varint(fx.fee), &varint(fx.fee + 1));
+    assert!(n > 0, "value_sum varint not found in the wire bytes");
+
+    let err = pczt_signing::summarize(&tampered)
+        .expect_err("a declared value balance that the commitments contradict must be refused");
+    assert!(
+        format!("{err}").contains("does not match the action value commitments"),
+        "unexpected rejection reason: {err}"
+    );
+    assert!(
+        pczt_signing::sign_redacted_pczt(&tampered, MNEMONIC, 0, false).is_err(),
+        "the device must refuse to sign a fee it refused to display"
+    );
+}
+
+/// The fee check must not be disableable by withholding `bsk`, the way the
+/// output check was disableable by withholding `rseed`.
+#[test]
+fn stripped_bsk_does_not_disable_the_fee_check() {
+    let fx = common::build_redacted_v5_send();
+    pczt_signing::summarize(&fx.redacted_pczt).expect("honest PCZT summarizes");
+
+    let no_bsk = pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.redacted_pczt).unwrap())
+        .redact_orchard_with(|mut o| {
+            o.clear_bsk();
+        })
+        .finish()
+        .serialize()
+        .expect("serialize bsk-stripped PCZT");
+
+    let err = pczt_signing::summarize(&no_bsk)
+        .expect_err("without bsk the declared fee is unprovable and must be refused");
+    assert!(
+        format!("{err}").contains("binding key absent"),
+        "unexpected rejection reason: {err}"
+    );
+    assert!(
+        pczt_signing::sign_redacted_pczt(&no_bsk, MNEMONIC, 0, false).is_err(),
+        "the device must refuse to sign a fee it refused to display"
+    );
+}
+
 /// LEB128, the varint postcard uses for `u64`.
 fn varint(mut v: u64) -> Vec<u8> {
     let mut out = Vec::new();
