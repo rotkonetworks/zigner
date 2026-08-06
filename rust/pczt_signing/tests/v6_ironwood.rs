@@ -210,6 +210,78 @@ fn tampered_output_recipient_is_rejected() {
     );
 }
 
+/// TAMPER DETECTION, the bypass variant: the two tests above only catch an
+/// attacker who leaves the output `rseed` in place. `verify_note_commitment`
+/// needs recipient + value + rseed, and the previous gate treated a MISSING
+/// field as "not verifiable, don't block" — so a hostile wallet that simply
+/// omits the output `rseed` disabled the gate entirely while `summarize` went
+/// on displaying the attacker's chosen recipient and amount, and
+/// `sign_redacted_pczt` went on signing (the signing path never reads the
+/// output rseed: pczt's low-level signer sets `rseed: None` itself, and the
+/// signature is over a sighash that binds the REAL `cmx`). The host then
+/// reassembles the transaction with the true rseed and broadcasts.
+///
+/// The rule is now keyed on what is DISPLAYED, not on which field is absent:
+/// an output that renders a recipient or a non-zero amount must verify.
+#[test]
+fn stripped_output_rseed_does_not_disable_the_display_gate() {
+    let fx = common::build_redacted_v5_send();
+    pczt_signing::summarize(&fx.redacted_pczt).expect("honest PCZT summarizes");
+
+    // Attacker step 1: drop the output rseed, so `verify_note_commitment`
+    // can no longer be computed at all.
+    let stripped =
+        pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.redacted_pczt).expect("parse"))
+            .redact_orchard_with(|mut o| {
+                o.redact_actions(|mut a| {
+                    a.clear_output_rseed();
+                });
+            })
+            .finish()
+            .serialize()
+            .expect("serialize rseed-stripped PCZT");
+
+    // Attacker step 2: now lie freely about both displayed fields.
+    let mut needle = vec![0x01];
+    needle.extend_from_slice(&varint(fx.migrated));
+    let mut replacement = vec![0x01];
+    replacement.extend_from_slice(&varint(fx.migrated + 1));
+    let (tampered, n) = patch_all(&stripped, &needle, &replacement);
+    assert!(n > 0, "output value field not found in the wire bytes");
+
+    let decoy_sk = orchard::keys::SpendingKey::from_bytes([11u8; 32]).unwrap();
+    let decoy = orchard::keys::FullViewingKey::from(&decoy_sk)
+        .address_at(0u32, orchard::keys::Scope::External)
+        .to_raw_address_bytes();
+    let (tampered, n) = patch_all(&tampered, &fx.ironwood_recipient, &decoy);
+    assert!(n > 0, "output recipient not found in the wire bytes");
+
+    // The bytes really do carry the attacker's display values.
+    let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+    assert!(
+        parsed
+            .orchard()
+            .actions()
+            .iter()
+            .any(|a| a.output().recipient() == &Some(decoy)
+                && a.output().value() == &Some(fx.migrated + 1)),
+        "the values the confirmation screen would display were not actually changed"
+    );
+
+    let err = pczt_signing::summarize(&tampered).expect_err(
+        "an output that displays a recipient/amount it cannot prove must be refused, \
+         not silently skipped",
+    );
+    assert!(
+        format!("{err}").contains("cannot be proven"),
+        "unexpected rejection reason: {err}"
+    );
+    assert!(
+        pczt_signing::sign_redacted_pczt(&tampered, MNEMONIC, 0, false).is_err(),
+        "the device must refuse to sign a PCZT it refused to display"
+    );
+}
+
 /// LEB128, the varint postcard uses for `u64`.
 fn varint(mut v: u64) -> Vec<u8> {
     let mut out = Vec::new();

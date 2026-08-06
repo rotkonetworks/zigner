@@ -87,20 +87,56 @@ pub struct PcztSummary {
 /// deliberately keeps all of those on the output side, so the check runs on
 /// exactly the bytes that cross the airgap.
 ///
-/// Fail-closed on a proven mismatch; no-op when the check is impossible
-/// (fields absent, unknown consensus branch, unparsable bundle).
+/// The rule is keyed on what is DISPLAYED, not on which field happens to be
+/// present: **anything the screen shows must be proven; only an output that
+/// shows nothing may skip verification.**
+///
+/// The previous version of this gate skipped whenever
+/// `verify_note_commitment` reported `MissingRecipient` / `MissingValue` /
+/// `MissingRandomSeed`, on the theory that a producer withholding a field gets
+/// no guarantee but also no false alarm. That made the whole control
+/// bypassable by an ATTACKER, not just waived by an honest producer: the
+/// signing path never reads the output `rseed` (pczt's low-level signer sets
+/// `rseed: None` itself, and the signature is over a sighash that binds the
+/// real `cmx`), so a hostile wallet could strip the output `rseed`, set
+/// `recipient` and `value` to whatever the victim expected to see, get the
+/// device to display those and sign, then reassemble with the true `rseed`.
+///
+/// So: an output that renders a recipient, or a non-zero amount, MUST verify -
+/// a missing field there is a refusal. Only a fully-blank output (no recipient
+/// AND no/zero value, i.e. nothing meaningful on screen) may skip. zafu's
+/// `redact_pczt_for_signer` keeps `recipient`, `value` and `rseed` on every
+/// output, including dummy/padding actions, so an honestly-redacted PCZT
+/// verifies every action and is unaffected.
+///
+/// Still a no-op when the bundle cannot be reached at all (unparsable, unknown
+/// consensus branch) - those paths make signing fail on their own.
 fn verify_displayed_outputs(pczt: &Pczt) -> Result<(), Error> {
     use pczt::roles::verifier::{OrchardError, Verifier};
 
-    fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<()>> {
-        for action in bundle.actions() {
-            match action.output().verify_note_commitment(action.spend()) {
+    fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<String>> {
+        for (index, action) in bundle.actions().iter().enumerate() {
+            let output = action.output();
+            // Exactly what `summarize` renders for this action.
+            let shows_recipient = output.recipient().is_some();
+            let shows_amount = output.value().map(|v| v.inner()).unwrap_or(0) != 0;
+
+            match output.verify_note_commitment(action.spend()) {
                 Ok(()) => {}
+                // Not verifiable because a field is absent.
                 Err(
-                    orchard::pczt::VerifyError::MissingRecipient
+                    e @ (orchard::pczt::VerifyError::MissingRecipient
                     | orchard::pczt::VerifyError::MissingValue
-                    | orchard::pczt::VerifyError::MissingRandomSeed,
-                ) => {}
+                    | orchard::pczt::VerifyError::MissingRandomSeed),
+                ) => {
+                    if shows_recipient || shows_amount {
+                        return Err(OrchardError::Custom(format!("action {index}: {e:?}")));
+                    }
+                    // Nothing is displayed for this action, so there is
+                    // nothing to lie about. (Padding actions in an honestly
+                    // redacted PCZT still verify; this is the only skip.)
+                }
+                // A PROVEN lie.
                 Err(e) => return Err(OrchardError::Verify(e)),
             }
         }
@@ -114,6 +150,10 @@ fn verify_displayed_outputs(pczt: &Pczt) -> Result<(), Error> {
         Ok(_) => Ok(()),
         Err(OrchardError::Verify(e)) => Err(Error::Parse(format!(
             "output does not match what it claims to pay ({e:?})"
+        ))),
+        Err(OrchardError::Custom(detail)) => Err(Error::Parse(format!(
+            "what this output would display cannot be proven against the note \
+             commitment ({detail}) - refusing to display or sign it"
         ))),
         Err(_) => Ok(()),
     }

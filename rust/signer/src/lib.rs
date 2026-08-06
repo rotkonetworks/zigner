@@ -1986,24 +1986,59 @@ const MAX_ORCHARD_ACTIONS: usize = 4096; // far above any real bundle (~tens)
 /// (only spend-side note plaintext and the fvk are stripped), so this check
 /// runs on exactly the bytes that cross the airgap.
 ///
-/// Fail-closed on a proven mismatch; silent no-op when the check is not
-/// possible (fields absent, unknown consensus branch, unparsable bundle) so
-/// this never turns a viewable PCZT into an unviewable one.
+/// The rule is keyed on what is DISPLAYED, not on which field happens to be
+/// present: **anything the screen shows must be proven; only an output that
+/// shows nothing may skip verification.**
+///
+/// The previous version of this gate skipped whenever
+/// `verify_note_commitment` reported `MissingRecipient` / `MissingValue` /
+/// `MissingRandomSeed` — "a producer that withholds a field gets no display
+/// guarantee, but also no false alarm". That made the control bypassable by an
+/// ATTACKER rather than merely waived by an honest producer: the signing path
+/// never reads the output `rseed` (`pczt`'s low-level signer sets
+/// `rseed: None` itself, and the signature is over a sighash that binds the
+/// real `cmx`), so a hostile wallet could strip the output `rseed`, set
+/// `recipient` and `value` to whatever the victim expected to see, have the
+/// device display those and sign, then reassemble with the true `rseed` and
+/// broadcast. The review screen reads `value()`/`recipient()` directly
+/// regardless of whether verification ran, so the skip was a silent no-op on
+/// attacker-chosen input.
+///
+/// So: an output that renders a recipient, or a non-zero amount, MUST verify —
+/// a missing field there is a REFUSAL. Only a fully-blank output (no recipient
+/// AND no/zero value — nothing meaningful on screen) may skip. zafu's
+/// `redact_pczt_for_signer` keeps `recipient`, `value` and `rseed` on every
+/// output, dummy/padding actions included, so an honestly-redacted PCZT
+/// verifies every action and is unaffected.
+///
+/// Still a silent no-op when the bundle cannot be reached at all (unparsable,
+/// unknown consensus branch) — signing fails on those paths anyway.
 fn verify_displayed_outputs(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
     use pczt::roles::verifier::{OrchardError, Verifier};
 
-    fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<()>> {
-        for action in bundle.actions() {
-            match action.output().verify_note_commitment(action.spend()) {
+    fn check(bundle: &orchard::pczt::Bundle) -> Result<(), OrchardError<String>> {
+        for (index, action) in bundle.actions().iter().enumerate() {
+            let output = action.output();
+            // Exactly what the review screen renders for this action.
+            let shows_recipient = output.recipient().is_some();
+            let shows_amount = output.value().map(|v| v.inner()).unwrap_or(0) != 0;
+
+            match output.verify_note_commitment(action.spend()) {
                 Ok(()) => {}
-                // The check needs recipient + value + rseed. A producer that
-                // withholds any of them gets no display guarantee, but also no
-                // false alarm.
+                // Not verifiable because a field is absent.
                 Err(
-                    orchard::pczt::VerifyError::MissingRecipient
+                    e @ (orchard::pczt::VerifyError::MissingRecipient
                     | orchard::pczt::VerifyError::MissingValue
-                    | orchard::pczt::VerifyError::MissingRandomSeed,
-                ) => {}
+                    | orchard::pczt::VerifyError::MissingRandomSeed),
+                ) => {
+                    if shows_recipient || shows_amount {
+                        return Err(OrchardError::Custom(format!("action {index}: {e:?}")));
+                    }
+                    // Nothing displayed for this action, so nothing to lie
+                    // about. (Padding actions in an honestly redacted PCZT
+                    // still verify; this is the only skip.)
+                }
+                // A PROVEN lie.
                 Err(e) => return Err(OrchardError::Verify(e)),
             }
         }
@@ -2022,6 +2057,14 @@ fn verify_displayed_outputs(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
             s: format!(
                 "PCZT output does not match what it claims to pay ({e:?}) — \
                  refusing to display or sign it."
+            ),
+        }),
+        // Something the screen WOULD show, that cannot be proven at all
+        // because the producer withheld a field the check needs.
+        Err(OrchardError::Custom(detail)) => Err(ErrorDisplayed::Str {
+            s: format!(
+                "what this PCZT output would display cannot be proven against the \
+                 note commitment ({detail}) — refusing to display or sign it."
             ),
         }),
         // Not verifiable here (structural parse, unrecognized consensus branch).
@@ -5312,6 +5355,78 @@ mod zcash_pczt_tests {
         let msg = format!("{err:?}");
         assert!(
             msg.contains("does not match what it claims to pay"),
+            "unexpected rejection reason: {}",
+            msg
+        );
+        assert!(
+            sign_zcash_pczt(MNEMONIC, 0, tampered).is_err(),
+            "the device must refuse to sign a PCZT it refused to display"
+        );
+    }
+
+    /// TAMPER DETECTION, the bypass variant — the reason the gate is keyed on
+    /// what is DISPLAYED rather than on which field is missing.
+    ///
+    /// The two tamper tests around this one only catch an attacker who leaves
+    /// the output `rseed` in place. `verify_note_commitment` needs recipient +
+    /// value + rseed, and the gate used to treat any of those being absent as
+    /// "not verifiable, don't block". Nothing in the signing path reads the
+    /// output `rseed` — `pczt`'s low-level signer sets `rseed: None` itself and
+    /// signs a sighash that binds the real `cmx` — so a hostile wallet could
+    /// simply omit it, display any recipient and any amount, collect the
+    /// signature, then reassemble with the true `rseed` and broadcast.
+    #[test]
+    fn stripped_output_rseed_does_not_disable_the_display_gate() {
+        let fx = build_v5_fixture(true, false);
+        inspect_zcash_pczt(fx.pczt.clone()).expect("honest PCZT inspects");
+
+        // Attacker step 1: drop the output rseed so `verify_note_commitment`
+        // cannot be computed at all.
+        let stripped =
+            pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.pczt).expect("parse honest PCZT"))
+                .redact_orchard_with(|mut o| {
+                    o.redact_actions(|mut a| {
+                        a.clear_output_rseed();
+                    });
+                })
+                .finish()
+                .serialize()
+                .expect("serialize rseed-stripped PCZT");
+
+        // Attacker step 2: now lie freely about both displayed fields.
+        let mut needle = vec![0x01];
+        needle.extend_from_slice(&varint(fx.sent));
+        let mut replacement = vec![0x01];
+        replacement.extend_from_slice(&varint(fx.sent + 1));
+        let (tampered, n) = patch_all(&stripped, &needle, &replacement);
+        assert!(n > 0, "output value field not found in the wire bytes");
+
+        let decoy_sk = orchard::keys::SpendingKey::from_bytes([11u8; 32]).unwrap();
+        let decoy = orchard::keys::FullViewingKey::from(&decoy_sk)
+            .address_at(0u32, orchard::keys::Scope::External)
+            .to_raw_address_bytes();
+        let (tampered, n) = patch_all(&tampered, &fx.recipient_raw, &decoy);
+        assert!(n > 0, "output recipient not found in the wire bytes");
+
+        // The bytes really do carry the attacker's chosen display values.
+        let parsed = Pczt::parse(&tampered).expect("tampered PCZT still parses");
+        assert!(
+            parsed
+                .orchard()
+                .actions()
+                .iter()
+                .any(|a| a.output().recipient() == &Some(decoy)
+                    && a.output().value() == &Some(fx.sent + 1)),
+            "the values the review screen would display were not actually changed"
+        );
+
+        let err = inspect_zcash_pczt(tampered.clone()).expect_err(
+            "an output that displays a recipient/amount it cannot prove must be refused, \
+             not silently skipped",
+        );
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("cannot be proven"),
             "unexpected rejection reason: {}",
             msg
         );
