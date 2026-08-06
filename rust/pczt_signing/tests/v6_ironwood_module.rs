@@ -15,9 +15,14 @@
 //! The tests drive `android/src/main/assets/modules/module0.wasm` - the
 //! artifact that actually ships in the APK - and FAIL when it is missing, so a
 //! suite that asserted nothing can never report green. Set
-//! `ZIGNER_ALLOW_MISSING_MODULE_WASM=1` to skip instead. When the build output
-//! is also present the two are asserted byte-identical, so a stale bundled
-//! asset cannot pass by proxy.
+//! `ZIGNER_ALLOW_MISSING_MODULE_WASM=1` to skip instead.
+//!
+//! A stale bundle is caught BEHAVIOURALLY, by one probe per security gate
+//! (`module_rejects_a_tampered_output_value` for the display gate,
+//! `module_rejects_a_tampered_value_sum` for the fee gate), rather than by
+//! comparing the asset against a fresh build. That byte comparison was tried
+//! and reverted: a release wasm is not reproducible across machines, so it
+//! passed locally and failed CI.
 
 mod common;
 
@@ -31,12 +36,6 @@ use pczt::Pczt;
 const BUNDLED_MODULE_WASM: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../android/src/main/assets/modules/module0.wasm"
-);
-
-/// The freshly built module wasm, when present.
-const BUILT_MODULE_WASM: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/target/wasm32-unknown-unknown/release/pczt_signing.wasm"
 );
 
 /// Set to 1 to let these tests skip when the bundled module wasm is missing.
@@ -82,14 +81,22 @@ fn module_wasm_available() -> bool {
             );
         }
     };
-    if let Ok(built) = std::fs::read(BUILT_MODULE_WASM) {
-        assert!(
-            built == bundled,
-            "the module wasm bundled into the APK ({BUNDLED_MODULE_WASM}) differs \
-             from the freshly built one ({BUILT_MODULE_WASM}) - the device would \
-             run code these tests never exercised. Re-copy the build output."
-        );
-    }
+    // Staleness is caught BEHAVIOURALLY, not by comparing bytes against a
+    // fresh build. That comparison was tried and is unsatisfiable in CI: a
+    // release wasm is not reproducible across machines (toolchain version and
+    // embedded paths both leak in), so it can only pass on whichever machine
+    // produced the committed artifact. It failed CI while passing locally,
+    // which is the worst of both - a green light for the author and a red one
+    // for everyone else.
+    //
+    // Instead, every test below drives the BUNDLED artifact, and the suite
+    // includes one behavioural probe per security gate:
+    //   - module_rejects_a_tampered_output_value  -> the display gate
+    //   - module_rejects_a_tampered_value_sum     -> the fee gate
+    // A bundle stale enough to be missing either one fails its probe. That is
+    // the property actually worth protecting: not "these bytes match", but
+    // "the artifact the device runs still refuses what it must refuse".
+    let _ = &bundled;
     true
 }
 
@@ -405,5 +412,71 @@ fn module_rejects_a_tampered_output_value() {
     assert!(
         rt.sign_request(&payload, MNEMONIC, 0, false).is_err(),
         "the module must refuse to SIGN a PCZT it refused to display"
+    );
+}
+
+/// FEE gate inside the wasmi sandbox, on the artifact that ships in the APK.
+///
+/// The sibling test above covers the DISPLAY gate (output commitment). This
+/// covers the FEE gate (value balance vs the action value commitments), and it
+/// exists specifically so that a bundle stale by one commit cannot pass: an
+/// artifact carrying the display gate but not the fee gate would satisfy
+/// `module_rejects_a_tampered_output_value` while still letting a hostile
+/// producer show any fee it liked. An inflated fee is fund loss, not a
+/// cosmetic defect, so it gets its own probe against the shipped bytes.
+#[test]
+fn module_rejects_a_tampered_value_sum() {
+    if !module_wasm_available() {
+        return;
+    }
+    let fx = common::build_redacted_v5_send();
+    let mut rt = load_module(BUNDLED_MODULE_WASM);
+
+    // Honest control: the shipped module summarizes the untampered PCZT.
+    rt.summarize_request(&single_request(&fx.redacted_pczt))
+        .expect("module summarizes the honest PCZT");
+
+    let varint = |mut v: u64| {
+        let mut out = Vec::new();
+        loop {
+            let b = (v & 0x7f) as u8;
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                return out;
+            }
+            out.push(b | 0x80);
+        }
+    };
+
+    // For this shielded-only send the orchard value_sum IS the fee, so
+    // inflating it by one zatoshi is a fee the value commitments contradict.
+    let needle = varint(fx.fee);
+    let replacement = varint(fx.fee + 1);
+    assert_eq!(needle.len(), replacement.len());
+
+    let mut tampered = fx.redacted_pczt.clone();
+    let mut hits = 0;
+    let mut i = 0;
+    while i + needle.len() <= tampered.len() {
+        if tampered[i..i + needle.len()] == needle[..] {
+            tampered[i..i + needle.len()].copy_from_slice(&replacement);
+            hits += 1;
+            i += needle.len();
+        } else {
+            i += 1;
+        }
+    }
+    assert!(hits > 0, "value_sum varint not found in the wire bytes");
+
+    let payload = single_request(&tampered);
+    assert!(
+        rt.summarize_request(&payload).is_err(),
+        "the module must refuse to DISPLAY a fee the action value commitments \
+         contradict"
+    );
+    assert!(
+        rt.sign_request(&payload, MNEMONIC, 0, false).is_err(),
+        "the module must refuse to SIGN a fee it refused to display"
     );
 }
