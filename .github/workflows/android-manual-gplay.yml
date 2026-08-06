@@ -6,6 +6,9 @@ concurrency:
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -41,7 +44,7 @@ jobs:
         with:
           releaseDirectory: app
           signingKeyBase64: ${{ secrets.ANDROID_PLAY_STORE_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEYSTORE_KEY_ALIAS }}
+          alias: ${{ secrets.ANDROID_PLAY_STORE_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_PLAY_STORE_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_PLAY_STORE_KEYSTORE_PASSWORD }}
         env:
