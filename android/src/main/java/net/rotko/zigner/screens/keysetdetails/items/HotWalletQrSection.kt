@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -109,7 +111,12 @@ fun HotWalletQrSection(
 						bitmap = bitmap,
 						contentDescription = "zafu hot wallet QR",
 						contentScale = ContentScale.Fit,
-						modifier = Modifier.padding(8.dp)
+						// no size modifier = intrinsic PNG size (tiny on hidpi);
+						// fill the plate and keep modules crisp when upscaling
+						filterQuality = FilterQuality.None,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(8.dp)
 					)
 				}
 
