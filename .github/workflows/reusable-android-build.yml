@@ -88,15 +88,15 @@ jobs:
           name: zigner-apk
           path: android/build/outputs/apk/debug/*.apk
 
-      - name: Assemble release apk
+      - name: Assemble release apk + bundle
         if: ${{ inputs.is-release == true }}
         run: |
-          ./gradlew clean assembleRelease --stacktrace
+          ./gradlew clean assembleRelease bundleRelease --stacktrace
 
-      - name: List release APKs
+      - name: List release artifacts
         if: ${{ inputs.is-release == true }}
         run: |
-          ls android/build/outputs/apk/release
+          ls android/build/outputs/apk/release android/build/outputs/bundle/release
 
       - name: Upload release APKs
         if: ${{ inputs.is-release == true }}
@@ -104,3 +104,11 @@ jobs:
         with:
           name: zigner-apk
           path: android/build/outputs/apk/release/*.apk
+
+      # Google Play requires the Android App Bundle for new apps
+      - name: Upload release AAB
+        if: ${{ inputs.is-release == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: zigner-aab
+          path: android/build/outputs/bundle/release/*.aab
