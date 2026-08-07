@@ -134,29 +134,34 @@ class CameraViewModel() : ViewModel() {
 			.addOnSuccessListener { barcodes ->
 				Trace.beginSection("process frame vault code")
 				barcodes.forEach {
-					// Check for UR QR codes first (text-based, start with "ur:")
+					// zafu's QrDisplay / AnimatedQrDisplay render UR, zoda and P-frame
+					// transports as BYTE-mode QR codes (lowercase content forces byte
+					// mode), so ML Kit leaves rawValue null and the content lives in
+					// rawBytes (UTF-8). Resolve a single source that falls back to
+					// rawBytes so every transport is recognised regardless of QR mode.
 					val textValue = it?.rawValue
 					val rawBytesLen = it?.rawBytes?.size ?: -1
 					Timber.d("[FROST] barcode: rawValueLen=${textValue?.length ?: -1} rawBytesLen=$rawBytesLen format=${it?.format}")
-					if (textValue != null && textValue.lowercase().startsWith("ur:")) {
-						processUrFrame(textValue)
-						return@forEach
-					}
-
-					// zoda transport (`zt:type/hex`) — note-sync uses this for
-					// verified erasure-coded frames. ML Kit returns it as ASCII text.
-					if (textValue != null && textValue.lowercase().startsWith("zt:")) {
-						processZtFrame(textValue)
-						return@forEach
-					}
-
-					// Check for FROST/auth/zid JSON QR codes. rawValue is null for
-					// byte-mode QRs (zafu's QrDisplay), so fall back to UTF-8 of rawBytes.
-					// Also handle P-frame multi-frame format from zafu's AnimatedQrDisplay
-					// (`P<idx>/<total>/<urType>/<base64>`); accumulate until complete then
-					// reassemble to the original UTF-8 payload string.
 					val frameSource: String? = textValue
 						?: it?.rawBytes?.toString(Charsets.UTF_8)
+
+					// Check for UR QR codes first (start with "ur:")
+					if (frameSource != null && frameSource.lowercase().startsWith("ur:")) {
+						processUrFrame(frameSource)
+						return@forEach
+					}
+
+					// zoda transport (`zt:type/hex`) — note-sync and erasure-coded
+					// frames. ML Kit returns these as ASCII text or rawBytes.
+					if (frameSource != null && frameSource.lowercase().startsWith("zt:")) {
+						processZtFrame(frameSource)
+						return@forEach
+					}
+
+					// Check for FROST/auth/zid JSON QR codes (plain JSON or P-frame).
+					// The P-frame multi-frame format from zafu's AnimatedQrDisplay
+					// (`P<idx>/<total>/<urType>/<base64>`) accumulates until complete,
+					// then reassembles to the original UTF-8 payload string.
 					val pFrameMatch = frameSource?.let {
 						Regex("""^P(\d+)/(\d+)/([^/]+)/(.+)$""").matchEntire(it)
 					}
