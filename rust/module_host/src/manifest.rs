@@ -3,7 +3,7 @@
 //! package = manifest || module_bytes
 //! manifest (fixed order, little-endian):
 //!   magic "ZIGM" | manifest_version:u8=1 | module_version:u32 |
-//!   min_kernel_version:u32 | module_hash:[32] | desc_len:u8 | desc |
+//!   min_kernel_version:u32 | module_hash:[32] | desc_len:u16 | desc |
 //!   sig_count:u8 | sig_count * ( key_index:u8 | sig:[64] )
 //!
 //! Signatures cover every manifest byte before sig_count over the
@@ -70,8 +70,9 @@ pub fn verify_package<'a>(
     let (kv, rest) = take(rest, 4)?;
     let min_kernel_version = u32::from_le_bytes(kv.try_into().unwrap());
     let (hash, rest) = take(rest, 32)?;
-    let (dl, rest) = take(rest, 1)?;
-    let (desc, rest) = take(rest, dl[0] as usize)?;
+    let (dl, rest) = take(rest, 2)?;
+    let desc_len = u16::from_le_bytes(dl.try_into().unwrap()) as usize;
+    let (desc, rest) = take(rest, desc_len)?;
 
     // signed region = everything up to here
     let signed_len = package.len() - rest.len();
@@ -144,7 +145,18 @@ pub fn build_package(
     out.extend_from_slice(&module_version.to_le_bytes());
     out.extend_from_slice(&min_kernel_version.to_le_bytes());
     out.extend_from_slice(&Sha256::digest(module_bytes));
-    out.push(description.len() as u8);
+    // u16 length: the description carries the human-readable changelog the
+    // device shows on the confirm screen, and it is INSIDE the signed bytes -
+    // so what the user reads is what the release keys attested to. A u8 would
+    // cap that at 255 bytes (one sentence) and, worse, `as u8` silently wrapped
+    // for anything longer, producing a package that misparses.
+    assert!(
+        description.len() <= u16::MAX as usize,
+        "module description too long: {} bytes (max {})",
+        description.len(),
+        u16::MAX
+    );
+    out.extend_from_slice(&(description.len() as u16).to_le_bytes());
     out.extend_from_slice(description.as_bytes());
     let mut msg = Vec::from(DOMAIN);
     msg.extend_from_slice(&out);

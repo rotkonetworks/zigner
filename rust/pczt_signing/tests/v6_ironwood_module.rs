@@ -533,12 +533,24 @@ fn module_compact_signatures_under_wasmi() {
     let compact = pczt_signing::parse_compact_response(&resp).expect("parse compact");
     assert_eq!(compact.messages.len(), 1);
     let _sigs = &compact.messages[0].signatures;
+    // The migration SPENDS a legacy orchard note and OUTPUTS into ironwood,
+    // so the only thing this device authorizes is the orchard spend - the
+    // ironwood actions are outputs with no spend authority to grant. The
+    // response is a delta of what this device newly contributed, so it must
+    // contain exactly that one orchard signature and nothing else. (It used
+    // to assert POOL_IRONWOOD back when the response echoed the wallet's own
+    // pre-existing signatures instead of the device's contribution.)
     assert!(
         compact.messages[0]
             .signatures
             .iter()
-            .any(|c| c.pool == envelope::POOL_IRONWOOD),
-        "compact single from the module returns the ironwood spend signature"
+            .all(|c| c.pool == envelope::POOL_ORCHARD),
+        "migration contribution must be the orchard spend the device owns, got {:?}",
+        compact.messages[0]
+            .signatures
+            .iter()
+            .map(|c| (c.pool, c.action_index))
+            .collect::<Vec<_>>()
     );
 
     // And every returned signature verifies against its action's rk over the
@@ -602,11 +614,12 @@ fn module_compact_signatures_under_wasmi() {
     assert_eq!(compact.messages[0].id, b"migrate");
     assert_eq!(compact.messages[1].id, b"v5");
     assert!(
-        compact.messages[0]
-            .signatures
-            .iter()
-            .any(|c| c.pool == envelope::POOL_IRONWOOD),
-        "migration message signature returned"
+        !compact.messages[0].signatures.is_empty()
+            && compact.messages[0]
+                .signatures
+                .iter()
+                .all(|c| c.pool == envelope::POOL_ORCHARD),
+        "migration message returns the device's orchard spend signature"
     );
     assert!(
         compact.messages[1]

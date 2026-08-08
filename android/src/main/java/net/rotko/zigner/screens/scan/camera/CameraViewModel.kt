@@ -393,13 +393,22 @@ class CameraViewModel() : ViewModel() {
 	 * 0x05 single-compact / 0x06 batch-compact (signatures-only response -
 	 * the Ironwood QR shrink; see rust/pczt_signing/src/envelope.rs).
 	 */
+	/**
+	 * Route any zcash-crypto module envelope to the protocol module.
+	 *
+	 * Deliberately matches on the [0x53][crypto=zcash 0x04] prelude ONLY, not on
+	 * the tx_type byte: the kernel owns trust (it verifies the module's
+	 * signature), the signed module owns protocol. Enumerating tx_types here
+	 * would mean every new envelope type needs a new APK - and on a device that
+	 * never goes online, an APK update costs the user an airgap break (USB +
+	 * debugging). The module already fail-closes on anything it does not
+	 * recognise with a named "unknown zcash tx type" error, and response
+	 * tx_types (0x07/0x08) are refused by the envelope parser rather than
+	 * mistaken for requests, so widening this does not weaken any gate.
+	 */
 	private fun isZcashModulePcztRequest(hexPayload: String): Boolean {
 		if (hexPayload.length < 6) return false
-		val prefix = hexPayload.substring(0, 6).lowercase()
-		return prefix == "530403" ||
-			prefix == "530404" ||
-			prefix == "530405" ||
-			prefix == "530406"
+		return hexPayload.substring(0, 4).lowercase() == "5304"
 	}
 
 	fun resetZcashSimpleSign() {
