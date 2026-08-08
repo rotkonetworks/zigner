@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.sp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
+import net.rotko.zigner.components.qrcode.QrPlaybackSpeedSlider
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.QrPlaybackSpeed
 import net.rotko.zigner.domain.decodeHex
 import net.rotko.zigner.domain.module.ProtocolModule
 import net.rotko.zigner.ui.theme.*
@@ -68,6 +70,7 @@ fun ModulePcztScreen(
 ) {
 	val context = LocalContext.current
 	val scope = rememberCoroutineScope()
+	LaunchedEffect(Unit) { QrPlaybackSpeed.init(context.applicationContext) }
 
 	var state by remember { mutableStateOf(ModulePcztState.SUMMARIZING) }
 	var errorDetail by remember { mutableStateOf("") }
@@ -104,13 +107,13 @@ fun ModulePcztScreen(
 		}
 	}
 
-	// Same 1.4 fps cadence as ZcashPcztScreen - webcams need ~700ms to focus.
+	// Playback speed from the shared QR-speed preference (see QrPlaybackSpeed).
 	LaunchedEffect(responseQrFrames) {
 		if (responseQrFrames.isEmpty()) return@LaunchedEffect
 		var idx = 0
 		while (true) {
 			currentFrameIdx = idx
-			delay(700.milliseconds)
+			delay(QrPlaybackSpeed.delayMs.value.milliseconds)
 			idx = (idx + 1) % responseQrFrames.size
 		}
 	}
@@ -251,6 +254,9 @@ fun ModulePcztScreen(
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally),
 				)
+				if (responseQrFrames.size > 1) {
+					QrPlaybackSpeedSlider(modifier = Modifier.align(Alignment.CenterHorizontally))
+				}
 				SignerDivider()
 				Spacer(modifier = Modifier.height(16.dp))
 				PrimaryButtonWide(label = "Done", onClicked = onDone)

@@ -26,7 +26,7 @@
 
 mod common;
 
-use common::{build_redacted_v6_migration, MNEMONIC};
+use common::{build_redacted_v5_send, build_redacted_v6_migration, MNEMONIC};
 use module_host::ModuleRuntime;
 use pczt::Pczt;
 
@@ -163,7 +163,11 @@ fn nu63_module_summarizes_and_signs_ironwood_under_wasmi() {
     // 1. Real redacted V6 turnstile PCZT (orchard spend -> ironwood output,
     //    branch id 0x37a5165b) from the shared producer.
     let fx = build_redacted_v6_migration();
-    let ironwood_hex: String = fx.ironwood_recipient.iter().map(|b| format!("{b:02x}")).collect();
+    let ironwood_hex: String = fx
+        .ironwood_recipient
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
 
     // 2. Load the module wasm into the wasmi ModuleRuntime.
     let mut rt = load_module(BUNDLED_MODULE_WASM);
@@ -203,7 +207,10 @@ fn nu63_module_summarizes_and_signs_ironwood_under_wasmi() {
         s.fee,
         fx.migrated
     );
-    assert_eq!(s.t_inputs, 0, "turnstile migration has no transparent inputs");
+    assert_eq!(
+        s.t_inputs, 0,
+        "turnstile migration has no transparent inputs"
+    );
 
     // The ironwood destination is present in the summary outputs, and the
     // migrated value lands there.
@@ -478,5 +485,134 @@ fn module_rejects_a_tampered_value_sum() {
     assert!(
         rt.sign_request(&payload, MNEMONIC, 0, false).is_err(),
         "the module must refuse to SIGN a fee it refused to display"
+    );
+}
+
+/// COMPACT signatures-only response under the SAME wasmi module: a wallet
+/// that asks for tx_type 0x05 (single) or 0x06 (batch) gets tx_type 0x07/0x08 -
+/// spend-auth signatures only, no full signed PCZT. This is the device-side
+/// half of the Ironwood QR shrink. The bundled module0.wasm MUST pass it
+/// (fail-closed on the tx_type predicate would surface here as a missing
+/// "compact" variant).
+#[test]
+fn module_compact_signatures_under_wasmi() {
+    if !module_wasm_available() {
+        return;
+    }
+    use pczt_signing::envelope::{self, RequestMessage, SignRequest};
+
+    let fx = build_redacted_v6_migration();
+    let mut rt = load_module(BUNDLED_MODULE_WASM);
+
+    // ---- single COMPACT (0x05 -> 0x07) ----
+    let single = envelope::encode_request_full(
+        &SignRequest::Single(RequestMessage {
+            id: Vec::new(),
+            pczt_bytes: fx.redacted_pczt.clone(),
+        }),
+        true,
+    )
+    .expect("encode compact single");
+    assert_eq!(single[2], envelope::TX_TYPE_PCZT_SINGLE_COMPACT);
+
+    let blob = rt
+        .summarize_request(&single)
+        .expect("compact single summarize under wasmi");
+    let summaries = parse_module_summaries(&blob);
+    assert_eq!(summaries.len(), 1);
+    assert!(summaries[0].ironwood_actions >= 1);
+
+    let resp = rt
+        .sign_request(&single, MNEMONIC, 0, false)
+        .expect("compact single sign under wasmi");
+    assert_eq!(
+        resp[2],
+        envelope::TX_TYPE_PCZT_SINGLE_COMPACT_RESPONSE,
+        "module returned a full signed PCZT for a compact request"
+    );
+    let compact = pczt_signing::parse_compact_response(&resp).expect("parse compact");
+    assert_eq!(compact.messages.len(), 1);
+    let _sigs = &compact.messages[0].signatures;
+    assert!(
+        compact.messages[0]
+            .signatures
+            .iter()
+            .any(|c| c.pool == envelope::POOL_IRONWOOD),
+        "compact single from the module returns the ironwood spend signature"
+    );
+
+    // And every returned signature verifies against its action's rk over the
+    // shielded sighash (the wallet merge check).
+    let parsed = Pczt::parse(&fx.redacted_pczt).expect("parse fixture");
+    let sighash = pczt::roles::signer::Signer::new(parsed.clone())
+        .expect("signer")
+        .shielded_sighash();
+    for c in &compact.messages[0].signatures {
+        let action = match c.pool {
+            envelope::POOL_ORCHARD => parsed.orchard().actions().get(c.action_index as usize),
+            envelope::POOL_IRONWOOD => parsed.ironwood().actions().get(c.action_index as usize),
+            _ => unreachable!(),
+        };
+        let action = action.expect("action in range");
+        let sig = orchard::primitives::redpallas::Signature::<
+            orchard::primitives::redpallas::SpendAuth,
+        >::from(c.signature);
+        let rk: orchard::primitives::redpallas::VerificationKey<
+            orchard::primitives::redpallas::SpendAuth,
+        > = (*action.spend().rk()).try_into().expect("rk parses");
+        assert!(
+            rk.verify(&sighash, &sig).is_ok(),
+            "module compact contribution {c:?} does not verify"
+        );
+    }
+
+    // ---- batch COMPACT (0x06 -> 0x08), ids echoed ----
+    let v5 = build_redacted_v5_send();
+    let batch = envelope::encode_request_full(
+        &SignRequest::Batch(vec![
+            RequestMessage {
+                id: b"migrate".to_vec(),
+                pczt_bytes: fx.redacted_pczt.clone(),
+            },
+            RequestMessage {
+                id: b"v5".to_vec(),
+                pczt_bytes: v5.redacted_pczt.clone(),
+            },
+        ]),
+        true,
+    )
+    .expect("encode compact batch");
+    assert_eq!(batch[2], envelope::TX_TYPE_PCZT_BATCH_COMPACT);
+
+    let blob = rt
+        .summarize_request(&batch)
+        .expect("compact batch summarize under wasmi");
+    assert_eq!(parse_module_summaries(&blob).len(), 2);
+
+    let resp = rt
+        .sign_request(&batch, MNEMONIC, 0, false)
+        .expect("compact batch sign under wasmi");
+    assert_eq!(
+        resp[2],
+        envelope::TX_TYPE_PCZT_BATCH_COMPACT_RESPONSE,
+        "module returned a full-PCZT batch for a compact batch request"
+    );
+    let compact = pczt_signing::parse_compact_response(&resp).expect("parse compact batch");
+    assert_eq!(compact.messages.len(), 2);
+    assert_eq!(compact.messages[0].id, b"migrate");
+    assert_eq!(compact.messages[1].id, b"v5");
+    assert!(
+        compact.messages[0]
+            .signatures
+            .iter()
+            .any(|c| c.pool == envelope::POOL_IRONWOOD),
+        "migration message signature returned"
+    );
+    assert!(
+        compact.messages[1]
+            .signatures
+            .iter()
+            .all(|c| c.pool == envelope::POOL_ORCHARD),
+        "V5 message carries orchard-only signatures"
     );
 }

@@ -40,7 +40,8 @@ use zip32::AccountId;
 
 /// BIP-39 mnemonic of the wallet that owns the note being spent/migrated.
 /// The device signs with this exact seed.
-pub const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+pub const MNEMONIC: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 /// Mirror of zafu's `redact_pczt_for_signer`: what the wallet strips before the
 /// PCZT crosses the airgap.
@@ -100,6 +101,9 @@ pub fn redact_pczt_for_signer(pczt: Pczt) -> Pczt {
 pub struct V6Fixture {
     /// The redacted-for-signer PCZT bytes - exactly what crosses the airgap.
     pub redacted_pczt: Vec<u8>,
+    /// The full pre-redaction PCZT the wallet retains - the merge target for
+    /// returned signature contributions (still carries the spend fvk).
+    pub full_pczt: Vec<u8>,
     /// The note value being migrated out of the orchard pool (zatoshi).
     pub note_value: u64,
     /// The network fee (inputs - all outputs, incl ironwood).
@@ -229,6 +233,7 @@ pub fn build_redacted_v5_send() -> V6Fixture {
     let pczt = Creator::build_from_parts(build_result.pczt_parts).expect("Creator");
     let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
 
+    let full_pczt = pczt.clone().serialize().expect("serialize full PCZT");
     let redacted = redact_pczt_for_signer(pczt);
     assert!(
         redacted.ironwood().actions().is_empty(),
@@ -236,10 +241,15 @@ pub fn build_redacted_v5_send() -> V6Fixture {
     );
     let redacted_pczt = redacted.serialize().expect("serialize redacted PCZT");
     // V5 must still ship in the v1 PCZT encoding.
-    assert_eq!(&redacted_pczt[4..8], &[1, 0, 0, 0], "V5 uses the v1 encoding");
+    assert_eq!(
+        &redacted_pczt[4..8],
+        &[1, 0, 0, 0],
+        "V5 uses the v1 encoding"
+    );
 
     V6Fixture {
         redacted_pczt,
+        full_pczt,
         note_value,
         fee,
         migrated: sent,
@@ -334,6 +344,7 @@ pub fn build_redacted_v6_migration() -> V6Fixture {
     let pczt = Creator::build_from_parts(build_result.pczt_parts).expect("Creator");
     let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
 
+    let full_pczt = pczt.clone().serialize().expect("serialize full PCZT");
     let redacted = redact_pczt_for_signer(pczt);
     assert_eq!(
         *redacted.global().tx_version(),
@@ -346,10 +357,85 @@ pub fn build_redacted_v6_migration() -> V6Fixture {
 
     V6Fixture {
         redacted_pczt,
+        full_pczt,
         note_value,
         fee,
         migrated,
         ironwood_recipient,
         fvk_bytes: fvk.to_bytes().to_vec(),
     }
+}
+
+/// Redact a PCZT for compact wallet transport: the wallet performs its
+/// standard redaction (clearing spend note plaintext but keeping output values,
+/// recipients, and rseed for display/recovery), then additionally clears cv_net
+/// and cmx (recomputable by resolve_fields), and v6 anchors (not needed for v6
+/// sighash). The signer's `resolve_fields()` recomputes these fields once, so
+/// the same verification gates apply to compact and full PCZTs.
+///
+/// NOTE: This is NOT applied on top of the standard redaction - the wallet
+/// does compact redaction directly, so it must NOT clear the spend/output values
+/// needed for resolve_cv_net to work. This fixture simulates that by starting
+/// with a fresh, unredacted PCZT.
+pub fn redact_pczt_for_compact_signer(pczt: Pczt) -> Pczt {
+    use pczt::roles::redactor::Redactor;
+
+    Redactor::new(pczt)
+        .redact_global_with(|mut g| {
+            g.clear_proprietary();
+        })
+        .redact_orchard_with(|mut o| {
+            // Compact-specific: clear cv_net and cmx (recomputable by resolve_fields)
+            // and v6 anchor (not signed, effects_anchor = Omit).
+            // Standard spend redaction: clear note plaintext but keep values/rseed.
+            o.redact_actions(|mut a| {
+                // Spend note plaintext: recipient, value, rho, rseed, fvk, witness
+                a.clear_spend_witness();
+                a.clear_spend_zip32_derivation();
+                a.clear_spend_dummy_sk();
+                a.clear_spend_proprietary();
+                a.clear_spend_rseed();
+                a.clear_spend_rho();
+                a.clear_spend_recipient();
+                // NOTE: DO NOT clear spend_value - needed for resolve_cv_net!
+                a.clear_spend_fvk();
+                // Compact redaction additions:
+                a.clear_cv_net(); // Recomputable from spend/output value + rcv
+
+                // Output: keep recipient and value for display, rseed for recovery
+                a.clear_output_zip32_derivation();
+                a.clear_output_user_address();
+                a.clear_output_proprietary();
+                // NOTE: DO NOT clear output value or recipient - needed for display and recovery!
+                a.clear_cmx(); // Compact redaction: recomputable from note commitment
+                               // Ciphertext: the wallet swaps it to memo plaintext before calling this
+            });
+            o.clear_anchor(); // v6 anchor not signed and not needed
+        })
+        .redact_ironwood_with(|mut o| {
+            o.redact_actions(|mut a| {
+                // Same as orchard
+                a.clear_spend_witness();
+                a.clear_spend_zip32_derivation();
+                a.clear_spend_dummy_sk();
+                a.clear_spend_proprietary();
+                a.clear_spend_rseed();
+                a.clear_spend_rho();
+                a.clear_spend_recipient();
+                // NOTE: DO NOT clear spend_value!
+                a.clear_spend_fvk();
+                a.clear_cv_net(); // Compact redaction
+
+                // NOTE: keep output recipient and value!
+                a.clear_cmx(); // Compact redaction
+            });
+            o.clear_anchor(); // v6 anchor not signed
+        })
+        .redact_transparent_with(|mut t| {
+            t.redact_outputs(|mut o| {
+                o.clear_user_address();
+                o.clear_proprietary();
+            });
+        })
+        .finish()
 }

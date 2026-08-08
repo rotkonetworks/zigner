@@ -134,8 +134,14 @@ fn wallet_produces_device_signs_wallet_extracts() {
     // Batch of two (same PCZT twice - proving is the expensive part and the
     // envelope/batch machinery is what's under test here).
     let batch_payload = envelope::encode_request(&SignRequest::Batch(vec![
-        RequestMessage { id: b"m-1".to_vec(), pczt_bytes: over_the_qr.clone() },
-        RequestMessage { id: b"m-2".to_vec(), pczt_bytes: over_the_qr.clone() },
+        RequestMessage {
+            id: b"m-1".to_vec(),
+            pczt_bytes: over_the_qr.clone(),
+        },
+        RequestMessage {
+            id: b"m-2".to_vec(),
+            pczt_bytes: over_the_qr.clone(),
+        },
     ]))
     .expect("encode batch");
 
@@ -150,7 +156,36 @@ fn wallet_produces_device_signs_wallet_extracts() {
         .filter(|(l, _)| l.starts_with("orchard:"))
         .map(|(_, v)| v)
         .sum();
-    assert_eq!(orchard_total, 985_000, "recipient+change values visible for confirmation");
+    assert_eq!(
+        orchard_total, 985_000,
+        "recipient+change values visible for confirmation"
+    );
+
+    // COMPACT fall-back: the SAME transparent-input PCZT asked for via the
+    // compact tx_types (0x06) must be refused loudly - the signatures-only
+    // response cannot express secp256k1 input signatures, so the wallet must
+    // resend with 0x03/0x04. Shielded-only sends and the Ironwood migration -
+    // the flows compact exists for - never hit this.
+    let compact_payload = envelope::encode_request_full(
+        &SignRequest::Batch(vec![
+            RequestMessage {
+                id: b"m-1".to_vec(),
+                pczt_bytes: over_the_qr.clone(),
+            },
+            RequestMessage {
+                id: b"m-2".to_vec(),
+                pczt_bytes: over_the_qr.clone(),
+            },
+        ]),
+        true,
+    )
+    .expect("encode compact batch");
+    let compact_err = pczt_signing::sign_request(&compact_payload, MNEMONIC, 0, true)
+        .expect_err("compact must refuse transparent inputs");
+    assert!(
+        format!("{compact_err}").contains("transparent inputs"),
+        "unexpected compact refusal reason: {compact_err}"
+    );
 
     let response_payload =
         pczt_signing::sign_request(&batch_payload, MNEMONIC, 0, true).expect("device signs batch");
