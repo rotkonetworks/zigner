@@ -166,17 +166,14 @@ fn wallet_produces_device_signs_wallet_extracts() {
     // response cannot express secp256k1 input signatures, so the wallet must
     // resend with 0x03/0x04. Shielded-only sends and the Ironwood migration -
     // the flows compact exists for - never hit this.
+    // One message: a batch may not repeat the same PCZT (that is refused
+    // earlier, by the duplicate gate), and the transparent-input refusal is
+    // per-message anyway.
     let compact_payload = envelope::encode_request_full(
-        &SignRequest::Batch(vec![
-            RequestMessage {
-                id: b"m-1".to_vec(),
-                pczt_bytes: over_the_qr.clone(),
-            },
-            RequestMessage {
-                id: b"m-2".to_vec(),
-                pczt_bytes: over_the_qr.clone(),
-            },
-        ]),
+        &SignRequest::Batch(vec![RequestMessage {
+            id: b"m-1".to_vec(),
+            pczt_bytes: over_the_qr.clone(),
+        }]),
         true,
     )
     .expect("encode compact batch");

@@ -23,6 +23,7 @@ pub mod envelope;
 use envelope::{
     encode_response, parse_request, parse_request_full, EnvelopeError, ResponseMessage, SignRequest,
 };
+use std::collections::BTreeSet;
 // compact-response types (re-exported so the wasm ABI + tests can name them)
 pub use envelope::{
     encode_compact_response, parse_compact_response, CompactResponse, CompactResponseMessage,
@@ -404,18 +405,23 @@ pub fn sign_redacted_pczt(
     account: u32,
     mainnet: bool,
 ) -> Result<Vec<u8>, Error> {
-    sign_redacted_pczt_inner(pczt_bytes, seed_phrase, account, mainnet).map(|(bytes, _)| bytes)
+    sign_redacted_pczt_inner(pczt_bytes, seed_phrase, account, mainnet).map(|(bytes, _, _)| bytes)
 }
 
 /// Sign every orchard action and transparent input this seed controls.
 /// Returns `(serialized_signed_pczt, finished_pczt)`; the finished `Pczt`
 /// is what the compact response extracts spend-auth signatures from.
+/// `(signed PCZT bytes, parsed signed PCZT, slots that were ALREADY signed on
+/// arrival)`. The third element is what makes a compact response report only
+/// this device's own contribution - see [`new_contributions`].
+type SignedPczt = (Vec<u8>, Pczt, BTreeSet<(u8, u32)>);
+
 fn sign_redacted_pczt_inner(
     pczt_bytes: &[u8],
     seed_phrase: &str,
     account: u32,
     mainnet: bool,
-) -> Result<(Vec<u8>, Pczt), Error> {
+) -> Result<SignedPczt, Error> {
     let mut pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
     // Resolve compact fields (cv_net, cmx, ciphertexts) for a redacted PCZT.
     // This is a no-op for full PCZTs where these fields are already present.
@@ -424,6 +430,12 @@ fn sign_redacted_pczt_inner(
     // Refuse to sign anything we would have refused to display. `sign_request`
     // does not re-run `summarize`, so this must be checked here too.
     verify_displayed_summary(&pczt)?;
+    reject_duplicate_rks(&pczt)?;
+
+    // Snapshot which slots ALREADY carry a spend-auth signature, so the
+    // compact response can report only what this device adds (see
+    // `new_contributions`).
+    let prior_slots = signed_slots(&pczt);
 
     let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, seed_phrase)
         .map_err(|e| Error::Seed(e.to_string()))?;
@@ -510,14 +522,17 @@ fn sign_redacted_pczt_inner(
             }
             match action.sign(sighash, osak, OsRng) {
                 Ok(()) => {}
+                // Foreign / dummy spends: this device does not hold the key, or
+                // the action carries no randomizer to sign under. Skip them -
+                // "sign what is yours". Matched on the VARIANT, never on a
+                // Debug string: an upstream rename must break the build here
+                // rather than silently turn a hard error into a skip.
+                Err(
+                    orchard::pczt::SignerError::WrongSpendAuthorizingKey
+                    | orchard::pczt::SignerError::MissingSpendAuthRandomizer,
+                ) => {}
                 Err(e) => {
-                    let msg = format!("{e:?}");
-                    // WrongSpendAuthorizingKey / MissingSpendAuthRandomizer are
-                    // foreign/dummy spends already handled elsewhere - skip.
-                    let foreign = msg.contains("Wrong") || msg.contains("Missing");
-                    if !foreign {
-                        return Err(Error::Sign(format!("{label} action {index}: {msg}")));
-                    }
+                    return Err(Error::Sign(format!("{label} action {index}: {e:?}")));
                 }
             }
         }
@@ -597,7 +612,7 @@ fn sign_redacted_pczt_inner(
         .clone()
         .serialize()
         .map_err(|e| Error::Sign(format!("serialize: {e:?}")))?;
-    Ok((bytes, pczt))
+    Ok((bytes, pczt, prior_slots))
 }
 
 #[derive(Debug)]
@@ -632,6 +647,36 @@ pub fn summarize_request(payload: &[u8]) -> Result<Vec<PcztSummary>, RequestErro
 /// refused here and the wallet must fall back to the full signed-PCZT
 /// response types (0x03/0x04). Shielded-only sends and the Ironwood master
 /// migration - the flows the compact transport exists for - never hit this.
+/// Reject a PCZT that reuses a randomized verification key across actions,
+/// in either pool. `rk` plus the shielded sighash is exactly what a spend-auth
+/// signature commits to, so two actions sharing an `rk` share a signature:
+/// authorizing one authorizes the other. Consensus would reject the duplicate
+/// nullifier anyway, but the device should never hand out a signature that is
+/// valid for an action the user did not review. Upstream does the same
+/// (Keystone PR 2216 / 2218).
+fn reject_duplicate_rks(pczt: &Pczt) -> Result<(), Error> {
+    let mut seen: BTreeSet<[u8; 32]> = BTreeSet::new();
+    for (label, actions) in [
+        ("orchard", pczt.orchard().actions().len()),
+        ("ironwood", pczt.ironwood().actions().len()),
+    ]
+    .iter()
+    .map(|(l, _)| *l)
+    .zip([pczt.orchard().actions(), pczt.ironwood().actions()])
+    {
+        for (index, action) in actions.iter().enumerate() {
+            let rk: [u8; 32] = *action.spend().rk();
+            if !seen.insert(rk) {
+                return Err(Error::Parse(format!(
+                    "duplicate action rk at {label} action {index} - one signature would \
+                     authorize more than one action"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn ensure_compact_supported(pczt: &Pczt, i: usize) -> Result<(), RequestError> {
     if !pczt.transparent().inputs().is_empty() {
         return Err(RequestError::Sign(
@@ -666,12 +711,42 @@ pub fn sign_request(
     let batch = matches!(request, SignRequest::Batch(_));
 
     if compact {
+        // A compact batch must not carry the same PCZT twice - upstream
+        // rejects duplicate canonical payloads, and a duplicate is never
+        // something the user meant to authorize twice. Scoped to the compact
+        // path: the legacy 0x03/0x04 contract is already shipped, and a
+        // duplicate there is wasteful rather than unsafe (each response still
+        // carries its own full signed PCZT).
+        let mut seen: BTreeSet<&[u8]> = BTreeSet::new();
+        for (i, m) in request.messages().iter().enumerate() {
+            if !seen.insert(m.pczt_bytes.as_slice()) {
+                return Err(RequestError::Sign(
+                    i,
+                    Error::Parse("duplicate PCZT in compact batch request".into()),
+                ));
+            }
+        }
+
         let mut messages = Vec::with_capacity(request.messages().len());
         for (i, m) in request.messages().iter().enumerate() {
-            let (_, pczt) = sign_redacted_pczt_inner(&m.pczt_bytes, seed_phrase, account, mainnet)
-                .map_err(|e| RequestError::Sign(i, e))?;
+            let (_, pczt, prior) =
+                sign_redacted_pczt_inner(&m.pczt_bytes, seed_phrase, account, mainnet)
+                    .map_err(|e| RequestError::Sign(i, e))?;
             ensure_compact_supported(&pczt, i)?;
-            let signatures = to_contributions(&pczt);
+            let signatures = new_contributions(&prior, &pczt);
+            // Authorizing nothing is not success. Without this a request whose
+            // spends all belong to another account comes back as a "signed"
+            // response carrying only the signatures the wallet itself shipped.
+            if signatures.is_empty() {
+                return Err(RequestError::Sign(
+                    i,
+                    Error::Sign(
+                        "this device authorized no action in the request - wrong account, or \
+                         the spends belong to another wallet"
+                            .into(),
+                    ),
+                ));
+            }
             messages.push(CompactResponseMessage {
                 id: m.id.clone(),
                 signatures,
@@ -699,7 +774,7 @@ pub fn sign_request(
 /// `extract_orchard_spend_auth_signatures` (PR 2602) so the bytes are exactly
 /// the upstream `SpendAuthSignature` semantics: (value_pool, action_index,
 /// signature:64) for Orchard and Ironwood.
-fn to_contributions(pczt: &Pczt) -> Vec<SignatureContribution> {
+fn all_contributions(pczt: &Pczt) -> Vec<SignatureContribution> {
     use orchard::ValuePool;
     use pczt::roles::signer::extract_orchard_spend_auth_signatures;
     extract_orchard_spend_auth_signatures(pczt)
@@ -713,6 +788,61 @@ fn to_contributions(pczt: &Pczt) -> Vec<SignatureContribution> {
             signature: *s.signature(),
         })
         .collect()
+}
+
+/// The (pool, action_index) slots that already carry a spend-auth signature.
+fn signed_slots(pczt: &Pczt) -> BTreeSet<(u8, u32)> {
+    all_contributions(pczt)
+        .into_iter()
+        .map(|c| (c.pool, c.action_index))
+        .collect()
+}
+
+/// Signatures THIS DEVICE produced: everything present after signing minus
+/// everything that was already there when the request arrived.
+///
+/// `extract_orchard_spend_auth_signatures` returns every signature in the
+/// object, and a request PCZT legitimately arrives carrying some (the builder
+/// authorizes dummy/padding actions with their `dummy_sk` before redaction).
+/// Returning those unchanged would make a signatures-only response say "the
+/// device authorized this" about signatures the wallet supplied itself - so a
+/// request we authorized NOTHING in would still come back looking successful.
+/// Upstream closes the same hole by refusing request PCZTs that carry
+/// signatures at all (Keystone PR 2225); we take the delta, which additionally
+/// tolerates the legitimate pre-authorized dummies.
+fn new_contributions(before: &BTreeSet<(u8, u32)>, after: &Pczt) -> Vec<SignatureContribution> {
+    all_contributions(after)
+        .into_iter()
+        .filter(|c| !before.contains(&(c.pool, c.action_index)))
+        .collect()
+}
+
+/// Wallet-side counterpart to a compact device response: apply one returned
+/// signature contribution back into the PCZT the wallet retained.
+///
+/// Uses `pczt`'s own `Signer::apply_orchard_spend_auth_signature` (PR 2602) so
+/// device and wallet share the same (value_pool, action_index) addressing, and
+/// the signature is verified against the action's randomized verification key
+/// before it is stored - a contribution that is not a valid spend-auth
+/// signature for its action is REFUSED here, not silently absorbed. The wallet
+/// then runs SpendFinalizer + TransactionExtractor as usual.
+pub fn apply_signature_contribution(
+    pczt: Pczt,
+    sig: &SignatureContribution,
+) -> Result<Pczt, Error> {
+    use orchard::ValuePool;
+    use pczt::roles::signer::SpendAuthSignature;
+    let pool = match sig.pool {
+        envelope::POOL_ORCHARD => ValuePool::Orchard,
+        envelope::POOL_IRONWOOD => ValuePool::Ironwood,
+        other => return Err(Error::Parse(format!("unknown value pool {other}"))),
+    };
+    let upstream = SpendAuthSignature::from_parts(pool, sig.action_index as usize, sig.signature);
+    let mut signer = Signer::new(pczt).map_err(|e| Error::Sign(format!("{e:?}")))?;
+    signer
+        .apply_orchard_spend_auth_signature(&upstream)
+        .map_err(|e| Error::Sign(format!("{e:?}")))?;
+    Ok(signer.finish())
 }
 
 fn hex(bytes: &[u8]) -> String {

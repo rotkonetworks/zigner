@@ -1104,6 +1104,7 @@ version = "0.1.0"
 dependencies = [
  "bip39",
  "getrandom",
+ "hex",
  "module_host",
  "orchard",
  "pczt",

@@ -514,22 +514,52 @@ fn compact_v6_migration_returns_signatures_only() {
             })
             .collect()
     };
+    // The request PCZT already carries the builder-authorized dummy
+    // signatures; the wallet holds those in its own copy. A signatures-only
+    // response must therefore report exactly the slots THIS DEVICE added -
+    // full-path signed slots MINUS the ones that arrived already signed.
+    // (Returning the wallet's own signatures back to it would make a request
+    // we authorized nothing in look successful.)
+    let preexisting_slots: Vec<(u8, usize)> = {
+        let before = Pczt::parse(&over_the_qr).expect("parse request pczt");
+        pczt::roles::signer::extract_orchard_spend_auth_signatures(&before)
+            .into_iter()
+            .map(|s| {
+                (
+                    match s.value_pool() {
+                        orchard::ValuePool::Orchard => pczt_signing::envelope::POOL_ORCHARD,
+                        orchard::ValuePool::Ironwood => pczt_signing::envelope::POOL_IRONWOOD,
+                    },
+                    s.action_index(),
+                )
+            })
+            .collect()
+    };
     let mut ours: Vec<_> = returned
         .iter()
         .map(|c| (c.pool, c.action_index as usize))
         .collect();
     ours.sort_unstable();
-    let mut reference = reference_slots;
+    let mut reference: Vec<_> = reference_slots
+        .into_iter()
+        .filter(|slot| !preexisting_slots.contains(slot))
+        .collect();
     reference.sort_unstable();
+    assert!(
+        !reference.is_empty(),
+        "fixture must require at least one real device signature"
+    );
     assert_eq!(
         ours, reference,
-        "compact response must cover exactly the signed (pool, action_index) slots of the full path"
+        "compact response must be exactly the slots this device newly signed"
     );
+    // NB: the migration's ironwood spends are dummies that IoFinalizer already
+    // authorized, so they are NOT part of what this device contributes.
     assert!(
         returned
             .iter()
-            .any(|c| c.pool == pczt_signing::envelope::POOL_IRONWOOD),
-        "the migration's ironwood spend signature is returned"
+            .all(|c| c.pool == pczt_signing::envelope::POOL_ORCHARD),
+        "a turnstile migration's device contribution is the real orchard spend"
     );
 
     // VALIDITY gate: each returned signature verifies against its action's
@@ -610,11 +640,13 @@ fn compact_batch_returns_per_pczt_signatures_with_ids() {
     assert_eq!(compact.messages[0].id, b"migrate-1");
     assert_eq!(compact.messages[1].id, b"send-2");
     assert!(
-        compact.messages[0]
-            .signatures
-            .iter()
-            .any(|c| c.pool == pczt_signing::envelope::POOL_IRONWOOD),
-        "migration message returns its ironwood signature"
+        !compact.messages[0].signatures.is_empty()
+            && compact.messages[0]
+                .signatures
+                .iter()
+                .all(|c| c.pool == pczt_signing::envelope::POOL_ORCHARD),
+        "migration message returns the real orchard spend signature (ironwood \
+         spends are pre-authorized dummies the wallet already holds)"
     );
     assert!(
         compact.messages[0]
