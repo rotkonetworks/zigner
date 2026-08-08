@@ -74,6 +74,59 @@ digest path for legacy QR type):
    `ZcashBatchMessageInput { id, pczt_bytes }` -> signed batch with sha256
    digests. Unlocks one-exchange Ironwood migration + vote bundles.
 
+## Compact signatures-only responses (2026-08-08)
+
+Upstream port of the Ironwood migration performance work (librustzcash PRs
+2535/2602/2643/2662; Keystone firmware PRs 2207/2213/2211): the device can now
+answer a signing request with **only the spend-auth signatures it produced**
+instead of the full signed PCZT. For the 35-PCZT migration that shrinks the
+return QR from ~132 KB / 662 fragments to ~6.5 KB / 33 fragments (~20x).
+
+How it works (new `tx_type` bytes on the `[0x53][0x04][...]` prelude, same
+"deliberately dumb" framing):
+
+| tx_type | direction | payload |
+|---------|-----------|---------|
+| 0x03 / 0x04 | request | single / batch of redacted PCZTs (unchanged) |
+| 0x05 / 0x06 | request | same bodies as 0x03 / 0x04, but **compact**: the device answers 0x07 / 0x08 |
+| 0x07 / 0x08 | response | compact version prefix + per-PCZT signature contributions |
+
+A contribution is `(pool:u8, action_index:u32, signature:64)` with
+`pool` = 0 Orchard / 1 Ironwood - the same (value_pool, action_index,
+signature) triple as upstream `pczt::roles::signer::SpendAuthSignature`
+(PR 2602), so the same primitives shade both sides of the airgap:
+`extract_orchard_spend_auth_signatures` on the device,
+`Signer::apply_orchard_spend_auth_signature` / `orchard::pczt::Action::apply_signature`
+in the wallet. Signatures are positional per PCZT in request order; batch
+responses echo the wallet-chosen ids. The response opens with a version
+string (Keystone PR 2211 parity) so a wallet can refuse a shape it cannot
+merge.
+
+Batch cap raised 35 -> 40 (Keystone `ZCASH_BATCH_MAX_PCZTS`); old firmware
+still fails closed on unknown tx_types, so a wallet that gets an error after
+asking 0x05/0x06 must retry 0x03/0x04. Compact is only offered for
+shielded-only PCZTs: a compact request containing transparent inputs is
+refused loudly (the transport cannot express secp256k1 input signatures) -
+the wallet falls back to the full signed-PCZT response.
+
+Device-side signing is identical in both modes: same redacted-PCZT parse,
+same on-device sighash recomputation and display gates, same verify-before-
+sign. The compact response is derived from the finished PCZT
+(`pczt::roles::signer::extract_orchard_spend_auth_signatures`), whose
+signatures are the randomized RedPallas spend-auth signatures - the wallet
+verifies each one against the action `rk` over the shielded sighash when it
+merges (proven by `tests/v6_ironwood.rs::compact_v6_migration_returns_signatures_only`).
+
+Implementation state: shipped in `rust/pczt_signing` (envelope + sign path +
+wallet-side `parse_compact_response`), the wasm protocol module (module0.wasm
+rebuilt), the Android module path (scan routing accepts 0x05/0x06; module
+screen flags compact responses), and tested native + under wasmi. QRs still
+ride the existing `ur:zigner-module` fountain; **no zafu change yet** -
+zafu/zcli need to (a) emit 0x05/0x06 when the signer is module-capable,
+(b) parse 0x07/0x08 and merge the contributions into the PCZT it kept
+(via `Signer::apply_orchard_spend_auth_signature` / an Ironwood-aware
+`complete_*_pczt` role), then run SpendFinalizer + TransactionExtractor.
+
 ## Status (2026-07-06)
 
 Done in `rust/pczt_signing` (standalone crate, all tested):

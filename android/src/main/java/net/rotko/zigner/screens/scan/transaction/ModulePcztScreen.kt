@@ -76,6 +76,9 @@ fun ModulePcztScreen(
 	var errorDetail by remember { mutableStateOf("") }
 	var summaries by remember { mutableStateOf<List<ModulePcztSummary>>(emptyList()) }
 	var responseQrFrames by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
+	// True when the module answered with the compact signatures-only envelope
+	// (tx_type 0x07/0x08) - the ~20x QR return shrink for compact requests.
+	var compactResponse by remember { mutableStateOf(false) }
 	var currentFrameIdx by remember { mutableStateOf(0) }
 	// Captured at summarize time so the on-screen identity matches the seed
 	// that will sign (see ZcashPcztScreen for rationale).
@@ -172,6 +175,10 @@ fun ModulePcztScreen(
 										state = ModulePcztState.MODULE_ERROR
 										return@launch
 									}
+									// Compact requests (tx_type 0x05/0x06) come back as the
+									// signatures-only envelope (0x07/0x08) - the Ironwood
+									// QR shrink. Detect it on the main thread for the UI flag.
+									var isCompact: Boolean
 									val urParts = withContext(Dispatchers.Default) {
 										val response = ProtocolModule.sign(
 											context = context,
@@ -180,6 +187,8 @@ fun ModulePcztScreen(
 											account = accountIndex,
 											mainnet = mainnet,
 										)
+										isCompact = response.size > 3 &&
+											(response[2] == 0x07.toByte() || response[2] == 0x08.toByte())
 										// 200-byte fragments keep frames webcam-readable
 										// (same bound as the signed-PCZT UR path).
 										moduleResponseToUr(
@@ -187,6 +196,7 @@ fun ModulePcztScreen(
 											200u,
 										)
 									}
+									compactResponse = isCompact
 									// Pre-render bitmaps so the ticker only swaps images.
 									val bitmaps = withContext(Dispatchers.Default) {
 										urParts.map { urString ->
@@ -223,6 +233,15 @@ fun ModulePcztScreen(
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp),
 				)
+				if (compactResponse) {
+					// Ironwood QR shrink: the wallet asked for signatures only.
+					Text(
+						text = "Compact signature response - far fewer QR frames",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.pink500,
+						modifier = Modifier.padding(bottom = 8.dp),
+					)
+				}
 				Box(
 					modifier = Modifier.weight(1f).fillMaxWidth(),
 					contentAlignment = Alignment.Center,
