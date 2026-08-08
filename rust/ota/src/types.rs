@@ -3,13 +3,12 @@
 //! Domain tags INCLUDE the leading 0x00 as part of the signed bytes
 //! (freeze doc: "The 0x00 is part of the signed bytes").
 
-use crate::{Cbor, Error, decode, encode};
+use crate::{decode, encode, Cbor, Error};
 
 /// Fail with a formatted crate error (internal helper).
 macro_rules! err {
     ($($t:tt)*) => { return Err(Error(format!($($t)*))) };
 }
-
 
 /// Domain tag for signed manifests (includes leading 0x00).
 pub const TAG_MANIFEST: &[u8] = b"\x00zafu/manifest/v1";
@@ -75,15 +74,21 @@ pub struct Status {
 }
 
 fn arr32(b: &[u8]) -> Result<[u8; 32], Error> {
-    let a: [u8; 32] = b.try_into().map_err(|_| Error("expected 32-byte value".into()))?;
+    let a: [u8; 32] = b
+        .try_into()
+        .map_err(|_| Error("expected 32-byte value".into()))?;
     Ok(a)
 }
 fn arr64(b: &[u8]) -> Result<[u8; 64], Error> {
-    let a: [u8; 64] = b.try_into().map_err(|_| Error("expected 64-byte value".into()))?;
+    let a: [u8; 64] = b
+        .try_into()
+        .map_err(|_| Error("expected 64-byte value".into()))?;
     Ok(a)
 }
 fn arr8(b: &[u8]) -> Result<[u8; 8], Error> {
-    let a: [u8; 8] = b.try_into().map_err(|_| Error("expected 8-byte value".into()))?;
+    let a: [u8; 8] = b
+        .try_into()
+        .map_err(|_| Error("expected 8-byte value".into()))?;
     Ok(a)
 }
 
@@ -140,19 +145,45 @@ pub fn decode_manifest(data: &[u8]) -> Result<Manifest, Error> {
         Cbor::Map(m) => m,
         _ => err!("manifest must be a CBOR map"),
     };
-    let version = get(&m, 1).and_then(|v| v.as_text()).ok_or(Error("manifest missing version".into()))?.to_string();
-    let board = get(&m, 2).and_then(|v| v.as_text()).ok_or(Error("manifest missing board".into()))?.to_string();
-    let payload_sha256 = arr32(get(&m, 3).and_then(|v| v.as_bytes()).ok_or(Error("manifest missing payload_sha256".into()))?)?;
-    let payload_size = get(&m, 4).and_then(|v| v.as_uint()).ok_or(Error("manifest missing payload_size".into()))?;
-    let min_version = get(&m, 5).and_then(|v| v.as_text()).ok_or(Error("manifest missing min_version".into()))?.to_string();
-    let key_id = get(&m, 6).and_then(|v| v.as_uint()).ok_or(Error("manifest missing key_id".into()))?;
-    let class = get(&m, 7).and_then(|v| v.as_text()).ok_or(Error("manifest missing class".into()))?.to_string();
+    let version = get(&m, 1)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("manifest missing version".into()))?
+        .to_string();
+    let board = get(&m, 2)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("manifest missing board".into()))?
+        .to_string();
+    let payload_sha256 = arr32(
+        get(&m, 3)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("manifest missing payload_sha256".into()))?,
+    )?;
+    let payload_size = get(&m, 4)
+        .and_then(|v| v.as_uint())
+        .ok_or(Error("manifest missing payload_size".into()))?;
+    let min_version = get(&m, 5)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("manifest missing min_version".into()))?
+        .to_string();
+    let key_id = get(&m, 6)
+        .and_then(|v| v.as_uint())
+        .ok_or(Error("manifest missing key_id".into()))?;
+    let class = get(&m, 7)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("manifest missing class".into()))?
+        .to_string();
     let image_sig = match get(&m, 8) {
-        Some(v) => Some(arr64(v.as_bytes().ok_or(Error("manifest image_sig not bstr".into()))?)?),
+        Some(v) => Some(arr64(
+            v.as_bytes()
+                .ok_or(Error("manifest image_sig not bstr".into()))?,
+        )?),
         None => None,
     };
     let req_id = match get(&m, 9) {
-        Some(v) => Some(arr8(v.as_bytes().ok_or(Error("manifest req_id not bstr".into()))?)?),
+        Some(v) => Some(arr8(
+            v.as_bytes()
+                .ok_or(Error("manifest req_id not bstr".into()))?,
+        )?),
         None => None,
     };
     Ok(Manifest {
@@ -194,11 +225,25 @@ pub fn decode_image_header(data: &[u8]) -> Result<ImageHeader, Error> {
         Cbor::Map(m) => m,
         _ => err!("image header must be a CBOR map"),
     };
-    let key_id = get(&m, 1).and_then(|v| v.as_uint()).ok_or(Error("image missing key_id".into()))?;
-    let board = get(&m, 2).and_then(|v| v.as_text()).ok_or(Error("image missing board".into()))?.to_string();
-    let version = get(&m, 3).and_then(|v| v.as_text()).ok_or(Error("image missing version".into()))?.to_string();
-    let payload_sha256 = arr32(get(&m, 4).and_then(|v| v.as_bytes()).ok_or(Error("image missing payload_sha256".into()))?)?;
-    let payload_len = get(&m, 5).and_then(|v| v.as_uint()).ok_or(Error("image missing payload_len".into()))?;
+    let key_id = get(&m, 1)
+        .and_then(|v| v.as_uint())
+        .ok_or(Error("image missing key_id".into()))?;
+    let board = get(&m, 2)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("image missing board".into()))?
+        .to_string();
+    let version = get(&m, 3)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("image missing version".into()))?
+        .to_string();
+    let payload_sha256 = arr32(
+        get(&m, 4)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("image missing payload_sha256".into()))?,
+    )?;
+    let payload_len = get(&m, 5)
+        .and_then(|v| v.as_uint())
+        .ok_or(Error("image missing payload_len".into()))?;
     Ok(ImageHeader {
         key_id,
         board,
@@ -247,9 +292,16 @@ pub fn decode_result(data: &[u8]) -> Result<OtaResult, Error> {
         Cbor::Map(m) => m,
         _ => err!("result must be a CBOR map"),
     };
-    let fw_version = get(&m, 1).and_then(|v| v.as_text()).ok_or(Error("result missing fw_version".into()))?.to_string();
-    let success = get(&m, 2).and_then(|v| v.as_bool()).ok_or(Error("result missing success".into()))?;
-    let slots = get(&m, 3).and_then(|v| v.as_text()).ok_or(Error("result missing slot".into()))?;
+    let fw_version = get(&m, 1)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("result missing fw_version".into()))?
+        .to_string();
+    let success = get(&m, 2)
+        .and_then(|v| v.as_bool())
+        .ok_or(Error("result missing success".into()))?;
+    let slots = get(&m, 3)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("result missing slot".into()))?;
     if slots.len() != 1 {
         err!("result slot must be a single character");
     }
@@ -257,9 +309,21 @@ pub fn decode_result(data: &[u8]) -> Result<OtaResult, Error> {
     if slot != b'A' && slot != b'B' {
         err!("result slot must be 'A' or 'B'");
     }
-    let req_id = arr8(get(&m, 4).and_then(|v| v.as_bytes()).ok_or(Error("result missing req_id".into()))?)?;
-    let zid_pubkey = arr32(get(&m, 5).and_then(|v| v.as_bytes()).ok_or(Error("result missing zid_pubkey".into()))?)?;
-    let result_sig = arr64(get(&m, 6).and_then(|v| v.as_bytes()).ok_or(Error("result missing result_sig".into()))?)?;
+    let req_id = arr8(
+        get(&m, 4)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("result missing req_id".into()))?,
+    )?;
+    let zid_pubkey = arr32(
+        get(&m, 5)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("result missing zid_pubkey".into()))?,
+    )?;
+    let result_sig = arr64(
+        get(&m, 6)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("result missing result_sig".into()))?,
+    )?;
     Ok(OtaResult {
         fw_version,
         success,
@@ -307,8 +371,13 @@ pub fn decode_status(data: &[u8]) -> Result<Status, Error> {
         Cbor::Map(m) => m,
         _ => err!("status must be a CBOR map"),
     };
-    let fw_version = get(&m, 1).and_then(|v| v.as_text()).ok_or(Error("status missing fw_version".into()))?.to_string();
-    let slots = get(&m, 2).and_then(|v| v.as_text()).ok_or(Error("status missing slot".into()))?;
+    let fw_version = get(&m, 1)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("status missing fw_version".into()))?
+        .to_string();
+    let slots = get(&m, 2)
+        .and_then(|v| v.as_text())
+        .ok_or(Error("status missing slot".into()))?;
     if slots.len() != 1 {
         err!("status slot must be a single character");
     }
@@ -316,9 +385,19 @@ pub fn decode_status(data: &[u8]) -> Result<Status, Error> {
     if slot != b'A' && slot != b'B' {
         err!("status slot must be 'A' or 'B'");
     }
-    let successful_boot = get(&m, 3).and_then(|v| v.as_bool()).ok_or(Error("status missing successful_boot".into()))?;
-    let zid_pubkey = arr32(get(&m, 4).and_then(|v| v.as_bytes()).ok_or(Error("status missing zid_pubkey".into()))?)?;
-    let status_sig = arr64(get(&m, 5).and_then(|v| v.as_bytes()).ok_or(Error("status missing status_sig".into()))?)?;
+    let successful_boot = get(&m, 3)
+        .and_then(|v| v.as_bool())
+        .ok_or(Error("status missing successful_boot".into()))?;
+    let zid_pubkey = arr32(
+        get(&m, 4)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("status missing zid_pubkey".into()))?,
+    )?;
+    let status_sig = arr64(
+        get(&m, 5)
+            .and_then(|v| v.as_bytes())
+            .ok_or(Error("status missing status_sig".into()))?,
+    )?;
     Ok(Status {
         fw_version,
         slot,

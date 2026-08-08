@@ -4,16 +4,19 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
 use crate::types::{
-    TAG_IMAGE, TAG_MANIFEST, TAG_RESULT, TAG_STATUS, ImageHeader, Manifest, OtaResult, Status,
     image_canonical, manifest_signed_canonical, result_signed_canonical, status_signed_canonical,
+    ImageHeader, Manifest, OtaResult, Status, TAG_IMAGE, TAG_MANIFEST, TAG_RESULT, TAG_STATUS,
 };
 use crate::Error;
 
 /// Reject the identity/small-order public key at pin time (RFC 8032 §3.1).
 fn pin_pubkey(pubkey: &[u8; 32]) -> Result<VerifyingKey, Error> {
-    let vk = VerifyingKey::from_bytes(pubkey).map_err(|e| Error(format!("invalid pubkey: {e:?}")))?;
+    let vk =
+        VerifyingKey::from_bytes(pubkey).map_err(|e| Error(format!("invalid pubkey: {e:?}")))?;
     if vk.is_weak() {
-        return Err(Error("small-order / identity public key rejected at pin".into()));
+        return Err(Error(
+            "small-order / identity public key rejected at pin".into(),
+        ));
     }
     Ok(vk)
 }

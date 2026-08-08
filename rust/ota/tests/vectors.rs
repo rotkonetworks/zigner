@@ -6,9 +6,9 @@
 use ota::semver;
 use ota::stream::verify_stream;
 use ota::types::{
-    ImageHeader, Manifest, OtaResult, Status, TAG_IMAGE, TAG_MANIFEST, TAG_RESULT, TAG_STATUS,
     decode_result, decode_status, image_canonical, manifest_signed_canonical,
     result_signed_canonical, result_wire_canonical, status_signed_canonical, status_wire_canonical,
+    ImageHeader, Manifest, OtaResult, Status, TAG_IMAGE, TAG_MANIFEST, TAG_RESULT, TAG_STATUS,
 };
 use ota::verifysig::{verify_image, verify_manifest, verify_result, verify_status};
 use serde_json::Value;
@@ -150,7 +150,11 @@ fn corpus_manifest_encode_matches_byte_for_byte() {
     for name in ["release_0_9_0", "rollback_0_8_5"] {
         let v = c.sign_vectors(name);
         let m = manifest_from(&v, &c);
-        assert_eq!(manifest_signed_canonical(&m).unwrap(), v.manifest_canonical, "{name} manifest canonical");
+        assert_eq!(
+            manifest_signed_canonical(&m).unwrap(),
+            v.manifest_canonical,
+            "{name} manifest canonical"
+        );
         let mut expected = TAG_MANIFEST.to_vec();
         expected.extend_from_slice(&v.manifest_canonical);
         assert_eq!(expected, v.manifest_signed, "{name} manifest signed");
@@ -163,7 +167,11 @@ fn corpus_image_encode_matches_byte_for_byte() {
     for name in ["release_0_9_0", "rollback_0_8_5"] {
         let v = c.sign_vectors(name);
         let h = image_header_from(&v, &c);
-        assert_eq!(image_canonical(&h).unwrap(), v.image_canonical, "{name} image canonical");
+        assert_eq!(
+            image_canonical(&h).unwrap(),
+            v.image_canonical,
+            "{name} image canonical"
+        );
         let mut expected = TAG_IMAGE.to_vec();
         expected.extend_from_slice(&v.image_canonical);
         assert_eq!(expected, v.image_signed, "{name} image signed");
@@ -177,9 +185,11 @@ fn corpus_signatures_verify_positive() {
     for name in ["release_0_9_0", "rollback_0_8_5"] {
         let v = c.sign_vectors(name);
         let m = manifest_from(&v, &c);
-        verify_manifest(&m, &a64(&v.manifest_sig), &pinned).unwrap_or_else(|e| panic!("{name} manifest verify: {e}"));
+        verify_manifest(&m, &a64(&v.manifest_sig), &pinned)
+            .unwrap_or_else(|e| panic!("{name} manifest verify: {e}"));
         let h = image_header_from(&v, &c);
-        verify_image(&h, &a64(&v.image_sig), &pinned).unwrap_or_else(|e| panic!("{name} image verify: {e}"));
+        verify_image(&h, &a64(&v.image_sig), &pinned)
+            .unwrap_or_else(|e| panic!("{name} image verify: {e}"));
     }
 }
 
@@ -199,7 +209,11 @@ fn corpus_result_matches_and_verifies() {
         zid_pubkey: hex32(rv["zid_pubkey_hex"].as_str().unwrap()),
         result_sig,
     };
-    assert_eq!(result_signed_canonical(&r).unwrap(), canonical, "result canonical");
+    assert_eq!(
+        result_signed_canonical(&r).unwrap(),
+        canonical,
+        "result canonical"
+    );
     let mut expected = TAG_RESULT.to_vec();
     expected.extend_from_slice(&canonical);
     assert_eq!(expected, signed, "result signed");
@@ -225,7 +239,11 @@ fn corpus_status_matches_and_verifies() {
         zid_pubkey: hex32(sv["zid_pubkey_hex"].as_str().unwrap()),
         status_sig: hex64(sv["status_sig_hex"].as_str().unwrap()),
     };
-    assert_eq!(status_signed_canonical(&s).unwrap(), canonical, "status canonical");
+    assert_eq!(
+        status_signed_canonical(&s).unwrap(),
+        canonical,
+        "status canonical"
+    );
     let mut expected = TAG_STATUS.to_vec();
     expected.extend_from_slice(&canonical);
     assert_eq!(expected, signed, "status signed");
@@ -264,7 +282,15 @@ fn golden_tuple(s: &str) -> (u64, u64, u64) {
 #[test]
 fn semver_rejects_bad_versions() {
     for bad in [
-        "v0.9.0", "V1.2.3", "0.9", "0.9.0-beta", "0.9.0+build", "0.a.0", "..", "0.9.0.1", "",
+        "v0.9.0",
+        "V1.2.3",
+        "0.9",
+        "0.9.0-beta",
+        "0.9.0+build",
+        "0.a.0",
+        "..",
+        "0.9.0.1",
+        "",
         " 0.9.0",
     ] {
         assert!(semver::parse(bad).is_none(), "should reject {bad:?}");
@@ -282,7 +308,8 @@ fn corpus_verify_stream_end_to_end() {
     let buf = build_stream(&v, &payload, &m, req_id);
     let msig = a64(&v.manifest_sig);
 
-    let vs = verify_stream(&buf, &msig, &pinned, "0.8.0", c.board(), &[], false).expect("release stream verifies");
+    let vs = verify_stream(&buf, &msig, &pinned, "0.8.0", c.board(), &[], false)
+        .expect("release stream verifies");
     assert_eq!(vs.manifest.version, "0.9.0");
     assert_eq!(vs.payload_sha256, a32(&v.payload_sha256));
     assert_eq!(vs.payload_len, v.payload_size);
@@ -316,10 +343,28 @@ fn corpus_rejections() {
     assert!(verify_stream(&tampered, &msig, &pinned, "0.8.0", c.board(), &[], false).is_err());
 
     // Blacklisted key_id.
-    assert!(verify_stream(&good, &msig, &pinned, "0.8.0", c.board(), &[v.key_id], false).is_err());
+    assert!(verify_stream(
+        &good,
+        &msig,
+        &pinned,
+        "0.8.0",
+        c.board(),
+        &[v.key_id],
+        false
+    )
+    .is_err());
 
     // Wrong board.
-    assert!(verify_stream(&good, &msig, &pinned, "0.8.0", "some-other-board", &[], false).is_err());
+    assert!(verify_stream(
+        &good,
+        &msig,
+        &pinned,
+        "0.8.0",
+        "some-other-board",
+        &[],
+        false
+    )
+    .is_err());
 
     // Bad class (unknown) — repackaged with a bogus class; either the
     // signature or the class gate must reject it.

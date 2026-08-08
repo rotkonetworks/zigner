@@ -9,15 +9,14 @@
 use sha2::{Digest, Sha256};
 
 use crate::semver;
-use crate::types::{CLASS_RELEASE, CLASS_ROLLBACK, ImageHeader, Manifest, decode_manifest};
+use crate::types::{decode_manifest, ImageHeader, Manifest, CLASS_RELEASE, CLASS_ROLLBACK};
 use crate::verifysig::{verify_image, verify_manifest};
-use crate::{Error, decode_one};
+use crate::{decode_one, Error};
 
 /// Fail with a formatted crate error (internal helper).
 macro_rules! err {
     ($($t:tt)*) => { return Err(Error(format!($($t)*))) };
 }
-
 
 /// Result of a fully verified stream (data eligible for verified staging).
 #[derive(Debug, Clone)]
@@ -186,8 +185,7 @@ pub fn decode_image_wrapper(wrapper: &[u8]) -> Result<(u64, u64, [u8; 32], &[u8]
         err!("image wrapper too short");
     }
     let key_id = u32::from_le_bytes(wrapper[0..4].try_into().unwrap()) as u64;
-    let payload_len =
-        u32::from_le_bytes(wrapper[4..8].try_into().unwrap()) as u64;
+    let payload_len = u32::from_le_bytes(wrapper[4..8].try_into().unwrap()) as u64;
     let mut sha = [0u8; 32];
     sha.copy_from_slice(&wrapper[8..40]);
     let payload = &wrapper[40..];
@@ -225,7 +223,11 @@ pub fn verify_payload_chunks(
     }
     let digest: [u8; 32] = hasher.finalize().into();
     if digest != *expected {
-        err!("payload sha256 mismatch: computed {} expected {}", hex::encode(digest), hex::encode(expected));
+        err!(
+            "payload sha256 mismatch: computed {} expected {}",
+            hex::encode(digest),
+            hex::encode(expected)
+        );
     }
     Ok(())
 }

@@ -9,14 +9,13 @@
 //! durable -> emit result. Any failure discards the inactive slot; the
 //! running (active) slot is never written during transfer.
 
-use crate::Error;
 use crate::stream::verify_payload_chunks;
+use crate::Error;
 
 /// Fail with a formatted crate error (internal helper).
 macro_rules! err {
     ($($t:tt)*) => { return Err(Error(format!($($t)*))) };
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
@@ -96,7 +95,11 @@ impl FirmwareSlots {
     /// per-chunk hash. Any failure discards the inactive slot (returns Err,
     /// leaves `staged` None). The running slot is never touched.
     pub fn stage(&mut self, req: &StageRequest) -> Result<(), Error> {
-        verify_payload_chunks(&req.payload, &req.payload_sha256, crate::stream::STAGING_CHUNK)?;
+        verify_payload_chunks(
+            &req.payload,
+            &req.payload_sha256,
+            crate::stream::STAGING_CHUNK,
+        )?;
         let target = self.active.other();
         self.staged = Some(StagedSlot {
             slot: target,
@@ -172,7 +175,6 @@ impl FirmwareSlots {
 fn sbyte(s: Slot) -> char {
     char::from(s.byte())
 }
-
 
 #[cfg(test)]
 mod tests {

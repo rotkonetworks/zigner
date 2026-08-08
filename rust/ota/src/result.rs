@@ -2,8 +2,10 @@
 //! ZID identity key; the wallet verifies `*_sig` against the embedded
 //! `zid_pubkey`.
 
-use crate::types::{OtaResult, Status, TAG_RESULT, TAG_STATUS, result_signed_canonical,
-    result_wire_canonical, status_signed_canonical, status_wire_canonical};
+use crate::types::{
+    result_signed_canonical, result_wire_canonical, status_signed_canonical, status_wire_canonical,
+    OtaResult, Status, TAG_RESULT, TAG_STATUS,
+};
 use crate::verifysig::sign;
 use crate::Error;
 

@@ -27,7 +27,6 @@ pub mod corpus {
     }
 }
 
-
 use std::fmt;
 
 /// Canonical CBOR value tree. Maps keep integer keys; construction orders
@@ -259,7 +258,9 @@ fn decode_item(cur: &mut Cursor) -> Result<Cbor, Error> {
                 // indefinite array: terminator break
                 let mut items = Vec::new();
                 loop {
-                    let nb = cur.byte().map_err(|_| Error("unterminated indefinite array".into()))?;
+                    let nb = cur
+                        .byte()
+                        .map_err(|_| Error("unterminated indefinite array".into()))?;
                     if nb == 0xff {
                         break;
                     }

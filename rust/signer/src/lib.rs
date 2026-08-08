@@ -4956,10 +4956,11 @@ pub fn ota_verify_stream(
     let bytes = decode_ur_fountain(ur_parts, "zafu-stream")?;
     let msig = hex_arr::<64>(&manifest_sig_hex, "manifest_sig")?;
     let pinned = hex_arr::<32>(&pinned_pubkey_hex, "pinned_pubkey")?;
-    let vs = ota::stream::verify_stream(&bytes, &msig, &pinned, &current_version, &board, &[], false)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("ota stream rejected: {e}"),
-        })?;
+    let vs =
+        ota::stream::verify_stream(&bytes, &msig, &pinned, &current_version, &board, &[], false)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("ota stream rejected: {e}"),
+            })?;
     Ok(OtaStreamManifestSummary {
         version: vs.manifest.version,
         board: vs.manifest.board,
@@ -4991,7 +4992,10 @@ pub fn ota_encode_result(
     })?;
     let wire = ota::result::produce_result(&fw_version, success, slot, &req, &sk)
         .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
-    Ok(vec![ur::ur::encode(&wire, &ur::Type::Custom("zafu-result"))])
+    Ok(vec![ur::ur::encode(
+        &wire,
+        &ur::Type::Custom("zafu-result"),
+    )])
 }
 
 /// Encode a device-signed `ur:zafu-status` (single-frame) as UR string.
@@ -5004,16 +5008,18 @@ pub fn ota_encode_status(
     let sk = hex_arr::<32>(&zid_secret_key_hex, "zid_secret_key")?;
     let wire = ota::result::produce_status(&fw_version, slot, successful_boot, &sk)
         .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
-    Ok(vec![ur::ur::encode(&wire, &ur::Type::Custom("zafu-status"))])
+    Ok(vec![ur::ur::encode(
+        &wire,
+        &ur::Type::Custom("zafu-status"),
+    )])
 }
 
 /// Decode + verify a `ur:zafu-result` single-frame UR.
 pub fn ota_decode_result(ur_parts: Vec<String>) -> Result<OtaResultFFI, ErrorDisplayed> {
     let bytes = decode_ur_fountain(ur_parts, "zafu-result")?;
-    let r = ota::types::decode_result(&bytes)
-        .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
-    ota::verifysig::verify_result(&r)
-        .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
+    let r =
+        ota::types::decode_result(&bytes).map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
+    ota::verifysig::verify_result(&r).map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
     Ok(OtaResultFFI {
         fw_version: r.fw_version,
         success: r.success,
@@ -5027,10 +5033,9 @@ pub fn ota_decode_result(ur_parts: Vec<String>) -> Result<OtaResultFFI, ErrorDis
 /// Decode + verify a `ur:zafu-status` single-frame UR.
 pub fn ota_decode_status(ur_parts: Vec<String>) -> Result<OtaStatusFFI, ErrorDisplayed> {
     let bytes = decode_ur_fountain(ur_parts, "zafu-status")?;
-    let s = ota::types::decode_status(&bytes)
-        .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
-    ota::verifysig::verify_status(&s)
-        .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
+    let s =
+        ota::types::decode_status(&bytes).map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
+    ota::verifysig::verify_status(&s).map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
     Ok(OtaStatusFFI {
         fw_version: s.fw_version,
         slot: s.slot,
