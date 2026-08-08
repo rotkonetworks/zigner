@@ -40,6 +40,10 @@ transform_regex = [
     "^https?://.*$",
     # unicode symbols and tilde
     "^[✓~→←↑↓α⇒−≤±\\\\]$",
+    # section refs (§3), byte-literal fragments (b'A), arrow pairs
+    "^§[0-9]+$",
+    "^b'[A-Za-z0-9]$",
+    "^[A-Za-z]+→[a-z]+$",
     # approximate durations/sizes like ~60s
     "^~[0-9]+[a-zA-Z]*$",
     # numeric ranges (en-dash or hyphen) and powers
