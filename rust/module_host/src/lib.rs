@@ -179,16 +179,31 @@ pub const KERNEL_VERSION: u32 = 1;
 /// Rotation requires a kernel (store/USB) update by design.
 pub const RELEASE_KEY_BYTES: [[u8; 32]; 3] = [[0u8; 32], [0u8; 32], [0u8; 32]];
 
-/// Decode the baked release keys. None while the placeholder is in place
-/// (all-zero is not a valid ed25519 point encoding wouldn't matter - we
-/// refuse it explicitly before parsing).
+/// Decode the baked release keys. None unless ALL THREE slots hold a real,
+/// non-low-order key.
+///
+/// Note the hazard this guards: an all-zero slot is NOT rejected by ed25519
+/// decoding. It decodes cleanly to a small-order point, and signatures under
+/// a small-order key are forgeable. So "still a placeholder" has to be an
+/// explicit check per slot, not something we can lean on the curve to catch.
 pub fn release_keys() -> Option<[ed25519_dalek::VerifyingKey; 3]> {
-    if RELEASE_KEY_BYTES.iter().all(|k| k.iter().all(|b| *b == 0)) {
-        return None;
-    }
     let mut keys = Vec::with_capacity(3);
     for kb in &RELEASE_KEY_BYTES {
-        keys.push(ed25519_dalek::VerifyingKey::from_bytes(kb).ok()?);
+        // Reject EACH placeholder slot, not just the all-three-zero case. An
+        // all-zero encoding decodes to a *valid* ed25519 point - a small-order
+        // one - so a partially-completed ceremony (real keys in some slots,
+        // placeholder in the rest) would otherwise hand out a usable key whose
+        // signatures are forgeable. Two placeholder slots left behind would let
+        // an attacker forge 2-of-3 with no key compromise whatsoever.
+        if kb.iter().all(|b| *b == 0) {
+            return None;
+        }
+        let key = ed25519_dalek::VerifyingKey::from_bytes(kb).ok()?;
+        // Belt and braces: refuse any low-order key, however it got in here.
+        if key.is_weak() {
+            return None;
+        }
+        keys.push(key);
     }
     keys.try_into().ok()
 }
@@ -205,5 +220,34 @@ pub fn self_test(wasm_bytes: &[u8]) -> bool {
     match rt.summarize_request(&[0x53, 0x04, 0x77, 0, 0, 0]) {
         Err(HostError::Module(msg)) => msg.contains("unknown zcash tx type"),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod release_key_tests {
+    use super::*;
+
+    /// An all-zero slot decodes to a valid-but-small-order ed25519 key, so a
+    /// partially-completed ceremony must be refused outright rather than
+    /// yielding a key whose signatures can be forged.
+    #[test]
+    fn placeholder_slots_are_individually_refused() {
+        let z = [0u8; 32];
+        let decoded = ed25519_dalek::VerifyingKey::from_bytes(&z)
+            .expect("all-zero decodes - that is precisely the hazard");
+        assert!(
+            decoded.is_weak(),
+            "all-zero must be recognised as low-order"
+        );
+    }
+
+    /// The shipped constant is still the placeholder, so the kernel must fail
+    /// closed. This flips at the key ceremony.
+    #[test]
+    fn kernel_fails_closed_on_placeholder_keys() {
+        assert!(
+            release_keys().is_none(),
+            "placeholder release keys must not yield a usable trust anchor"
+        );
     }
 }

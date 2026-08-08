@@ -96,8 +96,11 @@ pub fn verify_package<'a>(
         }
         seen[idx] = true;
         let signature = Signature::from_bytes(sig.try_into().unwrap());
+        // verify_strict, not verify: the permissive form accepts small-order
+        // public keys and non-canonical R, both of which admit forgeries. This
+        // is a trust anchor, so take the strict equation.
         release_keys[idx]
-            .verify(&msg, &signature)
+            .verify_strict(&msg, &signature)
             .map_err(|_| ManifestError::BadSignature(ki[0]))?;
         valid += 1;
     }
