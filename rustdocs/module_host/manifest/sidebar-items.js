@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DOMAIN","MAGIC","REQUIRED_SIGS"],"enum":["ManifestError"],"fn":["build_package","verify_package"],"struct":["VerifiedModule"]};

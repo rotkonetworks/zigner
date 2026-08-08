@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["compare","parse","to_string"],"struct":["Version"]};

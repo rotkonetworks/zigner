@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["open_batch_envelope","open_envelope","open_envelope_bytes","seal_batch_envelope","seal_envelope","seal_envelope_bytes"],"struct":["PlaintextBatch","PlaintextPayload","ShareEntry"]};
