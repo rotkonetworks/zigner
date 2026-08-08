@@ -11,18 +11,29 @@
 //! (`transaction_signing/zcash.rs`): the sighash is recomputed here from
 //! the PCZT contents, so a compromised wallet cannot substitute a digest
 //! for a different transaction than the one displayed.
+//!
+//! COMPACT PCZTs (wallet redaction of cv_net, anchors, ciphertexts, fvk):
+//! After parsing, `resolve_fields()` recomputes the redacted fields once so
+//! the same verification gates apply to compact and full PCZTs. The sighash
+//! is computed once per PCZT and reused for every action, and the spend
+//! authorizing key is zeroized after signing.
 
 pub mod envelope;
 
 use envelope::{
-    encode_response, parse_request, EnvelopeError, ResponseMessage, SignRequest,
+    encode_response, parse_request, parse_request_full, EnvelopeError, ResponseMessage, SignRequest,
+};
+// compact-response types (re-exported so the wasm ABI + tests can name them)
+pub use envelope::{
+    encode_compact_response, parse_compact_response, CompactResponse, CompactResponseMessage,
+    SignatureContribution, POOL_IRONWOOD, POOL_ORCHARD,
 };
 use pczt::roles::signer::Signer;
 use pczt::Pczt;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_protocol::consensus::{MainNetwork, TestNetwork};
-use zip32::AccountId;
 use zcash_transparent::keys::{NonHardenedChildIndex, TransparentKeyScope};
+use zip32::AccountId;
 
 #[derive(Debug)]
 pub enum Error {
@@ -243,7 +254,11 @@ fn verify_value_balance(bundle: &orchard::pczt::Bundle) -> Result<(), String> {
 
 /// Parse a redacted PCZT and produce the confirmation summary.
 pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
-    let pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
+    let mut pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
+    // Resolve compact fields (cv_net, cmx, ciphertexts) for a redacted PCZT.
+    // This is a no-op for full PCZTs where these fields are already present.
+    pczt.resolve_fields()
+        .map_err(|e| Error::Parse(format!("resolve fields: {e:?}")))?;
     verify_displayed_summary(&pczt)?;
 
     let orchard_actions = pczt.orchard().actions().len();
@@ -255,7 +270,10 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     // the wallet left them present. Anything unreadable renders "shielded".
     let mut outputs = Vec::new();
     for out in pczt.transparent().outputs() {
-        outputs.push((format!("t-script:{}", hex(out.script_pubkey())), *out.value()));
+        outputs.push((
+            format!("t-script:{}", hex(out.script_pubkey())),
+            *out.value(),
+        ));
     }
     for action in pczt.orchard().actions() {
         let out = action.output();
@@ -359,7 +377,9 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
 /// cosmetic error, so extending the same binding to those bundles is the next
 /// step if either becomes a supported flow.
 fn compute_fee_zat(pczt_bytes: &[u8]) -> Option<u64> {
-    let pczt = Pczt::parse(pczt_bytes).ok()?;
+    let mut pczt = Pczt::parse(pczt_bytes).ok()?;
+    // Resolve compact fields for a redacted PCZT.
+    pczt.resolve_fields().ok()?;
     let effects = pczt.into_effects().ok()?;
     // Transparent inputs carry their own value in the PCZT (transparent.value
     // is public), but fee_paid takes a prevout lookup by outpoint. We have no
@@ -373,15 +393,34 @@ fn compute_fee_zat(pczt_bytes: &[u8]) -> Option<u64> {
 }
 
 /// Sign every orchard action and transparent input this seed controls.
+///
 /// Returns the serialized signed PCZT (the wallet runs SpendFinalizer +
-/// TransactionExtractor).
+/// TransactionExtractor). For the compact signatures-only response the
+/// caller needs the finished (unsigned-proof) `Pczt` too, so the real work
+/// lives in [`sign_redacted_pczt_inner`].
 pub fn sign_redacted_pczt(
     pczt_bytes: &[u8],
     seed_phrase: &str,
     account: u32,
     mainnet: bool,
 ) -> Result<Vec<u8>, Error> {
-    let pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
+    sign_redacted_pczt_inner(pczt_bytes, seed_phrase, account, mainnet).map(|(bytes, _)| bytes)
+}
+
+/// Sign every orchard action and transparent input this seed controls.
+/// Returns `(serialized_signed_pczt, finished_pczt)`; the finished `Pczt`
+/// is what the compact response extracts spend-auth signatures from.
+fn sign_redacted_pczt_inner(
+    pczt_bytes: &[u8],
+    seed_phrase: &str,
+    account: u32,
+    mainnet: bool,
+) -> Result<(Vec<u8>, Pczt), Error> {
+    let mut pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
+    // Resolve compact fields (cv_net, cmx, ciphertexts) for a redacted PCZT.
+    // This is a no-op for full PCZTs where these fields are already present.
+    pczt.resolve_fields()
+        .map_err(|e| Error::Parse(format!("resolve fields: {e:?}")))?;
     // Refuse to sign anything we would have refused to display. `sign_request`
     // does not re-run `summarize`, so this must be checked here too.
     verify_displayed_summary(&pczt)?;
@@ -554,8 +593,11 @@ pub fn sign_redacted_pczt(
     // canonical-empty ironwood bundle), the v2 encoding otherwise. So a V5
     // signing response still goes back over the QR as v1 bytes - unchanged for
     // every wallet that predates v2 - while a V6 / ironwood response uses v2.
-    pczt.serialize()
-        .map_err(|e| Error::Sign(format!("serialize: {e:?}")))
+    let bytes = pczt
+        .clone()
+        .serialize()
+        .map_err(|e| Error::Sign(format!("serialize: {e:?}")))?;
+    Ok((bytes, pczt))
 }
 
 #[derive(Debug)]
@@ -584,27 +626,93 @@ pub fn summarize_request(payload: &[u8]) -> Result<Vec<PcztSummary>, RequestErro
         .collect()
 }
 
+/// Compact responses carry orchard/ironwood spend-auth signatures only
+/// (upstream `BatchSignResponse` semantics); transparent inputs cannot be
+/// expressed, so a COMPACT request that includes any transparent input is
+/// refused here and the wallet must fall back to the full signed-PCZT
+/// response types (0x03/0x04). Shielded-only sends and the Ironwood master
+/// migration - the flows the compact transport exists for - never hit this.
+fn ensure_compact_supported(pczt: &Pczt, i: usize) -> Result<(), RequestError> {
+    if !pczt.transparent().inputs().is_empty() {
+        return Err(RequestError::Sign(
+            i,
+            Error::Sign(
+                "compact signatures-only response unsupported for a PCZT with transparent \
+                 inputs - resend with the full signed-PCZT types (0x03/0x04)"
+                    .into(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// The full device flow after user confirmation: parse the envelope, sign
 /// every message, return the response envelope for the wallet's camera.
+///
+/// A COMPACT request (tx_type 0x05/0x06) gets a signatures-only response
+/// (tx_type 0x07/0x08) - see the envelope module docs - which is what makes
+/// the Ironwood migration QR return ~20x smaller. A legacy request
+/// (0x03/0x04) still gets full signed PCZTs back, byte-for-byte as before.
 pub fn sign_request(
     payload: &[u8],
     seed_phrase: &str,
     account: u32,
     mainnet: bool,
 ) -> Result<Vec<u8>, RequestError> {
-    let request = parse_request(payload).map_err(RequestError::Envelope)?;
+    let parsed = parse_request_full(payload).map_err(RequestError::Envelope)?;
+    let request = parsed.request;
+    let compact = parsed.compact;
+    let single = matches!(request, SignRequest::Single(_));
     let batch = matches!(request, SignRequest::Batch(_));
-    let mut responses = Vec::with_capacity(request.messages().len());
-    for (i, m) in request.messages().iter().enumerate() {
-        let signed = sign_redacted_pczt(&m.pczt_bytes, seed_phrase, account, mainnet)
-            .map_err(|e| RequestError::Sign(i, e))?;
-        responses.push(ResponseMessage {
-            id: m.id.clone(),
-            digest: envelope::integrity_digest(&signed),
-            signed_pczt: signed,
-        });
+
+    if compact {
+        let mut messages = Vec::with_capacity(request.messages().len());
+        for (i, m) in request.messages().iter().enumerate() {
+            let (_, pczt) = sign_redacted_pczt_inner(&m.pczt_bytes, seed_phrase, account, mainnet)
+                .map_err(|e| RequestError::Sign(i, e))?;
+            ensure_compact_supported(&pczt, i)?;
+            let signatures = to_contributions(&pczt);
+            messages.push(CompactResponseMessage {
+                id: m.id.clone(),
+                signatures,
+            });
+        }
+        encode_compact_response(&messages, envelope::COMPACT_RESPONSE_VERSION, single)
+            .map_err(RequestError::Envelope)
+    } else {
+        let mut responses = Vec::with_capacity(request.messages().len());
+        for (i, m) in request.messages().iter().enumerate() {
+            let signed = sign_redacted_pczt(&m.pczt_bytes, seed_phrase, account, mainnet)
+                .map_err(|e| RequestError::Sign(i, e))?;
+            responses.push(ResponseMessage {
+                id: m.id.clone(),
+                digest: envelope::integrity_digest(&signed),
+                signed_pczt: signed,
+            });
+        }
+        encode_response(&responses, batch).map_err(RequestError::Envelope)
     }
-    encode_response(&responses, batch).map_err(RequestError::Envelope)
+}
+
+/// Extract the spend-auth signatures this device produced from `pczt`, in the
+/// compact wire shape. Uses `pczt`'s own
+/// `extract_orchard_spend_auth_signatures` (PR 2602) so the bytes are exactly
+/// the upstream `SpendAuthSignature` semantics: (value_pool, action_index,
+/// signature:64) for Orchard and Ironwood.
+fn to_contributions(pczt: &Pczt) -> Vec<SignatureContribution> {
+    use orchard::ValuePool;
+    use pczt::roles::signer::extract_orchard_spend_auth_signatures;
+    extract_orchard_spend_auth_signatures(pczt)
+        .into_iter()
+        .map(|s| SignatureContribution {
+            pool: match s.value_pool() {
+                ValuePool::Orchard => envelope::POOL_ORCHARD,
+                ValuePool::Ironwood => envelope::POOL_IRONWOOD,
+            },
+            action_index: s.action_index() as u32,
+            signature: *s.signature(),
+        })
+        .collect()
 }
 
 fn hex(bytes: &[u8]) -> String {

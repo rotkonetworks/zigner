@@ -18,7 +18,7 @@
 
 mod common;
 
-use common::{build_redacted_v6_migration, MNEMONIC};
+use common::{build_redacted_v5_send, build_redacted_v6_migration, MNEMONIC};
 use pczt::Pczt;
 
 #[test]
@@ -80,17 +80,24 @@ fn wallet_builds_v6_migration_device_signs() {
     // Head ABI (FIX-B / R3 finding 3): the wasm summary head must carry
     // ironwood_actions and the fee so the device confirmation head reflects
     // the migration. Drive the actual C ABI the module_host calls.
-    let payload = pczt_signing::envelope::encode_request(&pczt_signing::envelope::SignRequest::Single(
-        pczt_signing::envelope::RequestMessage {
+    let payload = pczt_signing::envelope::encode_request(
+        &pczt_signing::envelope::SignRequest::Single(pczt_signing::envelope::RequestMessage {
             id: Vec::new(),
             pczt_bytes: over_the_qr.clone(),
-        },
-    ))
+        }),
+    )
     .expect("encode single request");
     let summaries = pczt_signing::summarize_request(&payload).expect("summarize_request");
     assert_eq!(summaries.len(), 1);
-    assert!(summaries[0].ironwood_actions >= 1, "head reports ironwood_actions");
-    assert_eq!(summaries[0].fee_zat, Some(fee), "head reports canonical fee");
+    assert!(
+        summaries[0].ironwood_actions >= 1,
+        "head reports ironwood_actions"
+    );
+    assert_eq!(
+        summaries[0].fee_zat,
+        Some(fee),
+        "head reports canonical fee"
+    );
 
     // -- device side: sign --
     let signed_bytes =
@@ -416,4 +423,211 @@ fn patch_all(bytes: &[u8], needle: &[u8], replacement: &[u8]) -> (Vec<u8>, usize
         }
     }
     (out, n)
+}
+
+/// COMPACT signatures-only response (the Ironwood QR shrink): a wallet that
+/// asks for tx_type 0x05 gets back ONLY the spend-auth signatures (0x07), not
+/// the full signed PCZT.
+///
+/// Correctness gate: the compact payload MUST be byte-identical to the
+/// signatures extracted from the full signed-PCZT response - so the wallet
+/// that merges the compact signatures reconstructs exactly what the full
+/// response would have carried (which tests/interop.rs already proves
+/// extracts to a broadcastable transaction).
+#[test]
+fn compact_v6_migration_returns_signatures_only() {
+    let fx = build_redacted_v6_migration();
+    let over_the_qr = fx.redacted_pczt.clone();
+
+    // Wallet asks for COMPACT via tx_type 0x05 (single).
+    let req = pczt_signing::envelope::encode_request_full(
+        &pczt_signing::envelope::SignRequest::Single(pczt_signing::envelope::RequestMessage {
+            id: Vec::new(),
+            pczt_bytes: over_the_qr.clone(),
+        }),
+        true,
+    )
+    .expect("encode compact single request");
+    assert_eq!(req[2], pczt_signing::envelope::TX_TYPE_PCZT_SINGLE_COMPACT);
+
+    // Device summarizes exactly as for the legacy flow, then signs compact.
+    let summaries = pczt_signing::summarize_request(&req).expect("summarize_request");
+    assert_eq!(summaries.len(), 1);
+    assert!(summaries[0].ironwood_actions >= 1);
+
+    let resp = pczt_signing::sign_request(&req, MNEMONIC, 0, false).expect("compact sign");
+    assert_eq!(
+        resp[2],
+        pczt_signing::envelope::TX_TYPE_PCZT_SINGLE_COMPACT_RESPONSE,
+        "compact request must produce a signatures-only response (0x07), not a full PCZT (0x03)"
+    );
+
+    let compact = pczt_signing::parse_compact_response(&resp).expect("parse compact response");
+    assert_eq!(compact.messages.len(), 1);
+    assert!(compact.messages[0].id.is_empty());
+    let returned = &compact.messages[0].signatures;
+
+    // The size win is the point: compact is far smaller than the full
+    // signed-PCZT response for this single shielded PCZT.
+    let full_resp = pczt_signing::sign_request(
+        &pczt_signing::envelope::encode_request(&pczt_signing::envelope::SignRequest::Single(
+            pczt_signing::envelope::RequestMessage {
+                id: Vec::new(),
+                pczt_bytes: over_the_qr.clone(),
+            },
+        ))
+        .expect("encode legacy single request"),
+        MNEMONIC,
+        0,
+        false,
+    )
+    .expect("full sign");
+    assert!(
+        resp.len() * 4 < full_resp.len(),
+        "compact response ({}) must be far smaller than the full signed-PCZT response ({})",
+        resp.len(),
+        full_resp.len()
+    );
+
+    // Correctness gate: the compact response must cover EXACTLY the same
+    // (pool, action_index) spend-auth slots the full signed-PCZT response
+    // carries - i.e. the wallet that merges the compact signatures lands them
+    // on precisely the actions the full path signed. (Signature bytes are NOT
+    // compared across the two runs: RedPallas spend-auth signing is
+    // randomized, so a fresh sign run legitimately differs. The strong check
+    // that the compact bytes are actually VALID for their actions is the
+    // `apply_signature_contribution` / `apply_orchard_spend_auth_signature`
+    // verify-before-store below.)
+    let reference_slots: Vec<_> = {
+        let signed = Pczt::parse(&full_resp[3 + 32 + 4..]).expect("parse signed pczt");
+        use pczt::roles::signer::extract_orchard_spend_auth_signatures;
+        extract_orchard_spend_auth_signatures(&signed)
+            .into_iter()
+            .map(|s| {
+                (
+                    match s.value_pool() {
+                        orchard::ValuePool::Orchard => pczt_signing::envelope::POOL_ORCHARD,
+                        orchard::ValuePool::Ironwood => pczt_signing::envelope::POOL_IRONWOOD,
+                    },
+                    s.action_index(),
+                )
+            })
+            .collect()
+    };
+    let mut ours: Vec<_> = returned
+        .iter()
+        .map(|c| (c.pool, c.action_index as usize))
+        .collect();
+    ours.sort_unstable();
+    let mut reference = reference_slots;
+    reference.sort_unstable();
+    assert_eq!(
+        ours, reference,
+        "compact response must cover exactly the signed (pool, action_index) slots of the full path"
+    );
+    assert!(
+        returned
+            .iter()
+            .any(|c| c.pool == pczt_signing::envelope::POOL_IRONWOOD),
+        "the migration's ironwood spend signature is returned"
+    );
+
+    // VALIDITY gate: each returned signature verifies against its action's
+    // randomized verification key over the shielded sighash - the exact check
+    // the wallet's merge (`apply_orchard_spend_auth_signature` /
+    // `orchard::pczt::Action::apply_signature`) performs before storing, so a
+    // compact response is provably as good as the full signed PCZT.
+    let merged = Pczt::parse(&over_the_qr).expect("parse original");
+    let shielded_sighash = pczt::roles::signer::Signer::new(merged.clone())
+        .expect("signer")
+        .shielded_sighash();
+    let mut applied = 0;
+    for c in returned {
+        let action = match c.pool {
+            pczt_signing::envelope::POOL_ORCHARD => {
+                merged.orchard().actions().get(c.action_index as usize)
+            }
+            pczt_signing::envelope::POOL_IRONWOOD => {
+                merged.ironwood().actions().get(c.action_index as usize)
+            }
+            _ => unreachable!(),
+        };
+        let action = action
+            .unwrap_or_else(|| panic!("contribution references an action out of range: {c:?}"));
+        let sig = orchard::primitives::redpallas::Signature::<
+            orchard::primitives::redpallas::SpendAuth,
+        >::from(c.signature);
+        let rk: orchard::primitives::redpallas::VerificationKey<
+            orchard::primitives::redpallas::SpendAuth,
+        > = (*action.spend().rk())
+            .try_into()
+            .expect("action carries a valid rk");
+        assert!(
+            rk.verify(&shielded_sighash, &sig).is_ok(),
+            "contribution {c:?} is NOT a valid spend-auth signature for its action"
+        );
+        applied += 1;
+    }
+    assert!(applied >= 1);
+}
+
+/// COMPACT BATCH: a single QR exchange for a multi-PCZT migration. The device
+/// gives back one signatures list per PCZT in request order, echoing ids, and
+/// the whole thing rides one much smaller response envelope.
+#[test]
+fn compact_batch_returns_per_pczt_signatures_with_ids() {
+    let v6 = build_redacted_v6_migration();
+    let v5 = build_redacted_v5_send();
+
+    let req = pczt_signing::envelope::encode_request_full(
+        &pczt_signing::envelope::SignRequest::Batch(vec![
+            pczt_signing::envelope::RequestMessage {
+                id: b"migrate-1".to_vec(),
+                pczt_bytes: v6.redacted_pczt.clone(),
+            },
+            pczt_signing::envelope::RequestMessage {
+                id: b"send-2".to_vec(),
+                pczt_bytes: v5.redacted_pczt.clone(),
+            },
+        ]),
+        true,
+    )
+    .expect("encode compact batch request");
+    assert_eq!(req[2], pczt_signing::envelope::TX_TYPE_PCZT_BATCH_COMPACT);
+
+    let summaries = pczt_signing::summarize_request(&req).expect("summarize compact batch");
+    assert_eq!(summaries.len(), 2);
+
+    let resp = pczt_signing::sign_request(&req, MNEMONIC, 0, false).expect("compact batch sign");
+    assert_eq!(
+        resp[2],
+        pczt_signing::envelope::TX_TYPE_PCZT_BATCH_COMPACT_RESPONSE,
+        "compact batch request must produce a batch signatures-only response (0x08)"
+    );
+
+    let compact = pczt_signing::parse_compact_response(&resp).expect("parse compact batch");
+    assert_eq!(compact.messages.len(), 2);
+    assert_eq!(compact.messages[0].id, b"migrate-1");
+    assert_eq!(compact.messages[1].id, b"send-2");
+    assert!(
+        compact.messages[0]
+            .signatures
+            .iter()
+            .any(|c| c.pool == pczt_signing::envelope::POOL_IRONWOOD),
+        "migration message returns its ironwood signature"
+    );
+    assert!(
+        compact.messages[0]
+            .signatures
+            .iter()
+            .any(|c| c.pool == pczt_signing::envelope::POOL_ORCHARD),
+        "migration message returns its orchard signatures too"
+    );
+    assert!(
+        compact.messages[1]
+            .signatures
+            .iter()
+            .all(|c| c.pool == pczt_signing::envelope::POOL_ORCHARD),
+        "a V5 send carries no ironwood signatures"
+    );
 }

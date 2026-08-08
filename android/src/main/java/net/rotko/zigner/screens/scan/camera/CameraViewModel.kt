@@ -389,12 +389,17 @@ class CameraViewModel() : ViewModel() {
 
 	/**
 	 * Check if hex payload is a Zcash PCZT protocol-module request:
-	 * prelude [0x53][crypto=0x04][tx_type], 0x03 single / 0x04 batch.
+	 * prelude [0x53][crypto=0x04][tx_type], 0x03 single / 0x04 batch,
+	 * 0x05 single-compact / 0x06 batch-compact (signatures-only response -
+	 * the Ironwood QR shrink; see rust/pczt_signing/src/envelope.rs).
 	 */
 	private fun isZcashModulePcztRequest(hexPayload: String): Boolean {
 		if (hexPayload.length < 6) return false
 		val prefix = hexPayload.substring(0, 6).lowercase()
-		return prefix == "530403" || prefix == "530404"
+		return prefix == "530403" ||
+			prefix == "530404" ||
+			prefix == "530405" ||
+			prefix == "530406"
 	}
 
 	fun resetZcashSimpleSign() {

@@ -10,13 +10,13 @@ crate-type = ["cdylib", "rlib"]
 
 # Standalone on purpose: the zigner workspace is resolver=1 with an older
 # zcash stack (orchard 0.10 via frost-spend). This crate tracks the released
-# crates.io stack (pczt 0.9.x / orchard 0.15 / zcash_primitives 0.30), which
+# crates.io stack (pczt 0.9.3 / orchard 0.15 / zcash_primitives 0.30), which
 # ships Ironwood (NU6.3 / V6) UNGATED - no `zcash_unstable` cfg is required
 # any more. Fold into the workspace when the legacy crates migrate.
 [workspace]
 
 [dependencies]
-pczt = { version = "0.9.2", default-features = false, features = ["orchard", "transparent", "signer"] }
+pczt = { version = "0.9.3", default-features = false, features = ["orchard", "transparent", "signer"] }
 zcash_keys = { version = "0.16.1", default-features = false, features = ["orchard", "transparent-inputs"] }
 zcash_protocol = { version = "0.10.4", default-features = false }
 zcash_primitives = { version = "0.30", default-features = false, features = ["transparent-inputs"] }
@@ -28,6 +28,7 @@ sha2 = { version = "0.10", default-features = false }
 # pczt's signer role uses rand_core::OsRng; the flag arrives via feature
 # unification in bigger graphs - standalone we enable it explicitly
 rand_core = { version = "0.6", features = ["getrandom"] }
+zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 # The wallet-side half of the contract - Creator / IoFinalizer / Prover /
@@ -35,7 +36,7 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 # released `pczt` roles. (The previous `zafu-wasm` dev-dep is pinned to the
 # 5333c01b librustzcash rev and cannot unify with the 0.9.2 stack; the roles
 # it wrapped are the same upstream roles used directly here.)
-pczt = { version = "0.9.2", default-features = false, features = ["orchard", "transparent", "signer", "io-finalizer", "zcp-builder", "prover", "tx-extractor", "spend-finalizer"] }
+pczt = { version = "0.9.3", default-features = false, features = ["orchard", "transparent", "signer", "io-finalizer", "zcp-builder", "prover", "tx-extractor", "spend-finalizer"] }
 zcash_protocol = { version = "0.10.4", default-features = false, features = ["local-consensus"] }
 orchard = { version = "0.15", default-features = false, features = ["circuit"] }
 secp256k1 = "0.29"

@@ -49,12 +49,19 @@ object ProtocolModule {
 			mainnet,
 		).toByteArray()
 
-	/** Zcash PCZT tx_types on the [0x53][crypto][tx_type] prelude. */
+	/**
+	 * Zcash PCZT tx_types on the [0x53][crypto][tx_type] prelude:
+	 * 0x03 single / 0x04 batch (full signed PCZT back), 0x05/0x06 the
+	 * compact signatures-only variants (Ironwood QR shrink).
+	 */
 	fun isPcztPayload(payload: ByteArray): Boolean =
 		payload.size > 3 &&
 			payload[0] == 0x53.toByte() &&
 			payload[1] == 0x04.toByte() &&
-			(payload[2] == 0x03.toByte() || payload[2] == 0x04.toByte())
+			(payload[2] == 0x03.toByte() ||
+				payload[2] == 0x04.toByte() ||
+				payload[2] == 0x05.toByte() ||
+				payload[2] == 0x06.toByte())
 }
 
 internal fun ByteArray.toUByteList(): List<UByte> = map { it.toUByte() }

@@ -22,13 +22,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
+import net.rotko.zigner.components.qrcode.QrPlaybackSpeedSlider
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.QrPlaybackSpeed
 import net.rotko.zigner.ui.theme.*
 import io.parity.signer.uniffi.ZcashPcztInspection
 import io.parity.signer.uniffi.decodeUrZcashPczt
@@ -96,6 +99,8 @@ fun ZcashPcztScreen(
 	modifier: Modifier = Modifier,
 ) {
 	val scope = rememberCoroutineScope()
+	val context = LocalContext.current
+	LaunchedEffect(Unit) { QrPlaybackSpeed.init(context.applicationContext) }
 
 	var state by remember { mutableStateOf(PcztState.INSPECTING) }
 	var errorMsg by remember { mutableStateOf("") }
@@ -126,15 +131,15 @@ fun ZcashPcztScreen(
 		}
 	}
 
-	// 1.4 fps cycle — webcams without macro need ~600-800ms to autofocus on a
-	// changing subject. Faster than this and focus hunts indefinitely on the
-	// rapidly-changing pattern, so the camera reads zero successful QRs.
+	// Playback speed comes from the shared QR-speed preference (default faster
+	// than the old fixed 1.4fps). The QrPlaybackSpeedSlider below lets the user
+	// slow it back to the webcam-autofocus floor if their camera hunts.
 	LaunchedEffect(signedQrFrames) {
 		if (signedQrFrames.isEmpty()) return@LaunchedEffect
 		var idx = 0
 		while (true) {
 			currentFrameIdx = idx
-			delay(700.milliseconds)
+			delay(QrPlaybackSpeed.delayMs.value.milliseconds)
 			idx = (idx + 1) % signedQrFrames.size
 		}
 	}
@@ -319,6 +324,9 @@ fun ZcashPcztScreen(
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally),
 				)
+				if (signedQrFrames.size > 1) {
+					QrPlaybackSpeedSlider(modifier = Modifier.align(Alignment.CenterHorizontally))
+				}
 				SignerDivider()
 				Spacer(modifier = Modifier.height(16.dp))
 				PrimaryButtonWide(label = "Done", onClicked = onDone)
