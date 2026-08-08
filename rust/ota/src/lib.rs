@@ -182,9 +182,9 @@ fn encode_length(len: usize, mt_byte: u8, out: &mut Vec<u8>) -> Result<(), Error
 // DECODE (STRICT)
 // ────────────────────────────────────────────────────────────────────────────
 
-/// Strictly decode canonical CBOR. Rejects trailing bytes, duplicate map
-/// keys, indefinite lengths, non-minimal ints, and non-minimal length
-/// encodings.
+// Strictly decode canonical CBOR. Rejects trailing bytes, duplicate map
+// keys, indefinite lengths, non-minimal ints, and non-minimal length
+// encodings.
 
 /// Decode the first top-level CBOR item, returning it plus the number of
 /// bytes consumed. Intended for self-delimiting stream parsing (manifest at

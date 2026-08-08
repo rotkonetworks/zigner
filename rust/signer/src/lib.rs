@@ -4969,11 +4969,7 @@ pub fn ota_verify_stream(
         key_id: vs.manifest.key_id,
         class: vs.manifest.class,
         payload_sha256_hex: hex::encode(vs.manifest.payload_sha256),
-        req_id_hex: vs
-            .manifest
-            .req_id
-            .map(|r| hex::encode(r))
-            .unwrap_or_default(),
+        req_id_hex: vs.manifest.req_id.map(hex::encode).unwrap_or_default(),
     })
 }
 

@@ -92,7 +92,7 @@ fn arr8(b: &[u8]) -> Result<[u8; 8], Error> {
     Ok(a)
 }
 
-fn get<'a>(m: &'a [(u64, Cbor)], k: u64) -> Option<&'a Cbor> {
+fn get(m: &[(u64, Cbor)], k: u64) -> Option<&Cbor> {
     m.iter().find(|(pk, _)| *pk == k).map(|(_, v)| v)
 }
 

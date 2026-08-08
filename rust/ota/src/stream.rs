@@ -180,7 +180,11 @@ fn decode_manifest_prefix(data: &[u8]) -> Result<(Manifest, usize), Error> {
 }
 
 /// Parse `u32le key_id || u32le payload_len || sha256(32) || payload`.
-pub fn decode_image_wrapper(wrapper: &[u8]) -> Result<(u64, u64, [u8; 32], &[u8]), Error> {
+/// `(chunk_index, total_chunks, image_hash, chunk_bytes)` of one streamed
+/// image wrapper.
+pub type ImageWrapper<'a> = (u64, u64, [u8; 32], &'a [u8]);
+
+pub fn decode_image_wrapper(wrapper: &[u8]) -> Result<ImageWrapper<'_>, Error> {
     if wrapper.len() < 8 + 32 {
         err!("image wrapper too short");
     }
