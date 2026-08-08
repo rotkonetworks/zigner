@@ -1060,6 +1060,9 @@ pub struct ZcashNoteSyncResult {
     pub anchor_height: u32,
     pub mainnet: bool,
     pub anchor_verified: bool,
+    /// Unix seconds (device clock) when these verified notes were stored.
+    /// 0 = unknown (older anchor written before the field existed).
+    pub synced_at: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

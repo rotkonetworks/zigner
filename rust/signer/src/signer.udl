@@ -1743,6 +1743,7 @@ dictionary ZcashNoteSyncResult {
     u32 anchor_height;
     boolean mainnet;
     boolean anchor_verified;
+    u64 synced_at;
 };
 
 // Live scan progress for animated zcash-notes QR (zoda transport).

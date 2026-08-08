@@ -2882,6 +2882,16 @@ fn decode_and_verify_zcash_notes(
         s: format!("Failed to store notes: {e}"),
     })?;
 
+    // Surface when these notes were stored (device clock). Read it back from
+    // the anchor we just wrote so the UI can answer "is this balance stale?"
+    // with both a chain block height and a human scan time. A read failure
+    // here must not fail the import -> degrade to 0 (unknown).
+    let synced_at = db_handling::zcash::get_verified_anchor(database)
+        .ok()
+        .flatten()
+        .map(|(_, _, _, ts)| ts)
+        .unwrap_or(0);
+
     Ok(ZcashNoteSyncResult {
         notes_verified,
         total_balance,
@@ -2889,6 +2899,7 @@ fn decode_and_verify_zcash_notes(
         anchor_height: bundle.anchor_height,
         mainnet: bundle.mainnet,
         anchor_verified,
+        synced_at,
     })
 }
 

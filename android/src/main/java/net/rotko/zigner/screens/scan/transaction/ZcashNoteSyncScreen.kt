@@ -19,6 +19,8 @@ import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.ui.theme.*
 import io.parity.signer.uniffi.ZcashNoteSyncResult
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -73,7 +75,10 @@ fun ZcashNoteSyncScreen(
 				)
 			}
 
-			// Balance card
+			// Balance card — freshness is the point: the chain block this balance
+			// was proven at, plus the device-clock time the notes were scanned.
+			// A verified balance can go stale (funds moved after the scan), so the
+			// block number is shown right here, not buried in a caption below.
 			Column(
 				modifier = Modifier
 					.fillMaxWidth()
@@ -82,15 +87,34 @@ fun ZcashNoteSyncScreen(
 					.padding(16.dp),
 				verticalArrangement = Arrangement.spacedBy(8.dp)
 			) {
-				Text(
-					text = "Verified Balance",
-					style = SignerTypeface.LabelM,
-					color = MaterialTheme.colors.textTertiary
-				)
+				Row(
+					modifier = Modifier.fillMaxWidth(),
+					horizontalArrangement = Arrangement.SpaceBetween,
+					verticalAlignment = Alignment.CenterVertically
+				) {
+					Text(
+						text = "Verified Balance",
+						style = SignerTypeface.LabelM,
+						color = MaterialTheme.colors.textTertiary
+					)
+					Text(
+						text = "as of block ${NumberFormat.getNumberInstance(Locale.US).format(result.anchorHeight.toLong())}",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textSecondary
+					)
+				}
 				Text(
 					text = formatZec(result.totalBalance),
 					style = SignerTypeface.TitleL,
 					color = MaterialTheme.colors.primary
+				)
+				Text(
+					text = if (result.syncedAt > 0uL)
+						"verified ${formatSyncDate(result.syncedAt)}"
+					else
+						"verification time unavailable",
+					style = SignerTypeface.CaptionM,
+					color = MaterialTheme.colors.textTertiary
 				)
 			}
 
@@ -160,3 +184,11 @@ private fun formatZec(zatoshis: ULong): String {
 	val zec = zatoshis.toLong() / 100_000_000.0
 	return "%.8f ZEC".format(zec)
 }
+
+/** Device-clock time the notes were stored (wall clock on the cold wallet). */
+private fun formatSyncDate(syncedAt: ULong): String =
+	try {
+		SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(syncedAt.toLong() * 1000L))
+	} catch (e: Exception) {
+		"unknown"
+	}
