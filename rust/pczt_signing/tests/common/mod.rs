@@ -408,7 +408,13 @@ pub fn redact_pczt_for_compact_signer(pczt: Pczt) -> Pczt {
                 a.clear_output_proprietary();
                 // NOTE: DO NOT clear output value or recipient - needed for display and recovery!
                 a.clear_cmx(); // Compact redaction: recomputable from note commitment
-                               // Ciphertext: the wallet swaps it to memo plaintext before calling this
+                               // Upstream's largest single request-leg win: the 580-byte
+                               // enc_ciphertext collapses to the memo trimmed to its last
+                               // nonzero byte - ONE byte for the empty memo a migration uses.
+                               // The device re-encrypts it in resolve_fields() from
+                               // recipient/value/rseed plus the spend nullifier (rho).
+                               // (pczt::orchard::MEMO_SIZE is crate-private upstream = 512.)
+                a.replace_enc_ciphertext_with_memo_plaintext([0u8; 512]);
             });
             o.clear_anchor(); // v6 anchor not signed and not needed
         })
@@ -428,6 +434,13 @@ pub fn redact_pczt_for_compact_signer(pczt: Pczt) -> Pczt {
 
                 // NOTE: keep output recipient and value!
                 a.clear_cmx(); // Compact redaction
+                               // Upstream's largest single request-leg win: the 580-byte
+                               // enc_ciphertext collapses to the memo trimmed to its last
+                               // nonzero byte - ONE byte for the empty memo a migration uses.
+                               // The device re-encrypts it in resolve_fields() from
+                               // recipient/value/rseed plus the spend nullifier (rho).
+                               // (pczt::orchard::MEMO_SIZE is crate-private upstream = 512.)
+                a.replace_enc_ciphertext_with_memo_plaintext([0u8; 512]);
             });
             o.clear_anchor(); // v6 anchor not signed
         })
