@@ -152,6 +152,12 @@ class NetworkExposedStateKeeper(
 			0
 		) == 0
 		_airplaneModeEnabled.value = !airplaneModeOff
+		// non-cold action: radios enabled on the cold wallet
+		if (airplaneModeOff) {
+			Timber.w("AIRGAP", "non-cold action: airplane mode turned OFF (radios enabled)")
+		} else {
+			Timber.i("AIRGAP", "airplane mode turned ON (radios disabled)")
+		}
 		updateGeneralAirgapState()
 	}
 
@@ -160,6 +166,11 @@ class NetworkExposedStateKeeper(
 			appContext.applicationContext.getSystemService(BluetoothManager::class.java)?.adapter
 		val btEnabled = bluetooth?.isEnabled == true
 		_bluetoothDisabledState.value = !btEnabled
+		if (btEnabled) {
+			Timber.w("AIRGAP", "non-cold action: bluetooth ENABLED")
+		} else {
+			Timber.i("AIRGAP", "bluetooth disabled")
+		}
 		updateGeneralAirgapState()
 	}
 
@@ -170,13 +181,19 @@ class NetworkExposedStateKeeper(
 			return
 		}
 
-		if ((usbIntent.extras?.getBoolean("connected") == true)
-			|| (usbIntent.extras?.getBoolean("host_connected") == true)
-		) {
+		val connected = usbIntent.extras?.getBoolean("connected") == true
+		val hostConnected = usbIntent.extras?.getBoolean("host_connected") == true
+		if (connected || hostConnected) {
 			_usbDisconnected.value = false
+			// non-cold action: device is plugged into a host (ADB / data over USB)
+			Timber.w(
+				"AIRGAP",
+				"non-cold action: USB connected (connected=$connected, host_connected=$hostConnected)"
+			)
 			updateGeneralAirgapState()
 		} else {
 			_usbDisconnected.value = true
+			Timber.i("AIRGAP", "USB disconnected")
 			updateGeneralAirgapState()
 		}
 		if ((usbIntent.extras?.getBoolean("connected") == null)
@@ -202,6 +219,11 @@ class NetworkExposedStateKeeper(
 			appContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager?
 		val wifiEnabled = wifi?.isWifiEnabled == true
 		_wifiDisabledState.value = !wifiEnabled
+		if (wifiEnabled) {
+			Timber.w("AIRGAP", "non-cold action: wifi ENABLED")
+		} else {
+			Timber.i("AIRGAP", "wifi disabled")
+		}
 		updateGeneralAirgapState()
 	}
 

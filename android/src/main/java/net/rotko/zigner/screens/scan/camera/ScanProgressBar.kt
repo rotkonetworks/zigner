@@ -32,7 +32,7 @@ fun ScanProgressBar(
 	onCancel: Callback,
 ) {
 	val progress =
-		captured.toFloat() / (total ?: 1).toFloat()
+		(captured.toFloat() / (total ?: 1).toFloat()).coerceIn(0f, 1f)
 
 	val SNACKBAR_BACKGROUND = Color(0xFF454549)
 	val PROGRESS_TEXT_COLOR = Color(0x7AFFFFFF)

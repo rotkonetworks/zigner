@@ -15,6 +15,7 @@ members = [
 	"qrcode_rtx",
 	"qrcode_static",
 	"module_host",
+	"ota",
 	"signer",
 	"transaction_parsing",
 	"transaction_signing",

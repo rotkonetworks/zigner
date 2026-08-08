@@ -603,6 +603,39 @@ interface ScreenData {
     KeyDetailsMulti(MKeyDetailsMulti f);
 };
 
+
+// ============================================================================
+// Zafu/Zigner firmware OTA (device side; rust/ota)
+// ============================================================================
+
+dictionary OtaStreamManifestSummary {
+    string version;
+    string board;
+    u64 payload_size;
+    string min_version;
+    u64 key_id;
+    string class;
+    string payload_sha256_hex;
+    string req_id_hex;
+};
+
+dictionary OtaResultFFI {
+    string fw_version;
+    boolean success;
+    u8 slot;
+    sequence<u8> req_id;
+    sequence<u8> zid_pubkey;
+    sequence<u8> result_sig;
+};
+
+dictionary OtaStatusFFI {
+    string fw_version;
+    u8 slot;
+    boolean successful_boot;
+    sequence<u8> zid_pubkey;
+    sequence<u8> status_sig;
+};
+
 namespace signer {
     FooterButton? action_get_name([ByRef] Action action);
 
@@ -1195,6 +1228,29 @@ namespace signer {
         boolean enabled,
         boolean force
     );
+
+    // ── OTA wire contract (rust/ota, device side) ──────────────────────────
+    // Verify a ur:zafu-stream fountain against the pinned key + current
+    // version/board and return the manifest summary (for the confirm screen).
+    [Throws=ErrorDisplayed]
+    OtaStreamManifestSummary ota_verify_stream(sequence<string> ur_parts, string manifest_sig_hex, string pinned_pubkey_hex, string current_version, string board);
+
+    // Encode a device-signed ur:zafu-result (single-frame UR strings).
+    [Throws=ErrorDisplayed]
+    sequence<string> ota_encode_result(string fw_version, boolean success, u8 slot, sequence<u8> req_id, string zid_secret_key_hex);
+
+    // Encode a device-signed ur:zafu-status (single-frame UR strings).
+    [Throws=ErrorDisplayed]
+    sequence<string> ota_encode_status(string fw_version, u8 slot, boolean successful_boot, string zid_secret_key_hex);
+
+    // Decode + verify a ur:zafu-result single-frame UR.
+    [Throws=ErrorDisplayed]
+    OtaResultFFI ota_decode_result(sequence<string> ur_parts);
+
+    // Decode + verify a ur:zafu-status single-frame UR.
+    [Throws=ErrorDisplayed]
+    OtaStatusFFI ota_decode_status(sequence<string> ur_parts);
+
 };
 
 dictionary MKeysNew {

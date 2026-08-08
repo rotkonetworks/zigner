@@ -521,7 +521,14 @@ class CameraViewModel() : ViewModel() {
 		}
 
 		val seqLen = sequenceMatch.groupValues[2].toIntOrNull() ?: 1
-		_total.value = seqLen
+		// NOTE: do NOT surface seqLen as the scanner "total". The zafu/zigner
+		// emitter deliberately generates ~2× the fragment count (fountain
+		// redundancy) while declaring seqLen = the base fragment count, so the
+		// number of frames you actually scan routinely exceeds seqLen — showing
+		// "captured / seqLen" renders a bogus overflow like "48 / 24" that looks
+		// like a broken scan. A BC-UR fountain has no fixed frame total anyway:
+		// it completes once enough *unique* parts are collected to decode. So
+		// leave _total null here and let ScanProgressBar render "N / … complete".
 		_captured.value = updatedFrames.size
 
 		val framesPastThreshold = updatedFrames.size - seqLen
