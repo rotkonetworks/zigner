@@ -72,16 +72,22 @@ fn take_string(b: &[u8]) -> Result<(&[u8], &[u8]), String> {
         return Err("truncated: expected a length-prefixed string".into());
     }
     let len = u32::from_be_bytes(b[0..4].try_into().unwrap()) as usize;
-    // Bound the claimed length against what is actually present before
-    // slicing, so a hostile length cannot panic the signer.
-    if b.len() < 4 + len {
+    // checked_add, not `4 + len`. armeabi-v7a is a shipped ABI and its usize
+    // is 32-bit, so a declared length near u32::MAX wraps: `4 + len` becomes
+    // a small number, the bounds check below passes, and the slice is then
+    // built with end < start - a panic on hostile input, on a real target.
+    // Release builds wrap silently, so nothing would have caught it earlier.
+    let end = 4usize
+        .checked_add(len)
+        .ok_or_else(|| format!("string length {len} overflows this platform's address size"))?;
+    if b.len() < end {
         return Err(format!(
             "truncated: string claims {} bytes, {} remain",
             len,
             b.len() - 4
         ));
     }
-    Ok((&b[4..4 + len], &b[4 + len..]))
+    Ok((&b[4..end], &b[end..]))
 }
 
 fn take_utf8(b: &[u8]) -> Result<(String, &[u8]), String> {

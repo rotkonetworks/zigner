@@ -106,8 +106,14 @@ pub fn parse_signing_prefix(data: &[u8]) -> Result<(ManifestFields, usize), Mani
     let mut at = 0usize;
     let mut need = |n: usize| -> Result<std::ops::Range<usize>, ManifestError> {
         let _ = take(&data[at.min(data.len())..], n)?;
-        let r = at..at + n;
-        at += n;
+        // checked_add for the same reason as ssh::take_string: usize is 32-bit
+        // on armeabi-v7a, and a wrapped offset would produce a reversed range
+        // rather than an error. Lengths here are currently bounded by a u16, so
+        // this is defence in depth - but the bound is a property of today's
+        // format, not of the arithmetic.
+        let end = at.checked_add(n).ok_or(ManifestError::Truncated)?;
+        let r = at..end;
+        at = end;
         Ok(r)
     };
 
