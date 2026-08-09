@@ -22,6 +22,17 @@ members = [
 	"zcash-wasm"
 ]
 
+# pq_hybrid (PQ-hybrid verifier scaffold) is deliberately EXCLUDED from the main
+# workspace graph. The RustCrypto `ml-dsa` -> `signature v3` -> `digest ^0.11`
+# chain conflicts with the zcash signer stack, which pins the pre-release
+# `digest = "=0.11.0-pre.9"` (via zcash_transparent -> bip32 -> hmac). resolver=1
+# unifies versions across the whole workspace, so even as an OFF-by-default
+# optional dep it would break `cargo check` for the existing crates. Keeping it
+# excluded lets it resolve on its own lockfile and leaves the current build
+# untouched. Merging it back in requires the zcash stack to move off the
+# pre-release digest pin (or an ml-dsa build on the signature v2 line).
+exclude = ["pq_hybrid"]
+
 # Shared crates — single source of truth across zcli/zafu/zigner
 [workspace.dependencies]
 frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "06cd04f" }

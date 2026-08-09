@@ -1,0 +1,39 @@
+[package]
+name = "pq_hybrid"
+version = "0.1.0"
+edition = "2021"
+description = "Post-quantum HYBRID verifier (ed25519 + ML-DSA-65) for Zigner update/anchor authority keys"
+
+# SCAFFOLD (PQ-hybrid task). This crate provides the hybrid public-key /
+# signature types and a belt-and-suspenders `verify()` that requires BOTH the
+# classical (ed25519) AND the post-quantum (ML-DSA-65, FIPS 204) signature to
+# pass. It is an ADDITIONAL verifier option, not a replacement: the whole PQ
+# path is gated behind the `pq-hybrid` feature and is OFF by default, so the
+# existing ed25519 build is untouched.
+
+[dependencies]
+# Classical half. Pure-Rust, no_std-capable (default features carry std; we
+# keep them for the scaffold). Already vendored in the zigner cargo cache.
+ed25519-dalek = { version = "2.2.0", default-features = false }
+
+# Post-quantum half. RustCrypto `ml-dsa` — pure Rust, no C toolchain, no_std
+# friendly. Optional + feature-gated so the crate builds without it. The
+# `signature` trait crate is re-exported by ml-dsa, so we do not depend on it
+# directly (pinning it separately fights ml-dsa's `signature ^3`).
+ml-dsa = { version = "0.1.1", optional = true }
+
+# Detached from the parent workspace: see the `exclude` note in ../Cargo.toml.
+# ml-dsa's signature/digest v3 line conflicts with the zcash stack's pinned
+# pre-release `digest`, so pq_hybrid resolves on its own lockfile.
+[workspace]
+
+[features]
+# Default is EMPTY: the crate compiles as inert type stubs with no PQ dep, so
+# it never drags ML-DSA into a default build.
+default = []
+# Turning this on pulls in ML-DSA-65 and activates real hybrid verification.
+pq-hybrid = ["dep:ml-dsa"]
+
+[lib]
+name = "pq_hybrid"
+crate-type = ["lib"]
