@@ -1445,7 +1445,7 @@ fn sign_penumbra_transaction(
 ///
 /// ```text
 /// ZcashAccounts = {
-///   1: bytes,              ; seed_fingerprint (16 bytes, identifies the seed)
+///   1: bytes,              ; seed_fingerprint (32-byte ZIP-32 SeedFingerprint)
 ///   2: [+ #49203(UFVK)]    ; accounts array, each tagged with 49203
 /// }
 ///
@@ -1539,13 +1539,16 @@ fn export_zcash_fvk(
         s: format!("Failed to derive UFVK: {e}"),
     })?;
 
-    // Generate seed fingerprint: first 16 bytes of SHA256(seed_phrase)
-    // This allows Zashi to match accounts to the same seed without revealing the seed
-    let seed_fingerprint = {
-        use sha2::{Digest, Sha256};
-        let hash = Sha256::digest(seed_phrase.as_bytes());
-        hash[..16].to_vec()
-    };
+    // ZIP-32 seed fingerprint (32 bytes): BLAKE2b-256 personalized
+    // "Zcash_HD_Seed_FP" over the same 64-byte BIP39 seed used for key
+    // derivation. Matches Keystone/Zashi/vizor so they recognize this account as
+    // belonging to the same seed. (Previously SHA256(mnemonic)[..16] - wrong
+    // length AND wrong preimage, which broke import into Keystone-compatible
+    // wallets with "seed fingerprint must be 32 bytes".)
+    let seed_fingerprint =
+        OrchardSpendingKey::seed_fingerprint(seed_phrase).map_err(|e| ErrorDisplayed::Str {
+            s: format!("Failed to derive seed fingerprint: {e}"),
+        })?;
 
     // ========================================================================
     // Build UR-encoded "zcash-accounts" for Zashi/Keystone QR code compatibility
@@ -1568,9 +1571,10 @@ fn export_zcash_fvk(
         cbor_data.push(0xa2);
 
         // Key 1: seed_fingerprint (bytes)
-        // CBOR: 0x01 = uint(1), 0x50 = bytes(16)
+        // CBOR: 0x01 = uint(1), then bytes(32): 0x58 (bytes, 1-byte length) 0x20 (=32)
         cbor_data.push(0x01);
-        cbor_data.push(0x50); // bytes(16) - 0x40 + 16 = 0x50
+        cbor_data.push(0x58); // bytes with 1-byte length follows
+        cbor_data.push(0x20); // length = 32
         cbor_data.extend_from_slice(&seed_fingerprint);
 
         // Key 2: accounts array

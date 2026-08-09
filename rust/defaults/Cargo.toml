@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+constants = {path = "../constants"}
 definitions = {path = "../definitions", default-features = false, optional = true}
 lazy_static = {version = "1.4.0", optional = true}
 regex = {version = "1.10.3", optional = true}

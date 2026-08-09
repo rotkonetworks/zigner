@@ -206,6 +206,34 @@ impl OrchardSpendingKey {
         Ok(Self(*sk.to_bytes()))
     }
 
+    /// Compute the ZIP-32 seed fingerprint (32 bytes) per ZIP 32 "Seed
+    /// Fingerprints", over the same 64-byte BIP39 seed used for key derivation
+    /// (`mnemonic.to_seed("")`). This is what Keystone/Zashi/vizor compute via
+    /// `zip32::fingerprint::SeedFingerprint::from_seed`, so an account exported
+    /// from zigner is recognized as belonging to the same seed.
+    ///
+    /// Note: this is NOT `SHA256(mnemonic)[..16]`. That older form was
+    /// non-conformant on both counts - 16 bytes instead of 32, and the wrong
+    /// preimage - which is why Keystone-compatible wallets rejected the import
+    /// ("seed fingerprint must be 32 bytes"). `from_seed` prepends the seed
+    /// length byte before hashing (ZIP 32), which is why we defer to the crate
+    /// rather than hand-rolling BLAKE2b.
+    pub fn seed_fingerprint(seed_phrase: &str) -> Result<[u8; 32]> {
+        use bip32::Mnemonic;
+        use zip32::fingerprint::SeedFingerprint;
+
+        let mnemonic = Mnemonic::new(seed_phrase, bip32::Language::English)
+            .map_err(|e| Error::ZcashKeyDerivation(format!("invalid mnemonic: {e}")))?;
+        let seed = mnemonic.to_seed("");
+        SeedFingerprint::from_seed(seed.as_bytes())
+            .map(|fp| fp.to_bytes())
+            .ok_or_else(|| {
+                Error::ZcashKeyDerivation(
+                    "seed length invalid for ZIP-32 seed fingerprint".to_string(),
+                )
+            })
+    }
+
     /// get raw bytes
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
@@ -2427,5 +2455,26 @@ mod tests {
         // note: actually redpallas uses randomness, so signatures differ
         // but both should be valid
         assert_eq!(response2.orchard_sigs.len(), 1);
+    }
+
+    #[test]
+    fn zcash_seed_fingerprint_is_zip32_conformant() {
+        // 24-word BIP39 all-zero-entropy vector (the bip32 crate only accepts
+        // 24-word phrases - same mnemonic the other zcash tests use).
+        let m = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+        let fp = super::OrchardSpendingKey::seed_fingerprint(m).unwrap();
+        // ZIP-32 seed fingerprints are exactly 32 bytes (the bug we fixed:
+        // Keystone/vizor reject anything else with "must be 32 bytes").
+        assert_eq!(fp.len(), 32);
+        // Deterministic for the same seed.
+        assert_eq!(super::OrchardSpendingKey::seed_fingerprint(m).unwrap(), fp);
+        // Regression guard: this is the ZIP-32 SeedFingerprint of the 24-word
+        // all-zero-entropy seed (cross-checkable against vizor/Keystone/Zashi).
+        assert_eq!(
+            hex::encode(fp),
+            "e62855dc1419972e2d8fd349b740de6a67d8cf6feaafe90cf2f37a2344566ccc",
+            "unexpected fingerprint - see printed value to update if algo changed",
+        );
+        println!("seed_fingerprint(abandon..art/24w) = {}", hex::encode(fp));
     }
 }

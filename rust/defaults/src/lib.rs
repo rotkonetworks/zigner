@@ -82,21 +82,31 @@ use definitions::network_specs::{Verifier, VerifierValue};
 mod error;
 pub use error::{Error, Result};
 
-/// Real Parity public key, with `Sr25519` encryption
+/// Generate default general verifier [`Verifier`].
 ///
-/// To be used in [`VerifierValue`] for general verifier in default cold
-/// database
-pub const DEFAULT_VERIFIER_PUBLIC: [u8; 32] = [
-    0xc4, 0x6a, 0x22, 0xb9, 0xda, 0x19, 0x54, 0x0a, 0x77, 0xcb, 0xde, 0x23, 0x19, 0x7e, 0x5f, 0xd9,
-    0x04, 0x85, 0xc7, 0x2b, 0x4e, 0xcf, 0x3c, 0x59, 0x9e, 0xcc, 0xa6, 0x99, 0x8f, 0x39, 0xbd, 0x57,
-];
-
-/// Generate default general verifier [`Verifier`], with Parity public key
-/// inside.
+/// The general verifier is the trust anchor for cold UPDATES (network specs,
+/// metadata, types) that reach the air-gapped device as QR payloads the user
+/// scans manually: the device accepts an update only if it is signed by this
+/// key. We anchor it to Rotko's ed25519 publisher key
+/// ([`constants::ROTKO_ZCASH_VERIFIER`]) - the SAME key already trusted for
+/// Zcash anchor attestation - instead of Parity's stock sr25519 key. This drops
+/// sr25519 from the update-trust path entirely.
+///
+/// NOTE: written only on FRESH cold-DB init (`cold_default`); already-
+/// provisioned devices keep whatever verifier is in their DB, so this takes
+/// effect on reflash / re-provision.
+///
+/// TODO(pq): migrate to an ed25519+ML-DSA hybrid `MultiSigner` variant (see the
+/// PQ-hybrid task) - format bump, not a redesign.
+/// TODO(domain-sep): a rigorous design would use a dedicated update-signing key
+/// distinct from the anchor-attestation key rather than reusing one ed25519 key
+/// for both purposes.
 pub fn default_general_verifier() -> Verifier {
     Verifier {
         v: Some(VerifierValue::Standard {
-            m: MultiSigner::Sr25519(sp_core::sr25519::Public::from_raw(DEFAULT_VERIFIER_PUBLIC)),
+            m: MultiSigner::Ed25519(sp_core::ed25519::Public::from_raw(
+                constants::ROTKO_ZCASH_VERIFIER,
+            )),
         }),
     }
 }

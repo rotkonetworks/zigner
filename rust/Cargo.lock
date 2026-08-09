@@ -1786,6 +1786,7 @@ dependencies = [
 name = "defaults"
 version = "0.1.0"
 dependencies = [
+ "constants",
  "definitions",
  "lazy_static",
  "regex",
