@@ -1108,6 +1108,7 @@ dependencies = [
  "module_host",
  "orchard",
  "pczt",
+ "rand_chacha",
  "rand_core",
  "secp256k1",
  "sha2 0.10.9",

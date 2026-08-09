@@ -28,6 +28,9 @@ sha2 = { version = "0.10", default-features = false }
 # pczt's signer role uses rand_core::OsRng; the flag arrives via feature
 # unification in bigger graphs - standalone we enable it explicitly
 rand_core = { version = "0.6", features = ["getrandom"] }
+# Hedged nonce derivation: see hedged_rng. Host entropy must not be the only
+# thing standing between us and nonce reuse.
+rand_chacha = { version = "0.3", default-features = false }
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]

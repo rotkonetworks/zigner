@@ -399,6 +399,27 @@ fn compute_fee_zat(pczt_bytes: &[u8]) -> Option<u64> {
 /// TransactionExtractor). For the compact signatures-only response the
 /// caller needs the finished (unsigned-proof) `Pczt` too, so the real work
 /// lives in [`sign_redacted_pczt_inner`].
+/// Pure seed derivation behind the hedged nonce (see `hedged_rng`). Split out
+/// so the property that matters can actually be tested: identical host bytes
+/// must still give different seeds for different messages.
+pub(crate) fn hedged_seed(
+    ask: &[u8; 32],
+    sighash: &[u8; 32],
+    label: &str,
+    index: usize,
+    host: &[u8; 32],
+) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(b"zigner-nonce-v1");
+    h.update(ask);
+    h.update(sighash);
+    h.update(label.as_bytes());
+    h.update((index as u64).to_le_bytes());
+    h.update(host);
+    h.finalize().into()
+}
+
 pub fn sign_redacted_pczt(
     pczt_bytes: &[u8],
     seed_phrase: &str,
@@ -492,11 +513,44 @@ fn sign_redacted_pczt_inner(
     use pczt::roles::low_level_signer::Signer as LowLevelSigner;
     use rand_core::OsRng;
 
+    /// Hedged (synthetic) nonce RNG for spend-auth signing.
+    ///
+    /// RedPallas spend-auth signing is randomised Schnorr, and inside wasm the
+    /// only entropy source is `host_getrandom` - i.e. the kernel. If the host
+    /// ever returns the same bytes twice, a plain `OsRng` reuses a nonce, and
+    /// a reused nonce across two different sighashes recovers the signing key.
+    /// The wallet is a realistic adversary for that: it chooses the
+    /// randomizers, so from `s = r + c*(ask + alpha)` with `r` repeated it has
+    /// two equations in two unknowns and `ask` falls out. The failure is
+    /// silent - the signatures still verify.
+    ///
+    /// So derive the nonce seed from secret key material and the message
+    /// rather than from host entropy alone. Host randomness is still mixed in
+    /// (hedged, not purely deterministic), but it is no longer load-bearing:
+    /// a constant host RNG still yields distinct nonces per sighash and per
+    /// action. Mixing `ask` is what keeps the seed unpredictable - hedging
+    /// over public data only would let anyone who knows the sighash
+    /// recompute the nonce, which is strictly worse than the bug it fixes.
+    fn hedged_rng(
+        ask: &[u8; 32],
+        sighash: &[u8; 32],
+        label: &str,
+        index: usize,
+    ) -> rand_chacha::ChaCha20Rng {
+        use rand_core::{RngCore, SeedableRng};
+        let mut host = [0u8; 32];
+        // Best effort: a failure here is survivable precisely because the
+        // seed does not depend on it for uniqueness.
+        let _ = OsRng.try_fill_bytes(&mut host);
+        rand_chacha::ChaCha20Rng::from_seed(crate::hedged_seed(ask, sighash, label, index, &host))
+    }
+
     fn sign_actions_with_fvk(
         pczt_ref: &Pczt,
         bundle: &mut orchard::pczt::Bundle,
         fvk: &orchard::keys::FullViewingKey,
         osak: &orchard::keys::SpendAuthorizingKey,
+        ask: &[u8; 32],
         sighash: [u8; 32],
         label: &str,
     ) -> Result<(), Error> {
@@ -520,7 +574,7 @@ fn sign_redacted_pczt_inner(
                     continue;
                 }
             }
-            match action.sign(sighash, osak, OsRng) {
+            match action.sign(sighash, osak, hedged_rng(ask, &sighash, label, index)) {
                 Ok(()) => {}
                 // Foreign / dummy spends: this device does not hold the key, or
                 // the action carries no randomizer to sign under. Skip them -
@@ -546,6 +600,7 @@ fn sign_redacted_pczt_inner(
             bundle,
             &orchard_fvk,
             &osak,
+            &ask,
             shielded_sighash,
             "orchard",
         )
@@ -560,6 +615,7 @@ fn sign_redacted_pczt_inner(
             bundle,
             &orchard_fvk,
             &osak,
+            &ask,
             shielded_sighash,
             "ironwood",
         )
@@ -971,5 +1027,49 @@ mod wasm_abi {
     #[no_mangle]
     pub extern "C" fn zigner_last_error() -> u64 {
         LAST_ERROR.with(|le| pack(le.borrow().clone().into_bytes()))
+    }
+}
+
+#[cfg(test)]
+mod hedged_nonce_tests {
+    use super::hedged_seed;
+
+    const ASK: [u8; 32] = [7u8; 32];
+    /// A host RNG stuck at a constant - the failure this construction exists
+    /// to survive.
+    const STUCK: [u8; 32] = [0u8; 32];
+
+    #[test]
+    fn a_stuck_host_rng_still_gives_distinct_nonces_per_message() {
+        let a = hedged_seed(&ASK, &[1u8; 32], "orchard", 0, &STUCK);
+        let b = hedged_seed(&ASK, &[2u8; 32], "orchard", 0, &STUCK);
+        assert_ne!(
+            a, b,
+            "same host entropy across two sighashes must not reuse a nonce - \
+             that is exactly the case that leaks ask"
+        );
+    }
+
+    #[test]
+    fn a_stuck_host_rng_still_gives_distinct_nonces_per_action_and_pool() {
+        let base = hedged_seed(&ASK, &[1u8; 32], "orchard", 0, &STUCK);
+        assert_ne!(base, hedged_seed(&ASK, &[1u8; 32], "orchard", 1, &STUCK));
+        assert_ne!(base, hedged_seed(&ASK, &[1u8; 32], "ironwood", 0, &STUCK));
+    }
+
+    #[test]
+    fn the_secret_key_is_bound_in() {
+        // Hedging over public data only would let anyone who knows the
+        // sighash recompute the nonce.
+        let a = hedged_seed(&ASK, &[1u8; 32], "orchard", 0, &STUCK);
+        let b = hedged_seed(&[8u8; 32], &[1u8; 32], "orchard", 0, &STUCK);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn host_entropy_still_contributes_when_it_works() {
+        let a = hedged_seed(&ASK, &[1u8; 32], "orchard", 0, &[0u8; 32]);
+        let b = hedged_seed(&ASK, &[1u8; 32], "orchard", 0, &[9u8; 32]);
+        assert_ne!(a, b, "must be hedged, not purely deterministic");
     }
 }

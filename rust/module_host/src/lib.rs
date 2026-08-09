@@ -183,7 +183,7 @@ pub const KERNEL_VERSION: u32 = 1;
 /// Bump in lockstep with the asset. It is a constant rather than something
 /// read from the asset because the baked module is a raw wasm with no
 /// manifest, so it carries no version of its own.
-pub const BAKED_MODULE_VERSION: u32 = 1;
+pub const BAKED_MODULE_VERSION: u32 = 2;
 
 /// The 2-of-3 release verifying keys, baked at build time per the update
 /// architecture. PLACEHOLDER (all-zero) until the offline key ceremony -
