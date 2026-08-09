@@ -162,7 +162,7 @@ fn a_patch_without_a_base_is_refused() {
     let pkg = build_package(
         b"delta",
         sha(b"the result"),
-        PAYLOAD_ZSTD_PATCH,
+        PAYLOAD_BSDIFF_ZSTD,
         sha(b"the base"),
         5,
         1,
@@ -181,7 +181,7 @@ fn a_patch_against_the_wrong_base_is_refused() {
     let pkg = build_package(
         b"delta",
         sha(b"the result"),
-        PAYLOAD_ZSTD_PATCH,
+        PAYLOAD_BSDIFF_ZSTD,
         sha(b"the base"),
         5,
         1,
@@ -194,25 +194,90 @@ fn a_patch_against_the_wrong_base_is_refused() {
     ));
 }
 
-/// Documents the open seam: the format accepts patches, the applier is not
-/// compiled in yet. Flip this test when a patch crate lands.
+/// Build a real zstd-compressed bsdiff delta the way the packer will.
+fn delta(base: &[u8], new: &[u8]) -> Vec<u8> {
+    let mut raw = Vec::new();
+    bsdiff::diff(base, new, &mut raw).unwrap();
+    zstd::stream::encode_all(raw.as_slice(), 19).unwrap()
+}
+
+/// The whole point: a package carrying a delta rebuilds the module exactly.
 #[test]
-fn a_patch_with_the_right_base_reaches_the_applier() {
+fn a_patch_package_reconstructs_the_module() {
     let (sk, vk) = keys();
-    let base = b"the base";
+    // Something long enough that a delta is meaningfully smaller than the whole.
+    let base: Vec<u8> = (0..40_000u32).map(|i| (i % 251) as u8).collect();
+    let mut new = base.clone();
+    new[20_000] ^= 0xff;
+    new.extend_from_slice(b"and a tail that was not there before");
+
+    let patch = delta(&base, &new);
+    assert!(
+        patch.len() < new.len() / 4,
+        "delta should be far smaller than the module: {} vs {}",
+        patch.len(),
+        new.len()
+    );
+
     let pkg = build_package(
-        b"delta",
-        sha(b"the result"),
-        PAYLOAD_ZSTD_PATCH,
-        sha(base),
+        &patch,
+        sha(&new),
+        PAYLOAD_BSDIFF_ZSTD,
+        sha(&base),
         5,
         1,
-        "m",
+        "delta update",
+        &[(0, sk[0].clone()), (2, sk[2].clone())],
+    );
+    let m = verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)).expect("patch applies");
+    assert_eq!(&m.module_bytes[..], &new[..]);
+    assert_eq!(m.module_version, 5);
+}
+
+/// A delta that rebuilds something OTHER than what the manifest committed to
+/// must be refused. This is what lets the patch travel untrusted: the
+/// signatures never cover the payload, only the result hash.
+#[test]
+fn a_patch_producing_the_wrong_module_is_refused() {
+    let (sk, vk) = keys();
+    let base = b"the base module".to_vec();
+    let honest = b"the patched module".to_vec();
+    let sneaky = b"a different module".to_vec();
+
+    let pkg = build_package(
+        &delta(&base, &sneaky),
+        sha(&honest), // manifest commits to the honest result
+        PAYLOAD_BSDIFF_ZSTD,
+        sha(&base),
+        5,
+        1,
+        "delta update",
         &[(0, sk[0].clone()), (2, sk[2].clone())],
     );
     assert!(matches!(
-        verify_package_with_base(&pkg, &vk, 1, 0, Some(base)),
-        Err(ManifestError::PatchUnsupported)
+        verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)),
+        Err(ManifestError::HashMismatch)
+    ));
+}
+
+/// Garbage in the payload must fail cheaply rather than panic.
+#[test]
+fn a_corrupt_delta_fails_cleanly() {
+    let (sk, vk) = keys();
+    let base = b"the base module".to_vec();
+    let pkg = build_package(
+        b"not a zstd frame at all",
+        sha(b"whatever"),
+        PAYLOAD_BSDIFF_ZSTD,
+        sha(&base),
+        5,
+        1,
+        "delta update",
+        &[(0, sk[0].clone()), (2, sk[2].clone())],
+    );
+    assert!(matches!(
+        verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)),
+        Err(ManifestError::PatchFailed)
     ));
 }
 

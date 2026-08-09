@@ -34,8 +34,12 @@ pub const MANIFEST_VERSION: u8 = 2;
 
 /// Payload is the complete module.
 pub const PAYLOAD_FULL: u8 = 0;
-/// Payload is a zstd `--patch-from` delta against `base_hash`.
-pub const PAYLOAD_ZSTD_PATCH: u8 = 1;
+/// Payload is a bsdiff delta against `base_hash`, zstd-compressed.
+///
+/// bsdiff+zstd rather than `zstd --patch-from`: measured on a real module
+/// pair it is smaller (33,723 vs 42,839 bytes) AND applies with pure-Rust
+/// crates, where zstd's prefix-dictionary path needs the C library.
+pub const PAYLOAD_BSDIFF_ZSTD: u8 = 1;
 
 #[derive(Debug)]
 pub enum ManifestError {
@@ -60,8 +64,8 @@ pub enum ManifestError {
     MissingBaseModule,
     /// The supplied base is not the one this patch was built against.
     BaseHashMismatch,
-    /// Patch application is not compiled into this kernel yet.
-    PatchUnsupported,
+    /// The delta did not apply, decompress, or stayed within its size bound.
+    PatchFailed,
 }
 
 pub struct VerifiedModule<'a> {
@@ -118,7 +122,7 @@ pub fn parse_signing_prefix(data: &[u8]) -> Result<(ManifestFields, usize), Mani
     let min_kernel_version = u32::from_le_bytes(data[need(4)?].try_into().unwrap());
     let module_hash: [u8; 32] = data[need(32)?].try_into().unwrap();
     let payload_kind = data[need(1)?][0];
-    if !matches!(payload_kind, PAYLOAD_FULL | PAYLOAD_ZSTD_PATCH) {
+    if !matches!(payload_kind, PAYLOAD_FULL | PAYLOAD_BSDIFF_ZSTD) {
         return Err(ManifestError::UnknownPayloadKind(payload_kind));
     }
     let base_hash: [u8; 32] = data[need(32)?].try_into().unwrap();
@@ -223,12 +227,12 @@ pub fn verify_package_with_base<'a>(
             }
             std::borrow::Cow::Borrowed(rest)
         }
-        PAYLOAD_ZSTD_PATCH => {
+        PAYLOAD_BSDIFF_ZSTD => {
             let base = base.ok_or(ManifestError::MissingBaseModule)?;
             if <[u8; 32]>::from(Sha256::digest(base)) != fields.base_hash {
                 return Err(ManifestError::BaseHashMismatch);
             }
-            std::borrow::Cow::Owned(apply_zstd_patch(base, rest)?)
+            std::borrow::Cow::Owned(apply_patch(base, rest)?)
         }
         other => return Err(ManifestError::UnknownPayloadKind(other)),
     };
@@ -256,17 +260,40 @@ pub fn verify_package_with_base<'a>(
     })
 }
 
-/// Apply a zstd `--patch-from` delta. Measured on real module pairs: a logic
-/// fix is ~43 KB and a dependency bump ~16 KB, against 2.7 MB for the whole
-/// module - the difference between seconds and half an hour of QR scanning.
+/// Largest module we will reconstruct from a delta.
 ///
-/// Not yet compiled in: the crate choice is open. `ruzstd` is pure Rust but
-/// decompress-only and its prefix-dictionary support is unconfirmed; the
-/// `zstd` crate certainly works but adds a C dependency to the NDK build.
-/// The format is settled here regardless, because `manifest_version` can only
-/// be changed cheaply while no package has ever verified.
-fn apply_zstd_patch(_base: &[u8], _patch: &[u8]) -> Result<Vec<u8>, ManifestError> {
-    Err(ManifestError::PatchUnsupported)
+/// This bound is load-bearing, not hygiene. The signatures cover the manifest
+/// - and therefore the RESULT hash - but NOT the payload bytes. So a valid
+/// signed manifest can be paired with a swapped payload, and the mismatch is
+/// only caught by the hash check at the end. Without a cap, a decompression
+/// bomb would be expanded in full before we ever got there.
+pub const MAX_MODULE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Reconstruct a module from `base` plus a zstd-compressed bsdiff delta.
+///
+/// Measured on a real module pair: 33,723 bytes against 2.0 MB for the whole
+/// module - seconds of QR scanning instead of half an hour.
+///
+/// The `take` is the bomb defence: decompression stops at the cap rather than
+/// running to completion, so a swapped payload costs bounded work and then
+/// fails, instead of expanding without limit before the hash check catches it.
+fn apply_patch(base: &[u8], patch: &[u8]) -> Result<Vec<u8>, ManifestError> {
+    use std::io::Read;
+    let decoder = ruzstd::StreamingDecoder::new(patch).map_err(|_| ManifestError::PatchFailed)?;
+    let mut raw = Vec::new();
+    decoder
+        .take(MAX_MODULE_BYTES as u64)
+        .read_to_end(&mut raw)
+        .map_err(|_| ManifestError::PatchFailed)?;
+    let mut out = Vec::new();
+    bsdiff::patch(base, &mut raw.as_slice(), &mut out).map_err(|_| ManifestError::PatchFailed)?;
+    // Belt to the take's braces: bsdiff output should be bounded by the patch
+    // it was read from, but that is a property of the format rather than
+    // something enforced above, so check it rather than assume it.
+    if out.len() > MAX_MODULE_BYTES {
+        return Err(ManifestError::PatchFailed);
+    }
+    Ok(out)
 }
 
 /// Packaging helper (release tooling + tests): sign with the provided keys.

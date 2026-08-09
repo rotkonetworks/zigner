@@ -4709,19 +4709,24 @@ pub fn baked_module_version() -> u32 {
     module_host::BAKED_MODULE_VERSION
 }
 
+/// `base` is the currently-active module, needed only when the package carries
+/// a delta rather than a whole module. Passing it always is simplest and costs
+/// nothing: a full package ignores it.
 pub fn module_verify_package(
     package: &[u8],
     last_installed_version: u32,
+    base: Option<Vec<u8>>,
 ) -> Result<ModulePackageInfo, ErrorDisplayed> {
     use sha2::Digest;
     let keys = module_host::release_keys().ok_or(ErrorDisplayed::Str {
         s: "release keys not provisioned - module updates disabled in this build".to_string(),
     })?;
-    let v = module_host::manifest::verify_package(
+    let v = module_host::manifest::verify_package_with_base(
         package,
         &keys,
         module_host::KERNEL_VERSION,
         last_installed_version,
+        base.as_deref(),
     )
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("module package rejected: {e:?}"),

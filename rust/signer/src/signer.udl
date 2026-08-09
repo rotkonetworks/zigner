@@ -619,7 +619,7 @@ namespace signer {
     // Verify a signed module package (2-of-3 manifest, hash, kernel gate,
     // anti-rollback). Fails closed while release keys are placeholders.
     [Throws=ErrorDisplayed]
-    ModulePackageInfo module_verify_package([ByRef] sequence<u8> package, u32 last_installed_version);
+    ModulePackageInfo module_verify_package([ByRef] sequence<u8> package, u32 last_installed_version, sequence<u8>? base);
 
     // Version of the module baked into the APK. The slot store uses it so a
     // stale installed slot cannot shadow a newer module from an APK update.

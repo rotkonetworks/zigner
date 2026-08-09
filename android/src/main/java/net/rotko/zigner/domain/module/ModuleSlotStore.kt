@@ -38,6 +38,21 @@ object ModuleSlotStore {
 
 	private fun stateFile(context: Context): File = File(dir(context), STATE)
 
+	/**
+	 * The delta base: ALWAYS the module baked into the APK, never the active
+	 * slot.
+	 *
+	 * Every device on a given APK holds this exact module, so one patch serves
+	 * all of them and there is no chaining or version matrix. Using the active
+	 * slot instead would also be a bug rather than merely a different choice:
+	 * loadActiveVerified() re-verifies on every boot and cannot ask for the
+	 * active module without recursing into itself, so it must use the baked
+	 * copy - and a slot staged against a different base would fail that check
+	 * and silently auto-revert.
+	 */
+	private fun deltaBase(context: Context): ByteArray =
+		context.assets.open("modules/module0.wasm").use { it.readBytes() }
+
 	private data class State(
 		var active: String?,
 		var staged: String?,
@@ -78,9 +93,11 @@ object ModuleSlotStore {
 	 */
 	fun stage(context: Context, packageBytes: ByteArray): ModulePackageInfo {
 		val state = readState(context)
+		// Deltas rebuild against the baked baseline; full packages ignore it.
 		val info = moduleVerifyPackage(
 			packageBytes.toUByteList(),
 			state.lastInstalled.toUInt(),
+			deltaBase(context).toUByteList(),
 		)
 		val target = if (state.active == "a") "b" else "a"
 		slotFile(context, target).writeBytes(packageBytes)
@@ -99,7 +116,11 @@ object ModuleSlotStore {
 		val staged = state.staged ?: return false
 		val pkg = runCatching { slotFile(context, staged).readBytes() }.getOrNull() ?: return false
 		val info = runCatching {
-			moduleVerifyPackage(pkg.toUByteList(), state.lastInstalled.toUInt())
+			moduleVerifyPackage(
+				pkg.toUByteList(),
+				state.lastInstalled.toUInt(),
+				deltaBase(context).toUByteList(),
+			)
 		}.getOrNull() ?: return false
 		if (!moduleSelfTest(info.wasm)) return false
 		state.active = staged
@@ -151,7 +172,11 @@ object ModuleSlotStore {
 		// the version we activated (or newer, which cannot happen).
 		val floor = (state.activeVersion - 1).coerceAtLeast(0)
 		val info = runCatching {
-			moduleVerifyPackage(pkg.toUByteList(), floor.toUInt())
+			moduleVerifyPackage(
+				pkg.toUByteList(),
+				floor.toUInt(),
+				deltaBase(context).toUByteList(),
+			)
 		}.getOrNull()
 		if (info == null || info.moduleVersion.toLong() != state.activeVersion) {
 			revertToAsset(context, state)
