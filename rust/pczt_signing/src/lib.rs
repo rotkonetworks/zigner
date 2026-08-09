@@ -83,6 +83,30 @@ pub struct PcztSummary {
     pub outputs: Vec<(String, u64)>,
     /// Declared fee in zatoshi, when derivable from the PCZT balance.
     pub fee_zat: Option<u64>,
+    /// Set when [`detect_delegation`] recognizes this PCZT as a Zcash voting
+    /// delegation authorization (zafu's `build_delegation_pczt`) rather than
+    /// a payment. `None` means: display it as an ordinary send/migration,
+    /// exactly as before this field existed.
+    pub delegation: Option<DelegationSummary>,
+}
+
+/// Truthful, conservative facts about a PCZT [`detect_delegation`] has
+/// recognized as a voting-delegation authorization, not a payment.
+///
+/// Only fields provable from data `verify_displayed_summary` has already
+/// bound to the sighash are included here. Notably absent: the vote round
+/// id, the delegated ZEC amount, and any human-readable round name / hotkey
+/// label. Those only exist inside the governance output's encrypted note
+/// plaintext (the memo) - see the doc comment on [`detect_delegation`] for
+/// exactly why this device cannot read them, and what would need to change
+/// on the producer (zafu) side to make that possible without lying.
+#[derive(Debug, Clone)]
+pub struct DelegationSummary {
+    /// Raw 43-byte orchard/ironwood receiver of the single governance
+    /// output, hex-encoded. Bound to the note commitment the same way an
+    /// ordinary send recipient is (`verify_note_commitment`, run before this
+    /// struct is ever constructed) - the UI renders it as a unified address.
+    pub hotkey_recipient: String,
 }
 
 /// Confirm that the recipient + amount this summary is about to DISPLAY are
@@ -253,6 +277,124 @@ fn verify_value_balance(bundle: &orchard::pczt::Bundle) -> Result<(), String> {
     }
 }
 
+/// Recognize a Zcash voting-delegation authorization PCZT (zafu's
+/// `build_delegation_pczt` / `build_governance_pczt`, `zcli/crates/zcash-voting`)
+/// and, if so, return the facts about it this device can PROVE - never more.
+///
+/// WHY THIS IS NOT A PAYMENT: a delegation PCZT does not spend the voter's
+/// real delegated notes in-band at all. It carries exactly one action in the
+/// Ironwood bundle: a synthetic 1-zatoshi "signed note" spend (rho bound to
+/// the delegated notes' commitments + the VAN + the vote round id via
+/// `governance::compute_rho_binding`, off-PCZT), paired with a zero-value
+/// output to the voting hotkey address whose memo carries the human-readable
+/// authorization text. The real delegated notes, the VAN, and the governance
+/// nullifiers travel to the cosmos voting chain out of band - never in this
+/// transaction - so nothing about "which notes, how much delegated weight"
+/// is either signed here or displayable from here.
+///
+/// DETECTION: structural, not content-based. Orchard's default builder
+/// (`BundleType::DEFAULT`, which zafu's governance builder uses) pads every
+/// bundle to at least 2 actions for indistinguishability, so a delegation
+/// PCZT typically carries the one real governance action PLUS one
+/// auto-generated dummy padding action - not a single action. The signal
+/// that isolates the real one from the padding is `spend_auth_sig`:
+/// `IoFinalizer::finalize_io` immediately signs every padding spend with its
+/// own freshly-generated `dummy_sk` and clears it, all before the PCZT is
+/// ever redacted for the airgap - so by the time this device sees it, the
+/// padding action's spend already carries a signature and the real,
+/// still-unsigned action is the only one with `spend_auth_sig == None`. That
+/// is exactly "the action this device is being asked to sign", which is
+/// also the only action whose truthfulness matters here.
+///
+/// So: this device recognizes a delegation PCZT as zero transparent inputs,
+/// no ORCHARD action left unsigned (a legacy send or an orchard->ironwood
+/// migration always leaves an orchard spend unsigned; a delegation never
+/// touches the orchard bundle), and exactly one IRONWOOD action left
+/// unsigned, whose output value is PROVEN zero
+/// (`verify_note_commitment` + `verify_value_balance`, already run by the
+/// time this function is called). Detecting on this shape - rather than
+/// trying to read a "kind" marker or sniff the memo text - means a forger
+/// cannot get a real payment mis-displayed as a delegation: satisfying it
+/// requires the one action this device signs to be value-locked at zero, and
+/// `verify_value_balance` proves the WHOLE bundle's declared value balance
+/// against the summed value commitments, so no other action in the same
+/// bundle can be smuggling real value past this check either. Worst case of
+/// a false-positive "delegation" label is a mislabeled zero-value
+/// transaction - never a mislabeled payment.
+///
+/// WHAT IS DELIBERATELY NOT DISPLAYED, AND WHY: the delegated amount, the
+/// vote round id, and the round name/hotkey label all live ONLY inside the
+/// governance output's encrypted note plaintext (the memo). Two independent
+/// gaps keep this device from reading them today:
+///
+/// 1. `summarize()` runs before the seed is available (see `sign_redacted_pczt`
+///    for where the seed first appears), so the outgoing viewing key needed
+///    to decrypt the wallet's own sent note is not derivable here even in
+///    principle.
+/// 2. Even with the OVK, this specific output is orchard's "restricted
+///    builder" shape - a zero-valued output paired with a real
+///    external-scope spend - whose `enc_ciphertext` is deliberately
+///    randomized (see the `orchard` crate's own doc comment on
+///    `pczt::Output::recipient`), so ordinary outgoing-viewing-key recovery
+///    does not apply to it either.
+/// 3. zafu's `redact_delegation_pczt_for_signer` (zcli
+///    `crates/zcash-voting/src/delegate.rs`) does not currently stash the
+///    round id / round name / delegated weight in any PCZT proprietary field
+///    that survives redaction - only the generic
+///    `zcash_client_backend:output_info` key is stripped, so a differently
+///    namespaced field WOULD survive, but nothing populates one today.
+///
+/// So this function reports only the recipient, and reports it exactly the
+/// way an ordinary send's recipient is reported. Extending the display with
+/// the round / amount / hotkey label requires a producer-side change (add a
+/// namespaced proprietary field, e.g. `zafu_voting:round_id`) plus, if that
+/// data is meant to be VERIFIED rather than merely displayed, some binding
+/// of it to the signed bytes (it is not enough for it to just be present -
+/// see the anti-tamper discussion on `verify_displayed_summary`).
+fn detect_delegation(pczt: &Pczt) -> Option<DelegationSummary> {
+    if !pczt.transparent().inputs().is_empty() {
+        return None;
+    }
+    // Any orchard action still needing a signature rules this out: a
+    // delegation PCZT never asks this device to sign an orchard action (see
+    // the doc comment above).
+    let orchard_needs_signing = pczt
+        .orchard()
+        .actions()
+        .iter()
+        .any(|a| a.spend().spend_auth_sig().is_none());
+    if orchard_needs_signing {
+        return None;
+    }
+    let mut unsigned_ironwood = pczt
+        .ironwood()
+        .actions()
+        .iter()
+        .filter(|a| a.spend().spend_auth_sig().is_none());
+    let action = unsigned_ironwood.next()?;
+    if unsigned_ironwood.next().is_some() {
+        // More than one action still needs this device's signature - not the
+        // single-governance-action delegation shape.
+        return None;
+    }
+    let out = action.output();
+    // The one fact that matters for safety: this output cannot move value.
+    // `verify_displayed_summary` has already proven this against the note
+    // commitment before `detect_delegation` is ever reached.
+    if *out.value() != Some(0u64) {
+        return None;
+    }
+    let hotkey_recipient = match out.recipient() {
+        Some(r) => hex(r),
+        // No recipient to show truthfully - do not guess, do not label it a
+        // delegation with a blank recipient. Fall through to the ordinary
+        // "orchard:shielded / ironwood:shielded" payment-shaped display,
+        // which already refuses to invent a recipient too.
+        None => return None,
+    };
+    Some(DelegationSummary { hotkey_recipient })
+}
+
 /// Parse a redacted PCZT and produce the confirmation summary.
 pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     let mut pczt = Pczt::parse(pczt_bytes).map_err(|e| Error::Parse(format!("{e:?}")))?;
@@ -261,6 +403,8 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     pczt.resolve_fields()
         .map_err(|e| Error::Parse(format!("resolve fields: {e:?}")))?;
     verify_displayed_summary(&pczt)?;
+
+    let delegation = detect_delegation(&pczt);
 
     let orchard_actions = pczt.orchard().actions().len();
     let transparent_inputs = pczt.transparent().inputs().len();
@@ -342,6 +486,7 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
         transparent_inputs,
         outputs,
         fee_zat,
+        delegation,
     })
 }
 
@@ -974,13 +1119,28 @@ mod wasm_abi {
                         Some(v) => v.to_string(),
                         None => "unknown".to_string(),
                     };
+                    // `kind=` is a new, additive head token: existing parsers
+                    // split the head on whitespace and match known prefixes,
+                    // ignoring anything else, so an old host still parses
+                    // actions/ironwood_actions/t_inputs/fee unchanged. A new
+                    // host uses `kind=delegation` to render the truthful
+                    // "voting delegation authorization" screen instead of a
+                    // payment screen - see `detect_delegation` for exactly
+                    // what is (recipient) and is not (round/amount/label)
+                    // provable, and therefore shown.
+                    let kind = if s.delegation.is_some() {
+                        "delegation"
+                    } else {
+                        "payment"
+                    };
                     out.extend_from_slice(
                         format!(
-                            "actions={} ironwood_actions={} t_inputs={} fee={}\n{}",
+                            "actions={} ironwood_actions={} t_inputs={} fee={} kind={}\n{}",
                             s.orchard_actions,
                             ironwood_actions,
                             s.transparent_inputs,
                             fee,
+                            kind,
                             s.outputs
                                 .iter()
                                 .map(|(l, v)| format!("{l}={v}"))

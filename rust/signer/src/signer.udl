@@ -34,6 +34,12 @@ dictionary ModulePcztSummary {
     u32 transparent_inputs;
     u64? fee_zat;
     sequence<string> output_lines;
+    // True when the module recognized this PCZT as a Zcash voting
+    // delegation authorization rather than a payment - see
+    // `pczt_signing::detect_delegation`. The confirmation screen must show
+    // "voting delegation authorization", not a payment recipient/amount,
+    // when this is set.
+    boolean is_delegation;
 };
 
 dictionary MetaValuesDisplay {

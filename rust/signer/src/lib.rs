@@ -4632,6 +4632,12 @@ pub struct ModulePcztSummary {
     /// shows "unknown" for None rather than an understated number.
     pub fee_zat: Option<u64>,
     pub output_lines: Vec<String>,
+    /// True when the module recognized this PCZT as a Zcash voting
+    /// delegation authorization rather than a payment (`kind=delegation` in
+    /// the head line - see `pczt_signing::detect_delegation`). Absent /
+    /// `kind=payment` on older modules parses as `false`, so a pre-delegation
+    /// module keeps rendering the plain payment screen it always has.
+    pub is_delegation: bool,
 }
 
 fn module_runtime(module_wasm: &[u8]) -> Result<module_host::ModuleRuntime, ErrorDisplayed> {
@@ -4665,6 +4671,7 @@ pub fn module_summarize_request(
         let mut ironwood_actions = 0u32;
         let mut t_inputs = 0u32;
         let mut fee_zat = None;
+        let mut is_delegation = false;
         for part in head.split_whitespace() {
             if let Some(v) = part.strip_prefix("ironwood_actions=") {
                 ironwood_actions = v.parse().unwrap_or(0);
@@ -4674,6 +4681,8 @@ pub fn module_summarize_request(
                 t_inputs = v.parse().unwrap_or(0);
             } else if let Some(v) = part.strip_prefix("fee=") {
                 fee_zat = v.parse::<u64>().ok();
+            } else if let Some(v) = part.strip_prefix("kind=") {
+                is_delegation = v == "delegation";
             }
         }
         out.push(ModulePcztSummary {
@@ -4682,6 +4691,7 @@ pub fn module_summarize_request(
             transparent_inputs: t_inputs,
             fee_zat,
             output_lines: lines.map(str::to_owned).collect(),
+            is_delegation,
         });
     }
     Ok(out)

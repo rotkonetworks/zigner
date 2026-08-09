@@ -26,7 +26,7 @@ use pczt::{
 use rand_core::OsRng;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_primitives::transaction::{
-    builder::{BuildConfig, Builder, BundlePadding},
+    builder::{BuildConfig, Builder, BundlePadding, PcztParts},
     fees::zip317,
     TxVersion,
 };
@@ -451,4 +451,122 @@ pub fn redact_pczt_for_compact_signer(pczt: Pczt) -> Pczt {
             });
         })
         .finish()
+/// Everything the delegation-display tests need from
+/// [`build_redacted_delegation`].
+pub struct DelegationFixture {
+    /// The redacted-for-signer PCZT bytes - exactly what crosses the airgap.
+    pub redacted_pczt: Vec<u8>,
+    /// Raw 43-byte receiver of the governance output (the voting hotkey).
+    pub hotkey_recipient: [u8; 43],
+}
+
+/// Build + redact a Zcash voting-delegation authorization PCZT, matching the
+/// shape zcli's `build_governance_pczt` produces (`zcli/crates/zcash-voting/
+/// src/action.rs`): a single Ironwood action pairing a synthetic 1-zatoshi
+/// "signed note" spend (from the voter's own external address, rho bound
+/// off-PCZT to the real delegated notes + VAN + vote round id) with a
+/// zero-value output to the voting hotkey address. No orchard bundle, no
+/// transparent inputs - this "transaction" is never broadcast to the Zcash
+/// network (it only carries a spend-auth signature the wallet extracts for
+/// the cosmos voting chain), so it is built with the low-level
+/// `orchard::builder::Builder` + `PcztParts` + `Creator` + `IoFinalizer`
+/// path exactly as the real builder does, not the fee-rule-aware
+/// `zcash_primitives::transaction::builder::Builder` used elsewhere in this
+/// file (which would reject a "transaction" with no conventional fee).
+pub fn build_redacted_delegation() -> DelegationFixture {
+    use orchard::builder::{Builder as OrchardBuilder, BundleType};
+    use orchard::bundle::BundleVersion;
+    use orchard::keys::{FullViewingKey, Scope, SpendingKey};
+    use orchard::note::{Note, RandomSeed, Rho};
+    use orchard::tree::{MerkleHashOrchard, MerklePath};
+    use orchard::value::NoteValue;
+    use orchard::Anchor;
+    use zcash_protocol::consensus::BranchId;
+
+    let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, MNEMONIC).unwrap();
+    let seed = mnemonic.to_seed("");
+    let usk = UnifiedSpendingKey::from_seed(&TestNetwork, &seed, AccountId::ZERO).unwrap();
+    let fvk = FullViewingKey::from(usk.orchard());
+    let bundle_version = BundleVersion::ironwood_v3();
+    let note_version = bundle_version.note_version();
+
+    // The "signed note": governance spend from the voter's own external
+    // address, value 1 zatoshi. Never a real payment note - real production
+    // code binds `rho` to the delegated notes / VAN / vote round id via
+    // `governance::compute_rho_binding`; a fixed test rho is fine here since
+    // this fixture only needs to exercise the PCZT *shape*, not the voting
+    // circuit.
+    let sender = fvk.address_at(0u32, Scope::External);
+    let rho = Rho::from_bytes(&[7u8; 32]).unwrap();
+    let rseed = (0u8..=255)
+        .find_map(|b| RandomSeed::from_bytes([b; 32], &rho).into_option())
+        .expect("test rseed");
+    let signed_note: Note = Option::from(Note::from_parts(
+        sender,
+        NoteValue::from_raw(1),
+        rho,
+        rseed,
+        note_version,
+    ))
+    .expect("signed note");
+
+    let zero = Option::from(MerkleHashOrchard::from_bytes(&[0u8; 32])).expect("zero hash");
+    let dummy_path = MerklePath::from_parts(0, [zero; 32]);
+    let anchor = Anchor::from(dummy_path.root(signed_note.commitment().into()));
+
+    // Voting hotkey: an external address distinct from the voter's own.
+    let hotkey_sk = SpendingKey::from_bytes([42u8; 32]).unwrap();
+    let hotkey_addr = FullViewingKey::from(&hotkey_sk).address_at(0u32, Scope::External);
+    let hotkey_recipient = hotkey_addr.to_raw_address_bytes();
+
+    let ovk = fvk.to_ovk(Scope::External);
+    // Mirror zcli's `build_governance_pczt`: the padded orchard Builder
+    // shuffles spends and outputs independently, so the real spend and the
+    // real output are not guaranteed to land in the same action slot. zcli
+    // retries until they do (`action.rs`'s `MAX_PCZT_LAYOUT_ATTEMPTS` loop);
+    // do the same here so this fixture matches what real delegation PCZTs
+    // from zafu actually look like, instead of occasionally exercising an
+    // unpaired shape production never ships.
+    let bundle = loop {
+        let mut builder = OrchardBuilder::new(
+            BundleType::DEFAULT,
+            bundle_version,
+            bundle_version.default_flags(),
+            anchor,
+        )
+        .expect("orchard builder");
+        builder
+            .add_spend(fvk.clone(), signed_note.clone(), dummy_path.clone())
+            .expect("add governance spend");
+        builder
+            .add_output(Some(ovk.clone()), hotkey_addr, NoteValue::ZERO, [0u8; 512])
+            .expect("add governance output");
+        let (bundle, meta) = builder.build_for_pczt(OsRng).expect("build_for_pczt");
+        if meta.spend_action_index(0) == meta.output_action_index(0) {
+            break bundle;
+        }
+    };
+
+    let parts = PcztParts {
+        params: TestNetwork,
+        version: TxVersion::V6,
+        consensus_branch_id: BranchId::Nu6_3,
+        lock_time: 0,
+        expiry_height: BlockHeight::from_u32(0),
+        transparent: None,
+        sapling: None,
+        orchard: None,
+        ironwood: Some(bundle),
+    };
+    let pczt = Creator::build_from_parts(parts).expect("Creator");
+    let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
+
+    let redacted = redact_pczt_for_signer(pczt);
+    let redacted_pczt = redacted.serialize().expect("serialize redacted delegation PCZT");
+    Pczt::parse(&redacted_pczt).expect("redacted delegation PCZT parses");
+
+    DelegationFixture {
+        redacted_pczt,
+        hotkey_recipient,
+    }
 }

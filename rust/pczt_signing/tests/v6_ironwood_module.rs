@@ -101,7 +101,7 @@ fn module_wasm_available() -> bool {
 }
 
 /// The summarize ABI returns a text head per message, records split by 0x1e:
-///   actions=<n> ironwood_actions=<n> t_inputs=<n> fee=<n|unknown>
+///   actions=<n> ironwood_actions=<n> t_inputs=<n> fee=<n|unknown> kind=<payment|delegation>
 ///   <label>=<value>            (one output per line)
 struct ModuleSummary {
     orchard_actions: usize,
