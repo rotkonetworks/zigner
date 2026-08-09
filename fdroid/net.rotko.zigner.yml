@@ -1,0 +1,97 @@
+License: GPL-3.0-only
+AuthorName: Rotko Networks
+AuthorWebSite: https://rotko.net
+
+Name: Zigner
+Summary: Air-gapped hardware signer for Zcash, Penumbra & Substrate
+Description: |
+  Zigner is an open-source air-gapped cold wallet and hardware signer. Turn a spare
+  Android phone into a secure offline transaction signer for:
+
+  • **Zcash (Orchard & Transparent)** — RedPallas signatures over shielded actions,
+    secp256k1 ECDSA for t-address inputs, with Ironwood (NU6.3 / V6) support
+
+  • **Penumbra** — All transaction actions: shielded spends/outputs, DEX swaps, liquidity
+    positions, delegations, votes, Dutch auctions, ICS20 withdrawals
+
+  • **Polkadot, Kusama & Cosmos** — Generic Substrate and Cosmos chain support
+
+  **Security Model:**
+
+  - Private keys are generated on-device and never leave the signing device
+  - All transactions arrive as QR codes and are displayed for review before signing
+  - Signed transactions are returned as QR codes
+  - The device should be permanently offline (airplane mode + disabled wireless radios)
+  - On compatible devices (Pixel 8+, Samsung with Knox), seeds are encrypted and stored
+    in the secure hardware element, never in main memory
+  - Uses FROST threshold multisig for group signing
+  - Anchor attestation prevents fabricated note trees on Zcash
+
+  **Features:**
+
+  - FROST distributed key generation and multi-signature support
+  - Full Viewing Key export (bech32m, UR) for Penumbra
+  - Chain ID validation on every signing request
+  - StrongBox support for high-security Android devices
+  - Support for Keychain/Secure Enclave on iOS
+  - QR-based transaction protocol with fountain-coded animated QR
+  - Metadata parsing from trusted sources (Substrate/Cosmos)
+
+  **Recommended Setup:**
+
+  Use a Pixel 8+ or later running GrapheneOS for maximum security. See the project
+  documentation for detailed security and privacy considerations.
+
+  **What This Is NOT:**
+
+  - A hot wallet or payment app
+  - Suitable for frequent small transactions
+  - A replacement for a hardware wallet (though it functions similarly)
+
+  **Note:** Zigner is part of the Zafu ecosystem (https://github.com/rotkonetworks/zafu),
+  a suite of open-source Zcash tools. It shares cryptographic logic with zafu-cli.
+
+WebSite: https://rotko.net
+SourceCode: https://github.com/rotkonetworks/zigner
+IssueTracker: https://github.com/rotkonetworks/zigner/issues
+
+RepoType: git
+Repo: https://github.com/rotkonetworks/zigner
+
+Categories:
+  - Security
+  - Finance
+
+Builds:
+  - versionName: '0.9.0'
+    versionCode: 9000
+    commit: master
+    subdir: android
+    gradle: yes
+    sudo:
+      - 'apt-get update && apt-get install -y rustup'
+      - 'rustup target add wasm32-unknown-unknown'
+    prebuild:
+      - 'cd ../rust/pczt_signing && cargo build --target wasm32-unknown-unknown --release --locked'
+      - 'cp ../rust/pczt_signing/target/wasm32-unknown-unknown/release/pczt_signing.wasm src/main/assets/modules/module0.wasm'
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+
+AllowedAPKSigningKeys: null
+
+RequiresRoot: false
+
+MaintainerNotes: |
+  This is a complex Rust+Kotlin+WebAssembly build. The app compiles Rust to both:
+  1. Native Android library (ARM/ARM64/x86_64) via rust-android-gradle
+  2. WebAssembly module for PCZT signing (runs in wasmi sandbox on device)
+
+  The wasm32 build step must happen before gradle assembles the APK. The Cargo.lock
+  is committed, enabling reproducible builds.
+
+  All Rust git dependencies (frost-spend, substrate, penumbra) point to specific
+  commits/tags in public repositories and should remain available.
+
+  The app targets minSdk 23 but runs best on Android 12+ (NU6.3 Zcash support).
+  Pixel 8+ with StrongBox secure element recommended for maximum key protection.
