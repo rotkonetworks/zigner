@@ -621,6 +621,10 @@ namespace signer {
     [Throws=ErrorDisplayed]
     ModulePackageInfo module_verify_package([ByRef] sequence<u8> package, u32 last_installed_version);
 
+    // Version of the module baked into the APK. The slot store uses it so a
+    // stale installed slot cannot shadow a newer module from an APK update.
+    u32 baked_module_version();
+
     // Instantiate + ABI-probe a staged module before activation.
     boolean module_self_test([ByRef] sequence<u8> wasm);
 

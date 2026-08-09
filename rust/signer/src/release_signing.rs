@@ -115,10 +115,12 @@ mod tests {
     fn prefix(module: &[u8], version: u32, desc: &str) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(manifest::MAGIC);
-        out.push(1);
+        out.push(manifest::MANIFEST_VERSION);
         out.extend_from_slice(&version.to_le_bytes());
         out.extend_from_slice(&1u32.to_le_bytes());
         out.extend_from_slice(&Sha256::digest(module));
+        out.push(manifest::PAYLOAD_FULL);
+        out.extend_from_slice(&[0u8; 32]);
         out.extend_from_slice(&(desc.len() as u16).to_le_bytes());
         out.extend_from_slice(desc.as_bytes());
         out
@@ -215,7 +217,7 @@ mod tests {
             verified.description,
             "changelog the user will read on the device"
         );
-        assert_eq!(verified.module_bytes, module);
+        assert_eq!(&verified.module_bytes[..], module);
     }
 
     #[test]

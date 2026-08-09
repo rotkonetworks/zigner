@@ -172,6 +172,19 @@ pub mod manifest;
 /// changes bump this.
 pub const KERNEL_VERSION: u32 = 1;
 
+/// Version of the module baked into the APK as an asset.
+///
+/// The APK's copy is authoritative whenever it is newer than an installed
+/// slot. filesDir survives APK updates, so without this a device that ever
+/// applied a module update would keep shadowing the baked module forever -
+/// an APK shipping a module security fix would be silently ignored. The slot
+/// store compares against this and discards anything not newer.
+///
+/// Bump in lockstep with the asset. It is a constant rather than something
+/// read from the asset because the baked module is a raw wasm with no
+/// manifest, so it carries no version of its own.
+pub const BAKED_MODULE_VERSION: u32 = 1;
+
 /// The 2-of-3 release verifying keys, baked at build time per the update
 /// architecture. PLACEHOLDER (all-zero) until the offline key ceremony -
 /// `release_keys()` returns None for placeholders, so the kernel FAILS

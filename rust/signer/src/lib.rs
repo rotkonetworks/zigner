@@ -4703,6 +4703,12 @@ pub struct ModulePackageInfo {
 
 /// Verify a module package against the kernel trust anchors. Fails closed
 /// while the release keys are unprovisioned placeholders.
+/// Version of the module baked into the APK, so the slot store can refuse to
+/// let a stale installed slot shadow a newer module shipped by an APK update.
+pub fn baked_module_version() -> u32 {
+    module_host::BAKED_MODULE_VERSION
+}
+
 pub fn module_verify_package(
     package: &[u8],
     last_installed_version: u32,
@@ -4720,7 +4726,7 @@ pub fn module_verify_package(
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("module package rejected: {e:?}"),
     })?;
-    let hash = sha2::Sha256::digest(v.module_bytes);
+    let hash = sha2::Sha256::digest(v.module_bytes.as_ref());
     Ok(ModulePackageInfo {
         module_version: v.module_version,
         min_kernel_version: v.min_kernel_version,

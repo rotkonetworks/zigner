@@ -2,6 +2,7 @@ package net.rotko.zigner.domain.module
 
 import android.content.Context
 import io.parity.signer.uniffi.ModulePackageInfo
+import io.parity.signer.uniffi.bakedModuleVersion
 import io.parity.signer.uniffi.moduleSelfTest
 import io.parity.signer.uniffi.moduleVerifyPackage
 import org.json.JSONObject
@@ -45,17 +46,20 @@ object ModuleSlotStore {
 	)
 
 	private fun readState(context: Context): State {
+		val baked = bakedModuleVersion().toLong()
 		val f = stateFile(context)
-		if (!f.exists()) return State(null, null, 0, 0)
+		// Floor the rollback counter at the baked version, so shipping a
+		// module in an APK also raises the bar for what a package may offer.
+		if (!f.exists()) return State(null, null, 0, baked)
 		return runCatching {
 			val j = JSONObject(f.readText())
 			State(
 				j.optString("active").ifEmpty { null },
 				j.optString("staged").ifEmpty { null },
 				j.optLong("activeVersion", 0),
-				j.optLong("lastInstalled", 0),
+				maxOf(j.optLong("lastInstalled", 0), baked),
 			)
-		}.getOrElse { State(null, null, 0, 0) }
+		}.getOrElse { State(null, null, 0, baked) }
 	}
 
 	private fun writeState(context: Context, s: State) {
@@ -115,6 +119,16 @@ object ModuleSlotStore {
 	fun loadActiveVerified(context: Context): ByteArray? {
 		val state = readState(context)
 		val active = state.active ?: return null
+		// The APK wins when it is newer. filesDir survives APK updates, so a
+		// device that ever applied a module update would otherwise keep
+		// shadowing the baked module forever - an APK shipping a module fix
+		// would be silently ignored on exactly the devices most likely to
+		// need it. The baked copy arrives signed by the app signing key
+		// through the OS, so it is the more authoritative of the two.
+		if (state.activeVersion <= bakedModuleVersion().toLong()) {
+			revertToAsset(context, state)
+			return null
+		}
 		val pkg = runCatching { slotFile(context, active).readBytes() }.getOrNull()
 		if (pkg == null) {
 			revertToAsset(context, state)
