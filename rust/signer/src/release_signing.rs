@@ -111,19 +111,18 @@ mod tests {
     const SEED_C: &str =
         "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
-    /// Build the signed region the way the packer would.
+    /// The signed region, built by the same function the packer calls.
+    /// Hand-rolling the format here instead would be the exact drift that
+    /// `parse_signing_prefix` was factored out to prevent.
     fn prefix(module: &[u8], version: u32, desc: &str) -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(manifest::MAGIC);
-        out.push(manifest::MANIFEST_VERSION);
-        out.extend_from_slice(&version.to_le_bytes());
-        out.extend_from_slice(&1u32.to_le_bytes());
-        out.extend_from_slice(&Sha256::digest(module));
-        out.push(manifest::PAYLOAD_FULL);
-        out.extend_from_slice(&[0u8; 32]);
-        out.extend_from_slice(&(desc.len() as u16).to_le_bytes());
-        out.extend_from_slice(desc.as_bytes());
-        out
+        manifest::build_signing_prefix(
+            Sha256::digest(module).into(),
+            manifest::PAYLOAD_FULL,
+            [0u8; 32],
+            version,
+            1,
+            desc,
+        )
     }
 
     fn verifying_key(seed: &str) -> VerifyingKey {
@@ -197,13 +196,14 @@ mod tests {
         let (_, sig_a) = sign_request(SEED_A, 0, &p).unwrap();
         let (_, sig_c) = sign_request(SEED_C, 0, &p).unwrap();
 
-        let mut package = p.clone();
-        package.push(2); // sig_count
-        package.push(0);
-        package.extend_from_slice(&hex::decode(sig_a).unwrap());
-        package.push(2);
-        package.extend_from_slice(&hex::decode(sig_c).unwrap());
-        package.extend_from_slice(module);
+        let package = manifest::assemble_package(
+            &p,
+            &[
+                (0, hex::decode(sig_a).unwrap().try_into().unwrap()),
+                (2, hex::decode(sig_c).unwrap().try_into().unwrap()),
+            ],
+            module,
+        );
 
         let keys = [
             verifying_key(SEED_A),
@@ -226,11 +226,11 @@ mod tests {
         let p = prefix(module, 3, "x");
         let (_, sig_a) = sign_request(SEED_A, 0, &p).unwrap();
 
-        let mut package = p.clone();
-        package.push(1);
-        package.push(0);
-        package.extend_from_slice(&hex::decode(sig_a).unwrap());
-        package.extend_from_slice(module);
+        let package = manifest::assemble_package(
+            &p,
+            &[(0, hex::decode(sig_a).unwrap().try_into().unwrap())],
+            module,
+        );
 
         let keys = [
             verifying_key(SEED_A),
@@ -253,13 +253,14 @@ mod tests {
         let rogue = ssh_pair.sign(&message);
 
         let (_, sig_c) = sign_request(SEED_C, 0, &p).unwrap();
-        let mut package = p.clone();
-        package.push(2);
-        package.push(0);
-        package.extend_from_slice(&rogue.0);
-        package.push(2);
-        package.extend_from_slice(&hex::decode(sig_c).unwrap());
-        package.extend_from_slice(module);
+        let package = manifest::assemble_package(
+            &p,
+            &[
+                (0, rogue.0),
+                (2, hex::decode(sig_c).unwrap().try_into().unwrap()),
+            ],
+            module,
+        );
 
         let keys = [
             verifying_key(SEED_A),

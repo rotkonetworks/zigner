@@ -4275,6 +4275,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "modpack"
+version = "0.1.0"
+dependencies = [
+ "bsdiff",
+ "ed25519-dalek",
+ "hex",
+ "module_host",
+ "sha2 0.10.8",
+ "zstd 0.13.3",
+]
+
+[[package]]
 name = "module_host"
 version = "0.1.0"
 dependencies = [

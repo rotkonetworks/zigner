@@ -296,18 +296,20 @@ fn apply_patch(base: &[u8], patch: &[u8]) -> Result<Vec<u8>, ManifestError> {
     Ok(out)
 }
 
-/// Packaging helper (release tooling + tests): sign with the provided keys.
-pub fn build_package(
-    payload: &[u8],
+/// Build the signed region of a manifest - the exact bytes the release keys
+/// sign, and the exact bytes a signing device is handed.
+///
+/// Split from assembly because the two halves happen on different machines:
+/// this runs on the build host, signing happens on separate offline devices,
+/// and [`assemble_package`] joins the results.
+pub fn build_signing_prefix(
     module_hash: [u8; 32],
     payload_kind: u8,
     base_hash: [u8; 32],
     module_version: u32,
     min_kernel_version: u32,
     description: &str,
-    signers: &[(u8, ed25519_dalek::SigningKey)],
 ) -> Vec<u8> {
-    use ed25519_dalek::Signer as _;
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
     out.push(MANIFEST_VERSION);
@@ -329,15 +331,59 @@ pub fn build_package(
     );
     out.extend_from_slice(&(description.len() as u16).to_le_bytes());
     out.extend_from_slice(description.as_bytes());
-    let mut msg = Vec::from(DOMAIN);
-    msg.extend_from_slice(&out);
-    out.push(signers.len() as u8);
-    for (idx, key) in signers {
+    out
+}
+
+/// The message the release keys actually sign: domain tag, then the prefix.
+pub fn signing_message(prefix: &[u8]) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(DOMAIN.len() + prefix.len());
+    msg.extend_from_slice(DOMAIN);
+    msg.extend_from_slice(prefix);
+    msg
+}
+
+/// Join a prefix with signatures collected from offline devices, plus payload.
+pub fn assemble_package(prefix: &[u8], sigs: &[(u8, [u8; 64])], payload: &[u8]) -> Vec<u8> {
+    let mut out = prefix.to_vec();
+    out.push(sigs.len() as u8);
+    for (idx, sig) in sigs {
         out.push(*idx);
-        out.extend_from_slice(&key.sign(&msg).to_bytes());
+        out.extend_from_slice(sig);
     }
     out.extend_from_slice(payload);
     out
+}
+
+/// Packaging helper for TESTS ONLY: signs with keys held right here.
+///
+/// The real release path never does this - it would need every signing key on
+/// one machine, exactly what the 2-of-3 custody model forbids. That path is
+/// [`build_signing_prefix`], offline devices, then [`assemble_package`].
+pub fn build_package(
+    payload: &[u8],
+    module_hash: [u8; 32],
+    payload_kind: u8,
+    base_hash: [u8; 32],
+    module_version: u32,
+    min_kernel_version: u32,
+    description: &str,
+    signers: &[(u8, ed25519_dalek::SigningKey)],
+) -> Vec<u8> {
+    use ed25519_dalek::Signer as _;
+    let prefix = build_signing_prefix(
+        module_hash,
+        payload_kind,
+        base_hash,
+        module_version,
+        min_kernel_version,
+        description,
+    );
+    let msg = signing_message(&prefix);
+    let sigs: Vec<(u8, [u8; 64])> = signers
+        .iter()
+        .map(|(idx, key)| (*idx, key.sign(&msg).to_bytes()))
+        .collect();
+    assemble_package(&prefix, &sigs, payload)
 }
 
 /// Convenience for the common case: a complete module, no patch.
