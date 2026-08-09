@@ -42,6 +42,7 @@ fun ScanScreen(
 	onCosmosSignRequest: (String) -> Unit = {},
 	onZcashSimpleSign: (String) -> Unit = {},
 	onZcashModulePczt: (String) -> Unit = {},
+	onModulePackage: (ByteArray) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 	onZcashNotes: (List<String>) -> Unit = {},
 	onZcashPczt: (List<String>) -> Unit = {},
@@ -64,6 +65,7 @@ fun ScanScreen(
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnZcashSimpleSign by rememberUpdatedState(onZcashSimpleSign)
 	val currentOnZcashModulePczt by rememberUpdatedState(onZcashModulePczt)
+	val currentOnModulePackage by rememberUpdatedState(onModulePackage)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
 	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
@@ -153,6 +155,16 @@ fun ScanScreen(
 				.collect { qrData ->
 					currentOnZcashModulePczt(qrData)
 					viewModel.resetZcashModulePczt()
+				}
+		}
+
+		// Module package handler (ur:zigner-module with package payload)
+		launch {
+			viewModel.modulePackageBytes
+				.filterNotNull()
+				.collect { packageBytes ->
+					currentOnModulePackage(packageBytes)
+					viewModel.resetModulePackageBytes()
 				}
 		}
 

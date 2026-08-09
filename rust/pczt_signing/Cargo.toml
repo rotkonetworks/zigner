@@ -50,6 +50,12 @@ secp256k1 = "0.29"
 # deps (wasmi + rand_core + ed25519 + sha2), so it links cleanly here.
 module_host = { path = "../module_host" }
 
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # wasmi module builds: randomness is a host capability. RedPallas signing
 # is randomized, so the module imports entropy instead of pretending the

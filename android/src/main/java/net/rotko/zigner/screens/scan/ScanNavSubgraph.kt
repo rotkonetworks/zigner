@@ -33,6 +33,7 @@ import net.rotko.zigner.screens.scan.transaction.ZidSignScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ModulePcztScreen
+import net.rotko.zigner.screens.scan.transaction.ModuleUpdateConfirmScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedTransactionScreen
@@ -41,7 +42,11 @@ import net.rotko.zigner.screens.scan.transaction.dynamicderivations.AddDynamicDe
 import net.rotko.zigner.screens.scan.transaction.previewType
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
 import io.parity.signer.uniffi.Action
+import net.rotko.zigner.domain.module.ModuleSlotStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 /**
  * Navigation Subgraph with compose nav controller for those Key Set screens which are not part of general
@@ -78,6 +83,11 @@ fun ScanNavSubgraph(
 	// Zcash note sync state
 	val zcashNoteSyncResult = scanViewModel.zcashNoteSyncResult.collectAsStateWithLifecycle()
 
+	// Module package state
+	val modulePackageData = scanViewModel.modulePackageBytes.collectAsStateWithLifecycle()
+	val modulePackageInfo = scanViewModel.modulePackageInfo.collectAsStateWithLifecycle()
+	val modulePackageError = scanViewModel.modulePackageError.collectAsStateWithLifecycle()
+
 	val addedNetworkName: MutableState<String?> =
 		remember { mutableStateOf(null) }
 
@@ -92,6 +102,25 @@ fun ScanNavSubgraph(
 
 	val context = LocalContext.current
 
+	// Stage module package when it arrives (verify signature, hash, etc.)
+	LaunchedEffect(modulePackageData.value) {
+		val packageBytes = modulePackageData.value ?: return@LaunchedEffect
+		try {
+			// Off the main thread: staging verifies 2-of-3 signatures and
+			// hashes a multi-megabyte package. A LaunchedEffect body runs on
+			// the composition dispatcher, so doing this inline would block the
+			// UI long enough to risk an ANR.
+			val info = withContext(Dispatchers.IO) {
+				ModuleSlotStore.stage(context, packageBytes)
+			}
+			scanViewModel.modulePackageInfo.value = info
+		} catch (e: Exception) {
+			Timber.e(e, "Failed to stage module package")
+			scanViewModel.modulePackageError.value = e.message
+				?: "Failed to stage module update: ${e::class.simpleName}"
+		}
+	}
+
 	//Full screens
 	val transactionsValue = transactions.value
 	val bananaQrData = bananaSplitPassword.value
@@ -102,7 +131,62 @@ fun ScanNavSubgraph(
 	val modulePcztPayload = scanViewModel.modulePcztPayload.collectAsStateWithLifecycle()
 	val frostData = scanViewModel.frostPayload.collectAsStateWithLifecycle()
 
-	if (modulePcztPayload.value != null) {
+	// Module package update flow (stage -> confirm -> activate)
+	if (modulePackageError.value != null) {
+		// Show error from staging
+		var showingError by remember { mutableStateOf(true) }
+		if (showingError) {
+			BottomSheetWrapperRoot(onClosedAction = {
+				scanViewModel.modulePackageError.value = null
+				showingError = false
+			}) {
+				LocalErrorBottomSheet(
+					error = LocalErrorSheetModel(
+						title = "Module Update Failed",
+						subtitle = "Failed to stage the module package for installation",
+						details = modulePackageError.value
+					),
+					onOk = {
+						scanViewModel.modulePackageError.value = null
+						showingError = false
+					}
+				)
+			}
+		}
+	} else if (modulePackageInfo.value != null) {
+		// Show confirm screen after successful stage
+		val currentVersion = remember { ModuleSlotStore.activeVersion(context) }
+		ModuleUpdateConfirmScreen(
+			info = modulePackageInfo.value!!,
+			currentVersion = currentVersion,
+			onConfirm = {
+				// Activation re-verifies the package and runs the wasmi
+				// self-test - instantiating the module and probing its ABI.
+				// Seconds of work, so not on the main thread.
+				scanViewModel.viewModelScope.launch {
+					val ok = withContext(Dispatchers.IO) {
+						ModuleSlotStore.activateStaged(context)
+					}
+					if (ok) {
+						Timber.d("[MODULE] Module activated successfully")
+						Toast.makeText(context, "Module update installed", Toast.LENGTH_SHORT).show()
+						scanViewModel.modulePackageInfo.value = null
+						scanViewModel.modulePackageBytes.value = null
+					} else {
+						Timber.e("[MODULE] Module activation failed")
+						scanViewModel.modulePackageError.value =
+							"Failed to activate module update. Self-test or verification failed."
+						scanViewModel.modulePackageInfo.value = null
+					}
+				}
+			},
+			onCancel = {
+				Timber.d("[MODULE] Module update cancelled by user")
+				scanViewModel.modulePackageInfo.value = null
+				scanViewModel.modulePackageBytes.value = null
+			},
+		)
+	} else if (modulePcztPayload.value != null) {
 		ModulePcztScreen(
 			payloadHex = modulePcztPayload.value!!,
 			getSeedPhrase = { scanViewModel.getFirstSeedPhrase() },
@@ -385,6 +469,9 @@ fun ScanNavSubgraph(
 			},
 			onZcashModulePczt = { payloadHex ->
 				scanViewModel.modulePcztPayload.value = payloadHex
+			},
+			onModulePackage = { packageBytes ->
+				scanViewModel.modulePackageBytes.value = packageBytes
 			},
 			onFrost = { json ->
 				scanViewModel.frostPayload.value = json

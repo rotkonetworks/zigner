@@ -74,9 +74,15 @@ class CameraViewModel() : ViewModel() {
 	private val _zcashPcztComplete = MutableStateFlow<List<String>?>(null)
 	val zcashPcztComplete: StateFlow<List<String>?> = _zcashPcztComplete.asStateFlow()
 
-	// UR zigner-module request frames (ur:zigner-module protocol-module PCZT
-	// request via animated QR); fountain-decoded to _zcashModulePcztPayload.
+	// UR zigner-module request frames (ur:zigner-module protocol-module PCZT request
+	// or module package via animated QR); fountain-decoded to either
+	// _zcashModulePcztPayload or _modulePackageBytes based on magic bytes.
 	private val _zignerModuleFrames = MutableStateFlow<List<String>>(emptyList())
+
+	// UR zigner-module package bytes (module package decoded from ur:zigner-module
+	// fountain frames; manifest || wasm starting with "ZIGM").
+	private val _modulePackageBytes = MutableStateFlow<ByteArray?>(null)
+	val modulePackageBytes: StateFlow<ByteArray?> = _modulePackageBytes.asStateFlow()
 
 	// JSON payloads (detected by {"frost":...} or {"auth":...} prefix)
 	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
@@ -446,12 +452,11 @@ class CameraViewModel() : ViewModel() {
 					_zcashPcztComplete.value = frames
 				}
 			}
-			// Protocol-module PCZT request over BC-UR fountain (ur:zigner-module).
-			// zafu animates the RAW prelude envelope [0x53][0x04][0x03]||pczt
-			// through the same fountain as ur:zcash-pczt but under this type so it
-			// reaches the ironwood-AWARE module path (not the blind zcash-pczt
-			// signer). Fountain-decode to the raw envelope, then dispatch on the
-			// 6-hex prelude exactly like the raw-byte / substrate multi-QR path.
+			// Protocol-module requests (PCZT) and module packages over BC-UR fountain.
+			// ur:zigner-module can carry either:
+			// 1. PCZT request: RAW prelude envelope [0x53][0x04][0x03]||pczt
+			// 2. Module package: manifest || wasm, starting with magic "ZIGM" [0x5A][0x49][0x47][0x4D]
+			// Fountain-decode to raw bytes, then dispatch based on magic/prelude.
 			normalizedUr.startsWith("ur:zigner-module") -> {
 				processUrFountainFrame(urString, normalizedUr, "ur:zigner-module", _zignerModuleFrames,
 					tryDecode = { frames ->
@@ -460,17 +465,35 @@ class CameraViewModel() : ViewModel() {
 				) { frames ->
 					try {
 						val decoded = decodeUrModuleRequest(frames)
-						val payloadHex =
-							ByteArray(decoded.size) { i -> decoded[i].toByte() }.encodeHex()
-						if (isZcashModulePcztRequest(payloadHex)) {
+						val payloadBytes = ByteArray(decoded.size) { i -> decoded[i].toByte() }
+
+						// Magic is checked on BYTES, and the payload is only
+						// hex-encoded on the PCZT branch. A module package runs
+						// to megabytes, so hex-encoding it up front to inspect a
+						// 3-byte prelude would allocate a string twice its size
+						// on every scan.
+						if (payloadBytes.size >= 4 &&
+							payloadBytes[0] == 0x5A.toByte() &&
+							payloadBytes[1] == 0x49.toByte() &&
+							payloadBytes[2] == 0x47.toByte() &&
+							payloadBytes[3] == 0x4D.toByte()) {
+							// Module package detected
+							Timber.d("[MODULE] ur:zigner-module decoded to module package: ${payloadBytes.size}B")
+							resetZignerModuleFrames()
+							_modulePackageBytes.value = payloadBytes
+						} else if (isZcashModulePcztRequest(payloadBytes.take(4).toByteArray().encodeHex())) {
+							// PCZT request detected
+							val payloadHex = payloadBytes.encodeHex()
+							Timber.d("[MODULE] ur:zigner-module decoded to PCZT request: prelude=${payloadHex.take(6)}")
 							resetZignerModuleFrames()
 							_zcashModulePcztPayload.value = payloadHex
 						} else {
-							Timber.w("ur:zigner-module payload is not a module PCZT request; prelude=${payloadHex.take(6)}")
+							val prelude = payloadBytes.take(3).toByteArray().encodeHex()
+							Timber.w("[MODULE] ur:zigner-module payload is neither module package nor PCZT request; prelude=$prelude")
 							resetZignerModuleFrames()
 						}
 					} catch (e: Exception) {
-						Timber.e(e, "ur:zigner-module fountain decode failed")
+						Timber.e(e, "[MODULE] ur:zigner-module fountain decode failed")
 						resetZignerModuleFrames()
 					}
 				}
@@ -614,6 +637,7 @@ class CameraViewModel() : ViewModel() {
 		_zcashPcztFrames.value = emptyList()
 		_zcashPcztComplete.value = null
 		_zignerModuleFrames.value = emptyList()
+		_modulePackageBytes.value = null
 		_frostPayload.value = null
 		_authPayload.value = null
 		_zidSignPayload.value = null
@@ -637,6 +661,10 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetZignerModuleFrames() {
 		_zignerModuleFrames.value = emptyList()
+	}
+
+	fun resetModulePackageBytes() {
+		_modulePackageBytes.value = null
 	}
 
 	fun resetFrostPayload() {

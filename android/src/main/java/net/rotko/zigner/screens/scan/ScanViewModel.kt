@@ -46,6 +46,7 @@ import io.parity.signer.uniffi.parseCosmosSignRequest
 import io.parity.signer.uniffi.signCosmosTransaction as uniffiSignCosmosTransaction
 import io.parity.signer.uniffi.ZcashNoteSyncResult
 import io.parity.signer.uniffi.ZcashSimpleSignRequest
+import io.parity.signer.uniffi.ModulePackageInfo
 import io.parity.signer.uniffi.decodeAndVerifyZcashNotes
 import io.parity.signer.uniffi.parseZcashSignRequest
 import io.parity.signer.uniffi.signZcashSimple
@@ -128,6 +129,11 @@ class ScanViewModel : ViewModel() {
 
 	// Protocol-module PCZT request state (prelude 530403/530404, hex payload)
 	var modulePcztPayload: MutableStateFlow<String?> = MutableStateFlow(null)
+
+	// Module package state (signed package bytes for installation)
+	var modulePackageBytes: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
+	var modulePackageInfo: MutableStateFlow<ModulePackageInfo?> = MutableStateFlow(null)
+	var modulePackageError: MutableStateFlow<String?> = MutableStateFlow(null)
 
 	// Unified signing state (replaces per-network state above)
 	var signRequest: MutableStateFlow<SignRequest?> = MutableStateFlow(null)
@@ -451,7 +457,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null || modulePackageBytes.value != null) {
 			clearState()
 			true
 		} else {
@@ -477,6 +483,9 @@ class ScanViewModel : ViewModel() {
 		zcashNoteSyncFrames.value = null
 		zcashPcztUrParts.value = null
 		modulePcztPayload.value = null
+		modulePackageBytes.value = null
+		modulePackageInfo.value = null
+		modulePackageError.value = null
 		frostPayload.value = null
 		clearFrostDkgState()
 		clearFrostSignState()

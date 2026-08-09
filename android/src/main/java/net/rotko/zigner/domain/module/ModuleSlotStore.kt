@@ -116,6 +116,18 @@ object ModuleSlotStore {
 	 * baked-in asset. Verification failure of the active slot auto-reverts
 	 * (clears active) so the next load doesn't retry a bad slot.
 	 */
+	/**
+	 * Version of the module actually in force: the active slot when there is
+	 * one, otherwise the module baked into the APK. This is what an update
+	 * replaces, so it is what the confirm screen must show - the baked version
+	 * alone would understate it whenever a slot is active.
+	 */
+	fun activeVersion(context: Context): Long {
+		val state = readState(context)
+		val baked = bakedModuleVersion().toLong()
+		return if (state.active != null) maxOf(state.activeVersion, baked) else baked
+	}
+
 	fun loadActiveVerified(context: Context): ByteArray? {
 		val state = readState(context)
 		val active = state.active ?: return null
