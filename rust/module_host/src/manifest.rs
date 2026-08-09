@@ -13,7 +13,7 @@
 //! enforces module_version > last_installed (anti-rollback) - persisted
 //! counter, outside this parser.
 
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 pub const MAGIC: &[u8; 4] = b"ZIGM";
@@ -41,6 +41,61 @@ pub struct VerifiedModule<'a> {
     pub module_bytes: &'a [u8],
 }
 
+/// The fields of a manifest's signed region.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestFields {
+    pub module_version: u32,
+    pub min_kernel_version: u32,
+    pub module_hash: [u8; 32],
+    pub description: String,
+}
+
+/// Parse the signed region of a manifest, returning its fields and its exact
+/// length in bytes - the region the release signatures cover.
+///
+/// Shared by the verifier and by the offline signing flow, deliberately: a
+/// signer that parsed this format separately from the verifier would be one
+/// refactor away from displaying different fields than the ones it signs.
+pub fn parse_signing_prefix(data: &[u8]) -> Result<(ManifestFields, usize), ManifestError> {
+    let take = |b: &[u8], n: usize| -> Result<(usize, usize), ManifestError> {
+        if b.len() < n {
+            Err(ManifestError::Truncated)
+        } else {
+            Ok((n, b.len() - n))
+        }
+    };
+    let mut at = 0usize;
+    let mut need = |n: usize| -> Result<std::ops::Range<usize>, ManifestError> {
+        let _ = take(&data[at.min(data.len())..], n)?;
+        let r = at..at + n;
+        at += n;
+        Ok(r)
+    };
+
+    if data[need(4)?] != *MAGIC {
+        return Err(ManifestError::BadMagic);
+    }
+    let v = data[need(1)?][0];
+    if v != 1 {
+        return Err(ManifestError::UnsupportedVersion(v));
+    }
+    let module_version = u32::from_le_bytes(data[need(4)?].try_into().unwrap());
+    let min_kernel_version = u32::from_le_bytes(data[need(4)?].try_into().unwrap());
+    let module_hash: [u8; 32] = data[need(32)?].try_into().unwrap();
+    let desc_len = u16::from_le_bytes(data[need(2)?].try_into().unwrap()) as usize;
+    let desc = data[need(desc_len)?].to_vec();
+
+    Ok((
+        ManifestFields {
+            module_version,
+            min_kernel_version,
+            module_hash,
+            description: String::from_utf8_lossy(&desc).into_owned(),
+        },
+        at,
+    ))
+}
+
 /// Parse + fully verify a module package against the kernel's trust
 /// anchors and state. Returns the module only if EVERY check passes.
 pub fn verify_package<'a>(
@@ -57,25 +112,12 @@ pub fn verify_package<'a>(
         }
     };
 
-    let (magic, rest) = take(package, 4)?;
-    if magic != MAGIC {
-        return Err(ManifestError::BadMagic);
-    }
-    let (ver, rest) = take(rest, 1)?;
-    if ver[0] != 1 {
-        return Err(ManifestError::UnsupportedVersion(ver[0]));
-    }
-    let (mv, rest) = take(rest, 4)?;
-    let module_version = u32::from_le_bytes(mv.try_into().unwrap());
-    let (kv, rest) = take(rest, 4)?;
-    let min_kernel_version = u32::from_le_bytes(kv.try_into().unwrap());
-    let (hash, rest) = take(rest, 32)?;
-    let (dl, rest) = take(rest, 2)?;
-    let desc_len = u16::from_le_bytes(dl.try_into().unwrap()) as usize;
-    let (desc, rest) = take(rest, desc_len)?;
+    let (fields, signed_len) = parse_signing_prefix(package)?;
+    let module_version = fields.module_version;
+    let min_kernel_version = fields.min_kernel_version;
+    let hash = fields.module_hash;
+    let rest = &package[signed_len..];
 
-    // signed region = everything up to here
-    let signed_len = package.len() - rest.len();
     let mut msg = Vec::with_capacity(DOMAIN.len() + signed_len);
     msg.extend_from_slice(DOMAIN);
     msg.extend_from_slice(&package[..signed_len]);
@@ -109,7 +151,7 @@ pub fn verify_package<'a>(
     }
 
     let module_bytes = rest;
-    if <[u8; 32]>::from(Sha256::digest(module_bytes)) != *<&[u8; 32]>::try_from(hash).unwrap() {
+    if <[u8; 32]>::from(Sha256::digest(module_bytes)) != hash {
         return Err(ManifestError::HashMismatch);
     }
     if module_version <= last_installed_version {
@@ -128,7 +170,7 @@ pub fn verify_package<'a>(
     Ok(VerifiedModule {
         module_version,
         min_kernel_version,
-        description: String::from_utf8_lossy(desc).into_owned(),
+        description: fields.description,
         module_bytes,
     })
 }

@@ -158,7 +158,7 @@ fn derive_base_keypair(seed_phrase: &str, index: u32) -> Result<ed25519::Pair, S
 ///   HMAC-SHA512(key="zafu-identity:" + domain, data=mnemonic + '\0' + index_str)
 ///
 /// When domain is empty, falls back to base derivation.
-fn derive_domain_keypair(
+pub(crate) fn derive_domain_keypair(
     seed_phrase: &str,
     domain: &str,
     index: u32,

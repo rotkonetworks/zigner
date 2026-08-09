@@ -84,6 +84,9 @@ log = "0.4.21"
 # inspect/sign code over them. Dev-dependencies are not compiled for
 # `cargo build`, so none of this reaches the Android artifact.
 [dev-dependencies]
+# Cross-library check: signatures this crate makes with sp_core must verify in
+# the kernel verifier, which uses dalek's strict equation.
+ed25519-dalek = "2"
 pczt = { version = "0.9.2", package = "pczt", default-features = false, features = ["signer", "orchard", "transparent", "io-finalizer", "zcp-builder", "prover", "spend-finalizer", "tx-extractor"] }
 zcash_protocol = { version = "0.10", features = ["local-consensus"] }
 # Halo2 proving/verifying keys, so the round-trip test can finalize + extract a

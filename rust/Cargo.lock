@@ -7190,6 +7190,7 @@ dependencies = [
  "constants",
  "db_handling",
  "definitions",
+ "ed25519-dalek",
  "env_logger",
  "ffi-support",
  "frost-spend",

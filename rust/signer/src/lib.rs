@@ -34,6 +34,8 @@ pub mod backup;
 mod ffi_types;
 pub mod frost_backup;
 pub mod frost_multisig;
+pub mod release_signing;
+pub mod ssh;
 
 use crate::ffi_types::*;
 use db_handling::identities::{import_all_addrs, inject_derivations_has_pwd};
