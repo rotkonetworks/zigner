@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 module_host = { path = "../module_host" }
-ota = { path = "../ota" }
 anyhow = "1.0"
 ffi-support = "0.4"
 hex = "0.4.3"

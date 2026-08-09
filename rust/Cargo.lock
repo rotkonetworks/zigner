@@ -4622,16 +4622,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ota"
-version = "0.1.0"
-dependencies = [
- "ed25519-dalek",
- "hex",
- "serde_json",
- "sha2 0.10.8",
-]
-
-[[package]]
 name = "pairing"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7204,7 +7194,6 @@ dependencies = [
  "navigator",
  "orchard 0.15.3",
  "oslog",
- "ota",
  "parser",
  "pbkdf2 0.12.2",
  "pczt",
