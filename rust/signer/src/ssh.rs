@@ -119,10 +119,22 @@ pub fn public_key_line(seed_phrase: &str, index: u32, comment: &str) -> Result<S
 
 /// Parse a signing payload into a framing we can display, or refuse it.
 pub fn classify_request(blob: &[u8]) -> Result<SshSignRequest, String> {
+    Ok(parse_request(blob)?.0)
+}
+
+/// As [`classify_request`], but also returns the public key blob a userauth
+/// request names, so the caller can check it is OURS.
+///
+/// The key blob has to come out of the parser rather than be searched for in
+/// the raw bytes: username, service and session id are all attacker-chosen, so
+/// "our key appears somewhere in the blob" is a property an attacker can
+/// arrange while the actual key field names a different identity.
+fn parse_request(blob: &[u8]) -> Result<(SshSignRequest, Option<Vec<u8>>), String> {
     if blob.starts_with(SSHSIG_MAGIC) {
-        return classify_sshsig(&blob[SSHSIG_MAGIC.len()..]);
+        return Ok((classify_sshsig(&blob[SSHSIG_MAGIC.len()..])?, None));
     }
-    classify_userauth(blob)
+    let (req, key_blob) = classify_userauth(blob)?;
+    Ok((req, Some(key_blob)))
 }
 
 fn classify_sshsig(rest: &[u8]) -> Result<SshSignRequest, String> {
@@ -143,7 +155,7 @@ fn classify_sshsig(rest: &[u8]) -> Result<SshSignRequest, String> {
     })
 }
 
-fn classify_userauth(blob: &[u8]) -> Result<SshSignRequest, String> {
+fn classify_userauth(blob: &[u8]) -> Result<(SshSignRequest, Vec<u8>), String> {
     let (session_id, rest) = take_string(blob)?;
     if session_id.is_empty() {
         return Err("userauth blob has an empty session identifier".into());
@@ -172,11 +184,14 @@ fn classify_userauth(blob: &[u8]) -> Result<SshSignRequest, String> {
     if alg != ALG {
         return Err(format!("unsupported key algorithm '{alg}'"));
     }
-    let (_key_blob, rest) = take_string(rest)?;
+    let (key_blob, rest) = take_string(rest)?;
     if !rest.is_empty() {
         return Err("trailing bytes after userauth request".into());
     }
-    Ok(SshSignRequest::UserAuth { username, service })
+    Ok((
+        SshSignRequest::UserAuth { username, service },
+        key_blob.to_vec(),
+    ))
 }
 
 /// Sign an SSH payload, refusing anything whose framing we did not recognise.
@@ -191,17 +206,16 @@ pub fn sign_request(
 ) -> Result<(String, String), String> {
     // Classify BEFORE signing: an unparseable payload must never be signed,
     // whatever the UI did or did not display.
-    let request = classify_request(blob)?;
+    let (_request, named_key) = parse_request(blob)?;
 
     let pair = derive_domain_keypair(seed_phrase, SSH_DOMAIN, index)?;
 
-    // For userauth, the blob names the key it expects to be signed with.
-    // Refuse when that is not us: signing for a key we do not hold produces a
-    // useless signature at best, and at worst lets a caller use us to attack a
-    // different identity's session binding.
-    if let SshSignRequest::UserAuth { .. } = request {
-        let expected = public_key_blob(&pair.public().0);
-        if !contains_subslice(blob, &expected) {
+    // A userauth blob names the key it expects to be signed with. Compare
+    // against the PARSED field, exactly - not a substring search over the
+    // whole blob, which an attacker satisfies by putting our key blob in the
+    // username and someone else's in the key field.
+    if let Some(named_key) = named_key {
+        if named_key != public_key_blob(&pair.public().0) {
             return Err("this request is for a different SSH key than this device holds".into());
         }
     }
@@ -211,10 +225,6 @@ pub fn sign_request(
         public_key_line(seed_phrase, index, "")?,
         hex::encode(signature.0),
     ))
-}
-
-fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack.windows(needle.len()).any(|w| w == needle)
 }
 
 #[cfg(test)]
@@ -331,17 +341,19 @@ mod tests {
     }
 
     /// The key-ownership guard must look at the KEY FIELD, not anywhere in
-    /// the blob. A username is attacker-controlled, so if our public key blob
-    /// merely has to appear somewhere, an attacker embeds it there and has us
-    /// sign a request whose actual key field names a different identity.
+    /// the blob. The session identifier is attacker-influenced and carries
+    /// arbitrary bytes, so if our public key blob merely has to appear
+    /// somewhere, it can be embedded there while the actual key field names a
+    /// different identity.
     #[test]
     fn refuses_a_request_that_only_mentions_our_key_in_a_free_text_field() {
         let ours = public_key_blob(&pubkey(0));
-        // Someone else's key in the key field...
-        let mut b = ssh_string(b"session-id-bytes");
+        // The session identifier is a byte string with no UTF-8 constraint,
+        // so it is where raw key bytes can actually be smuggled - the username
+        // and service fields are text and would reject them.
+        let mut b = ssh_string(&ours);
         b.push(SSH_MSG_USERAUTH_REQUEST);
-        // ...and ours smuggled into the username.
-        b.extend_from_slice(&ssh_string(&ours));
+        b.extend_from_slice(&ssh_string(b"tommi"));
         b.extend_from_slice(&ssh_string(b"ssh-connection"));
         b.extend_from_slice(&ssh_string(b"publickey"));
         b.push(1);
