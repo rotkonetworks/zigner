@@ -1,0 +1,38 @@
+[package]
+name = "module_host-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+module_host = { path = ".." }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = { version = "0.10", default-features = false }
+
+[[bin]]
+name = "apply_patch"
+path = "fuzz_targets/apply_patch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_prefix"
+path = "fuzz_targets/parse_prefix.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verify_package"
+path = "fuzz_targets/verify_package.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

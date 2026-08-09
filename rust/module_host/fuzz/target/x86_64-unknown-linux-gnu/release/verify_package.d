@@ -1,0 +1,1 @@
+/steam/rotko/zigner/rust/module_host/fuzz/target/x86_64-unknown-linux-gnu/release/verify_package: /steam/rotko/zigner/rust/module_host/fuzz/fuzz_targets/verify_package.rs /steam/rotko/zigner/rust/module_host/src/lib.rs /steam/rotko/zigner/rust/module_host/src/manifest.rs

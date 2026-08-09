@@ -280,10 +280,15 @@ pub const MAX_MODULE_BYTES: usize = 16 * 1024 * 1024;
 /// Measured on a real module pair: 33,723 bytes against 2.0 MB for the whole
 /// module - seconds of QR scanning instead of half an hour.
 ///
+/// Public so a fuzz harness can reach it directly. It is the most exposed
+/// parser we have: the payload it consumes is NOT covered by the release
+/// signatures - the manifest commits only to the RESULT hash - so bsdiff and
+/// ruzstd are handed attacker-controlled bytes by design.
+///
 /// The `take` is the bomb defence: decompression stops at the cap rather than
 /// running to completion, so a swapped payload costs bounded work and then
 /// fails, instead of expanding without limit before the hash check catches it.
-fn apply_patch(base: &[u8], patch: &[u8]) -> Result<Vec<u8>, ManifestError> {
+pub fn apply_patch(base: &[u8], patch: &[u8]) -> Result<Vec<u8>, ManifestError> {
     use std::io::Read;
     let decoder = ruzstd::StreamingDecoder::new(patch).map_err(|_| ManifestError::PatchFailed)?;
     let mut raw = Vec::new();

@@ -110,3 +110,9 @@ rust/module_host/target/
 
 # separate website repo
 zigner.rotko.net/
+
+# cargo-fuzz build artifacts
+fuzz/target
+fuzz/corpus
+fuzz/artifacts
+fuzz/Cargo.lock
