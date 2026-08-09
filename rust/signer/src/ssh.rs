@@ -330,6 +330,29 @@ mod tests {
         }
     }
 
+    /// The key-ownership guard must look at the KEY FIELD, not anywhere in
+    /// the blob. A username is attacker-controlled, so if our public key blob
+    /// merely has to appear somewhere, an attacker embeds it there and has us
+    /// sign a request whose actual key field names a different identity.
+    #[test]
+    fn refuses_a_request_that_only_mentions_our_key_in_a_free_text_field() {
+        let ours = public_key_blob(&pubkey(0));
+        // Someone else's key in the key field...
+        let mut b = ssh_string(b"session-id-bytes");
+        b.push(SSH_MSG_USERAUTH_REQUEST);
+        // ...and ours smuggled into the username.
+        b.extend_from_slice(&ssh_string(&ours));
+        b.extend_from_slice(&ssh_string(b"ssh-connection"));
+        b.extend_from_slice(&ssh_string(b"publickey"));
+        b.push(1);
+        b.extend_from_slice(&ssh_string(ALG.as_bytes()));
+        b.extend_from_slice(&ssh_string(&public_key_blob(&pubkey(1))));
+
+        let err = sign_request(MNEMONIC, 0, &b)
+            .expect_err("must refuse: the key field names a different key");
+        assert!(err.contains("different SSH key"), "unexpected: {err}");
+    }
+
     #[test]
     fn refuses_a_userauth_request_naming_another_key() {
         let blob = userauth_blob(&pubkey(1), "tommi");

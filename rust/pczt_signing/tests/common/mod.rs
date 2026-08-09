@@ -451,6 +451,8 @@ pub fn redact_pczt_for_compact_signer(pczt: Pczt) -> Pczt {
             });
         })
         .finish()
+}
+
 /// Everything the delegation-display tests need from
 /// [`build_redacted_delegation`].
 pub struct DelegationFixture {
