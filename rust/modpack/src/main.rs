@@ -113,6 +113,7 @@ fn prepare(a: &Args) -> Result<(), String> {
         module_hash,
         kind,
         base_hash,
+        payload.len() as u32,
         version,
         min_kernel,
         &changelog,

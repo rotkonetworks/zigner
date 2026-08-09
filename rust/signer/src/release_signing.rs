@@ -119,6 +119,7 @@ mod tests {
             Sha256::digest(module).into(),
             manifest::PAYLOAD_FULL,
             [0u8; 32],
+            module.len() as u32,
             version,
             1,
             desc,

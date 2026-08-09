@@ -149,8 +149,8 @@ fn absurd_declared_lengths_are_refused() {
     for len in [u16::MAX, u16::MAX - 1, 0xFFFE, 0x8000] {
         let mut p = seed_package();
         // desc_len sits at magic(4) + ver(1) + mver(4) + mkver(4) + hash(32)
-        // + kind(1) + base_hash(32) = 78.
-        p[78..80].copy_from_slice(&len.to_le_bytes());
+        // + kind(1) + base_hash(32) + payload_len(4) = 82.
+        p[82..84].copy_from_slice(&len.to_le_bytes());
         let _ = parse_signing_prefix(&p);
         let _ = verify_package(&p, &vk, 1, 0);
     }

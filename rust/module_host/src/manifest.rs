@@ -4,7 +4,7 @@
 //! manifest (fixed order, little-endian):
 //!   magic "ZIGM" | manifest_version:u8=1 | module_version:u32 |
 //!   min_kernel_version:u32 | module_hash:[32] | payload_kind:u8 |
-//!   base_hash:[32] | desc_len:u16 | desc |
+//!   base_hash:[32] | payload_len:u32 | desc_len:u16 | desc |
 //!   sig_count:u8 | sig_count * ( key_index:u8 | sig:[64] )
 //!
 //! `module_hash` is always the sha256 of the RESULTING module. For
@@ -12,6 +12,12 @@
 //! payload is a delta and `base_hash` names the module it applies to - full
 //! modules are ~2.7 MB and take ~36 minutes over QR at the default playback
 //! speed, where a measured delta is tens of KB and takes seconds.
+//!
+//! `payload_len` pins the payload byte-exactly. Without it a package had no
+//! canonical encoding: zstd ignores bytes after its frame and bsdiff ignores
+//! bytes after its control stream, so arbitrary junk could be appended to a
+//! signed delta and it still verified. It also lets a wrong-sized payload be
+//! rejected BEFORE decompression rather than after.
 //!
 //! Signatures cover every manifest byte before sig_count over the
 //! domain-separated message "zigner-module-v1" || fields. 2-of-3 of the
@@ -66,6 +72,8 @@ pub enum ManifestError {
     BaseHashMismatch,
     /// The delta did not apply, decompress, or stayed within its size bound.
     PatchFailed,
+    /// The payload is not the length the signed manifest committed to.
+    PayloadLengthMismatch,
 }
 
 pub struct VerifiedModule<'a> {
@@ -86,6 +94,8 @@ pub struct ManifestFields {
     pub payload_kind: u8,
     /// The module a patch applies to; all-zero for a full payload.
     pub base_hash: [u8; 32],
+    /// Exact payload length. Signed, so the package has one encoding.
+    pub payload_len: u32,
     pub description: String,
 }
 
@@ -132,6 +142,7 @@ pub fn parse_signing_prefix(data: &[u8]) -> Result<(ManifestFields, usize), Mani
         return Err(ManifestError::UnknownPayloadKind(payload_kind));
     }
     let base_hash: [u8; 32] = data[need(32)?].try_into().unwrap();
+    let payload_len = u32::from_le_bytes(data[need(4)?].try_into().unwrap());
     let desc_len = u16::from_le_bytes(data[need(2)?].try_into().unwrap()) as usize;
     let desc = data[need(desc_len)?].to_vec();
 
@@ -142,6 +153,7 @@ pub fn parse_signing_prefix(data: &[u8]) -> Result<(ManifestFields, usize), Mani
             module_hash,
             payload_kind,
             base_hash,
+            payload_len,
             description: String::from_utf8_lossy(&desc).into_owned(),
         },
         at,
@@ -221,6 +233,13 @@ pub fn verify_package_with_base<'a>(
     }
     if valid < REQUIRED_SIGS {
         return Err(ManifestError::NotEnoughSignatures(valid));
+    }
+
+    // Length first: this is the cheap reject. A payload of the wrong size
+    // cannot be the one that was signed, and checking here means a hostile
+    // delta never reaches the decompressor at all.
+    if rest.len() as u64 != fields.payload_len as u64 {
+        return Err(ManifestError::PayloadLengthMismatch);
     }
 
     // Resolve the payload into the actual module before any hash check.
@@ -317,6 +336,7 @@ pub fn build_signing_prefix(
     module_hash: [u8; 32],
     payload_kind: u8,
     base_hash: [u8; 32],
+    payload_len: u32,
     module_version: u32,
     min_kernel_version: u32,
     description: &str,
@@ -329,6 +349,7 @@ pub fn build_signing_prefix(
     out.extend_from_slice(&module_hash);
     out.push(payload_kind);
     out.extend_from_slice(&base_hash);
+    out.extend_from_slice(&payload_len.to_le_bytes());
     // u16 length: the description carries the human-readable changelog the
     // device shows on the confirm screen, and it is INSIDE the signed bytes -
     // so what the user reads is what the release keys attested to. A u8 would
@@ -385,6 +406,7 @@ pub fn build_package(
         module_hash,
         payload_kind,
         base_hash,
+        payload.len() as u32,
         module_version,
         min_kernel_version,
         description,
