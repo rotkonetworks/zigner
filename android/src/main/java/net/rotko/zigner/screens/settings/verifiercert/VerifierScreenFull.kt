@@ -16,6 +16,8 @@ fun VerifierScreenFull(
 	verifierDetails: VerifierDetailsModel,
 	wipe: Callback,
 	onBack: Callback,
+	developerOptionsRevealed: Boolean = false,
+	onRevealDeveloperOptions: Callback = {},
 ) {
 	val bottomSheetState =
 		rememberModalBottomSheetState(
@@ -40,6 +42,8 @@ fun VerifierScreenFull(
 				verifierDetails = verifierDetails,
 				onBack = onBack,
 				onRemove = { scope.launch { bottomSheetState.show() } },
+				developerOptionsRevealed = developerOptionsRevealed,
+				onRevealDeveloperOptions = onRevealDeveloperOptions,
 			)
 		},
 	)

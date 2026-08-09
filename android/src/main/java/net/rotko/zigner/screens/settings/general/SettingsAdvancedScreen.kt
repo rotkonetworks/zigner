@@ -25,6 +25,7 @@ internal fun SettingsAdvancedScreen(
 	onWipeData: Callback,
 	isOnlineModeEnabled: Boolean,
 	wasOnlineModeEverEnabled: Boolean,
+	developerOptionsRevealed: Boolean,
 ) {
 	Column(
 		modifier = Modifier
@@ -48,18 +49,26 @@ internal fun SettingsAdvancedScreen(
 				onClick = onVerifierCertificate,
 			)
 
-			SettingsToggleElement(
-				name = "Online Mode",
-				description = if (wasOnlineModeEverEnabled && !isOnlineModeEnabled) {
-					"Previously used in online mode"
-				} else {
-					"Allow use with WiFi/Bluetooth enabled"
-				},
-				icon = Icons.Outlined.Wifi,
-				isChecked = isOnlineModeEnabled,
-				showWarning = wasOnlineModeEverEnabled && !isOnlineModeEnabled,
-				onClick = onOnlineModeToggle,
-			)
+			// Online Mode is a hidden developer option. It only appears after the user
+			// deliberately unlocks developer options via the 5-tap gesture on the
+			// verifier certificate screen. Until then, the app is fully air-gapped and
+			// this toggle is not rendered at all. Revealing the option does NOT enable
+			// online mode - the toggle still defaults off and turning it on requires the
+			// explicit confirmation + authentication flow below.
+			if (developerOptionsRevealed) {
+				SettingsToggleElement(
+					name = "Online Mode",
+					description = if (wasOnlineModeEverEnabled && !isOnlineModeEnabled) {
+						"Previously used in online mode"
+					} else {
+						"Allow use with WiFi/Bluetooth enabled"
+					},
+					icon = Icons.Outlined.Wifi,
+					isChecked = isOnlineModeEnabled,
+					showWarning = wasOnlineModeEverEnabled && !isOnlineModeEnabled,
+					onClick = onOnlineModeToggle,
+				)
+			}
 
 			SettingsElement(
 				name = stringResource(R.string.settings_wipe_data),

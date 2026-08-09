@@ -144,6 +144,15 @@ class SettingsGeneralViewModel: ViewModel() {
 		preferencesRepository.lightThemeEnabled
 			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+	/**
+	 * Whether developer options have been revealed via the hidden 5-tap gesture on
+	 * the verifier certificate screen. When false (the default), the online mode
+	 * toggle is not shown at all and the app stays fully air-gapped.
+	 */
+	val developerOptionsRevealed: StateFlow<Boolean> =
+		preferencesRepository.developerOptionsRevealed
+			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
 	fun toggleLightTheme() {
 		viewModelScope.launch {
 			preferencesRepository.setLightThemeEnabled(!lightThemeEnabled.value)

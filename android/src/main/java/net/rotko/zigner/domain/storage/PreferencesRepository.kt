@@ -22,6 +22,7 @@ class PreferencesRepository(private val context: Context) {
 	private val onlineModeEnabledKey = booleanPreferencesKey("online_mode_enabled")
 	private val onlineModeWasEverEnabledKey = booleanPreferencesKey("online_mode_was_ever_enabled")
 	private val lightThemeEnabledKey = booleanPreferencesKey("light_theme_enabled")
+	private val developerOptionsRevealedKey = booleanPreferencesKey("developer_options_revealed")
 
 	val networksFilter = context.dataStore.data
 		.map { preferences ->
@@ -103,5 +104,25 @@ class PreferencesRepository(private val context: Context) {
 
 	suspend fun setLightThemeEnabled(enabled: Boolean) {
 		context.dataStore.edit { settings -> settings[lightThemeEnabledKey] = enabled }
+	}
+
+	// Developer options gate. Default off. The online mode toggle is hidden from the
+	// Advanced Settings screen until this flag is set. Setting it only REVEALS the
+	// option - it does not enable online mode. Online mode stays off and still
+	// requires the explicit confirmation + authentication flow to turn on.
+	// Revealed by tapping the verifier certificate value 5 times (Android
+	// developer-mode / bootloader-unlock style gesture on a screen normal users
+	// never touch).
+	val developerOptionsRevealed: Flow<Boolean> = context.dataStore.data
+		.map { preferences -> preferences[developerOptionsRevealedKey] ?: false }
+
+	suspend fun isDeveloperOptionsRevealed(): Boolean {
+		return context.dataStore.data.first()[developerOptionsRevealedKey] ?: false
+	}
+
+	suspend fun setDeveloperOptionsRevealed(revealed: Boolean) {
+		context.dataStore.edit { settings ->
+			settings[developerOptionsRevealedKey] = revealed
+		}
 	}
 }

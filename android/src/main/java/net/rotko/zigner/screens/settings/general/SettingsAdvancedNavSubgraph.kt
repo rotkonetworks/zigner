@@ -30,6 +30,7 @@ internal fun SettingsAdvancedNavSubgraph(
 
 	val onlineModeEnabled = vm.onlineModeEnabled.collectAsStateWithLifecycle()
 	val onlineModeWasEverEnabled = vm.onlineModeWasEverEnabled.collectAsStateWithLifecycle()
+	val developerOptionsRevealed = vm.developerOptionsRevealed.collectAsStateWithLifecycle()
 
 	val menuNavController = rememberNavController()
 
@@ -47,6 +48,7 @@ internal fun SettingsAdvancedNavSubgraph(
 			onWipeData = { menuNavController.navigate(SettingsAdvancedMenu.wipe_factory) },
 			isOnlineModeEnabled = onlineModeEnabled.value,
 			wasOnlineModeEverEnabled = onlineModeWasEverEnabled.value,
+			developerOptionsRevealed = developerOptionsRevealed.value,
 		)
 	}
 

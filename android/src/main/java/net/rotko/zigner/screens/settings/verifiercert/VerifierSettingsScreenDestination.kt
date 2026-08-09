@@ -1,6 +1,7 @@
 package net.rotko.zigner.screens.settings.verifiercert
 
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -25,6 +26,8 @@ fun NavGraphBuilder.verifierSettingsDestination(
 			}.handleErrorAppState(coreNavController)
 		} ?: return@composable
 
+		val developerOptionsRevealed = vm.developerOptionsRevealed.collectAsStateWithLifecycle()
+
 		VerifierScreenFull(
 			verifierDetails = model,
 			wipe = {
@@ -37,6 +40,8 @@ fun NavGraphBuilder.verifierSettingsDestination(
 				}
 			},
 			onBack = coreNavController::popBackStack,
+			developerOptionsRevealed = developerOptionsRevealed.value,
+			onRevealDeveloperOptions = { vm.revealDeveloperOptions() },
 		)
 	}
 }
