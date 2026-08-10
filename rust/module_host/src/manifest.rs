@@ -288,7 +288,7 @@ pub fn verify_package_with_base<'a>(
 /// Largest module we will reconstruct from a delta.
 ///
 /// This bound is load-bearing, not hygiene. The signatures cover the manifest
-/// - and therefore the RESULT hash - but NOT the payload bytes. So a valid
+/// (and therefore the RESULT hash) but NOT the payload bytes. So a valid
 /// signed manifest can be paired with a swapped payload, and the mismatch is
 /// only caught by the hash check at the end. Without a cap, a decompression
 /// bomb would be expanded in full before we ever got there.

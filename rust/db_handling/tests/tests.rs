@@ -3,6 +3,7 @@ use db_handling::cold_default::populate_all_network_specs;
 use pretty_assertions::{assert_eq, assert_ne};
 use sled::{Batch, Tree};
 use sp_core::ecdsa::Public as EcdsaPublic;
+use sp_core::ed25519::Public as Ed25519Public;
 use sp_core::sr25519::Public;
 use sp_core::H256;
 use sp_runtime::MultiSigner;
@@ -846,9 +847,9 @@ fn display_general_verifier_properly() {
     let verifier = get_general_verifier(&db).unwrap();
     let expected_verifier = Verifier {
         v: Some(VerifierValue::Standard {
-            m: MultiSigner::Sr25519(
-                Public::try_from(
-                    hex::decode("c46a22b9da19540a77cbde23197e5fd90485c72b4ecf3c599ecca6998f39bd57")
+            m: MultiSigner::Ed25519(
+                Ed25519Public::try_from(
+                    hex::decode("5fbcaabe9b00d23a2bebb6370f1acba30e61854ece40200df6f323d6a21ac784")
                         .unwrap()
                         .as_ref(),
                 )
@@ -1016,10 +1017,10 @@ fn history_with_identities() {
     let element2 = Event::GeneralVerifierSet {
         verifier: Verifier {
             v: Some(VerifierValue::Standard {
-                m: MultiSigner::Sr25519(
-                    Public::try_from(
+                m: MultiSigner::Ed25519(
+                    Ed25519Public::try_from(
                         hex::decode(
-                            "c46a22b9da19540a77cbde23197e5fd90485c72b4ecf3c599ecca6998f39bd57",
+                            "5fbcaabe9b00d23a2bebb6370f1acba30e61854ece40200df6f323d6a21ac784",
                         )
                         .unwrap()
                         .as_ref(),

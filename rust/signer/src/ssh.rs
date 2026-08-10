@@ -303,7 +303,7 @@ mod tests {
                 assert_eq!(username, "tommi");
                 assert_eq!(service, "ssh-connection");
             }
-            other => panic!("expected UserAuth, got {other:?}"),
+            other => panic!("{}", format!("expected UserAuth, got {other:?}")),
         }
     }
 
@@ -319,7 +319,7 @@ mod tests {
                 assert_eq!(hash_algorithm, "sha512");
                 assert_eq!(message_hash_hex.len(), 128);
             }
-            other => panic!("expected SshSig, got {other:?}"),
+            other => panic!("{}", format!("expected SshSig, got {other:?}")),
         }
     }
 
@@ -335,7 +335,8 @@ mod tests {
         ] {
             assert!(
                 sign_request(MNEMONIC, 0, &junk).is_err(),
-                "signed an unframed payload: {junk:?}"
+                "{}",
+                format!("signed an unframed payload: {junk:?}")
             );
         }
     }
@@ -362,14 +363,22 @@ mod tests {
 
         let err = sign_request(MNEMONIC, 0, &b)
             .expect_err("must refuse: the key field names a different key");
-        assert!(err.contains("different SSH key"), "unexpected: {err}");
+        assert!(
+            err.contains("different SSH key"),
+            "{}",
+            format!("unexpected: {err}")
+        );
     }
 
     #[test]
     fn refuses_a_userauth_request_naming_another_key() {
         let blob = userauth_blob(&pubkey(1), "tommi");
         let err = sign_request(MNEMONIC, 0, &blob).expect_err("must refuse another key's request");
-        assert!(err.contains("different SSH key"), "unexpected: {err}");
+        assert!(
+            err.contains("different SSH key"),
+            "{}",
+            format!("unexpected: {err}")
+        );
     }
 
     #[test]

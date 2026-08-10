@@ -35,6 +35,7 @@ mod ffi_types;
 pub mod frost_backup;
 pub mod frost_multisig;
 pub mod release_signing;
+pub use release_signing::ReleaseSigningRequest;
 pub mod ssh;
 
 use crate::ffi_types::*;
@@ -4717,6 +4718,32 @@ pub struct ModulePackageInfo {
 
 /// Verify a module package against the kernel trust anchors. Fails closed
 /// while the release keys are unprovisioned placeholders.
+/// This device's release public key, hex. Collected from three devices to
+/// form the 2-of-3 set baked into RELEASE_KEY_BYTES.
+pub fn release_signing_pubkey(seed_phrase: &str, index: u32) -> Result<String, ErrorDisplayed> {
+    release_signing::public_key_hex(seed_phrase, index).map_err(|s| ErrorDisplayed::Str { s })
+}
+
+/// Parse a scanned manifest prefix for the approve screen. Refuses anything
+/// that is not exactly a well-formed manifest, so a release key cannot be
+/// turned into a general signing oracle by whatever is driving the QR.
+pub fn release_classify_request(prefix: &[u8]) -> Result<ReleaseSigningRequest, ErrorDisplayed> {
+    release_signing::classify_request(prefix).map_err(|s| ErrorDisplayed::Str { s })
+}
+
+/// Sign a manifest prefix. The signed message is built on-device as
+/// "zigner-module-v1" || prefix - never accepted pre-domained from the host.
+/// Returns the signature hex; the caller shows it as a QR.
+pub fn release_sign_request(
+    seed_phrase: &str,
+    index: u32,
+    prefix: &[u8],
+) -> Result<String, ErrorDisplayed> {
+    release_signing::sign_request(seed_phrase, index, prefix)
+        .map(|(_pubkey, sig)| sig)
+        .map_err(|s| ErrorDisplayed::Str { s })
+}
+
 /// Version of the module baked into the APK, so the slot store can refuse to
 /// let a stale installed slot shadow a newer module shipped by an APK update.
 pub fn baked_module_version() -> u32 {
