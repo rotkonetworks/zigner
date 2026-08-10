@@ -135,3 +135,47 @@ remains the mechanism for the NEXT protocol change, not this one.
 5. Interop test extension: run the interop flow with the module
    executing under wasmi instead of native - same test, same
    assertions.
+
+## Freshness: why there is no expiry field
+
+Signing means a hostile distributor cannot forge a package, and anti-rollback
+means it cannot serve an older one. What remains is the **freeze attack**: it
+can simply withhold a fix and keep a device on a vulnerable module forever.
+Nothing in the format detects that, and adding a timestamp was considered
+while `manifest_version` was still cheap to change. It was rejected.
+
+**The device has no clock it can trust.** It is airgapped by construction, so
+it never syncs, and the Android clock is user-settable. There is no time
+source anywhere in the domain layer. An expiry field would be a value the
+verifier cannot evaluate.
+
+**Enforcing it would brick devices on a date.** `loadActiveVerified()`
+re-verifies the active slot on every boot. An expiry checked there turns
+"this release got old" into "signing stops working", auto-reverting to the
+baked module - a scheduled outage, triggered by a clock we already said we
+cannot trust, on devices whose whole purpose is to be available when needed.
+An unopened device would expire on the shelf.
+
+**A signed freshness statement needs an online key.** The TUF answer is a
+timestamp role: a small attestation, re-signed frequently, saying "as of
+date D the newest module is version N". Frequent re-signing is incompatible
+with three cold keys in three locations, so it needs a fourth key that is
+online - a new trust anchor, permanently exposed, to defend against a threat
+the release keys already cover the serious half of. That trade is backwards.
+
+**A dedicated display-only field earns nothing.** A timestamp shown but never
+enforced would give the human something to compare - but `desc` is free text
+inside the signed region, so a release can simply say when it was cut. The
+changelog already carries it.
+
+So freshness is handled operationally, not cryptographically:
+
+- publish the current version and module hash where anyone can check them
+- show the installed module version on-device
+- a human comparing two numbers detects a freeze, which is the same detection
+  a timestamp field would have provided, without a clock, a fourth key, or a
+  verifier that can fail on a calendar
+
+This is a deliberate decision recorded so it is not revisited by default. It
+would change if the device ever gained a trusted time source, or if releases
+became frequent enough that manual comparison stopped being realistic.
