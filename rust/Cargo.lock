@@ -4281,6 +4281,7 @@ version = "0.1.0"
 dependencies = [
  "bsdiff",
  "ed25519-dalek",
+ "getrandom 0.2.15",
  "hex",
  "module_host",
  "sha2 0.10.8",

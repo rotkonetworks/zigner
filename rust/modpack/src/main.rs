@@ -261,8 +261,197 @@ fn verify(a: &Args) -> Result<(), String> {
     Ok(())
 }
 
+/// sign: sign a manifest prefix with a raw ed25519 release key held as a FILE.
+///
+/// This is the software-key path, for the slot that is not a device - e.g. the
+/// GitHub/CI key (slot 0), decrypted from its age file at release time. Device
+/// holders instead sign on their zigner (`release_sign_request`), which derives
+/// the key from the seed and never exports it. Both produce the SAME bytes: a
+/// signature over `manifest::signing_message(prefix)` = DOMAIN || prefix, so a
+/// file-key signature and a device signature are interchangeable in a package.
+///
+/// Output is one line `INDEX:SIGHEX`, ready to paste into `modpack assemble
+/// --sig INDEX:SIGHEX`. The pubkey is printed to stderr for the operator to
+/// eyeball against the pinned slot.
+fn sign(a: &Args) -> Result<(), String> {
+    use ed25519_dalek::{Signer, SigningKey, Verifier};
+
+    let slot: u8 = a
+        .req("--slot")?
+        .parse()
+        .map_err(|_| "--slot must be 0, 1 or 2".to_string())?;
+    if slot > 2 {
+        return Err("--slot must be 0, 1 or 2".into());
+    }
+    let prefix = read(&a.req("--prefix")?)?;
+
+    // Parse with the real parser before signing - never sign bytes we cannot
+    // classify, and reject trailing bytes (display-one, sign-another). Mirrors
+    // the device's `classify_request`.
+    let (_, consumed) = manifest::parse_signing_prefix(&prefix)
+        .map_err(|e| format!("not a module manifest: {e:?}"))?;
+    if consumed != prefix.len() {
+        return Err(format!(
+            "trailing bytes after the manifest: signed region is {consumed}, got {}",
+            prefix.len()
+        ));
+    }
+
+    let raw = read(&a.req("--key")?)?;
+    let key_bytes: [u8; 32] = raw.as_slice().try_into().map_err(|_| {
+        format!(
+            "--key must be a raw 32-byte ed25519 secret key (as `keygen` writes); got {} bytes",
+            raw.len()
+        )
+    })?;
+    let sk = SigningKey::from_bytes(&key_bytes);
+
+    let msg = manifest::signing_message(&prefix);
+    let sig = sk.sign(&msg);
+    // The signature we emit must verify under our own key, or assemble/verify
+    // will reject it later for no visible reason.
+    sk.verifying_key()
+        .verify(&msg, &sig)
+        .map_err(|e| format!("self-verify failed (bad key?): {e}"))?;
+
+    eprintln!(
+        "signed slot {slot} with release pubkey {}",
+        hex::encode(sk.verifying_key().to_bytes())
+    );
+    println!("{slot}:{}", hex::encode(sig.to_bytes()));
+    Ok(())
+}
+
+/// keygen: mint independent ed25519 release keypairs, OFFLINE.
+///
+/// `--count` defaults to 3 (a full all-software trust root). For the zigner
+/// model - two device-held keys plus one GitHub/CI key - mint only the software
+/// key with `--count 1`; the two device keys come from `release_signing_pubkey`
+/// on each zigner and are never files.
+///
+/// This is the firmware trust root. The device pins all three verifying keys
+/// (`module_host` `release_keys: [VerifyingKey; 3]`) and accepts a module only
+/// if 2 of the 3 signed it - the same 2-of-3 the `prepare`/`assemble` split
+/// enforces. Run this ONCE, on an air-gapped machine (see CEREMONY.md), then
+/// never again for the life of the trust root.
+///
+/// Not FROST: three separate keys, three separate holders, any two of which can
+/// authorise a release. That is deliberate - it is the same custody the rest of
+/// this tool assumes (no process ever holds two keys).
+///
+/// Output: three raw 32-byte secret keys written 0600 (encrypt with `age` to
+/// their holders and shred the raw, still offline), plus the three verifying
+/// keys printed as hex and as a ready-to-paste `[VerifyingKey; 3]` snippet.
+fn keygen(a: &Args) -> Result<(), String> {
+    use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+
+    let out_dir = a.opt("--out-dir").unwrap_or_else(|| "release-keys".into());
+    // Fail closed rather than clobber an existing trust root.
+    if std::path::Path::new(&out_dir).exists() {
+        return Err(format!(
+            "{out_dir} already exists - refusing to overwrite a trust root. \
+             Pick a fresh --out-dir or move the old one aside."
+        ));
+    }
+    std::fs::create_dir_all(&out_dir).map_err(|e| format!("mkdir {out_dir}: {e}"))?;
+
+    // Slot names are advisory (the device only cares about position 0/1/2), but
+    // labelling the files by intended holder makes the ceremony auditable.
+    // Default all three; --count 1 mints only the software (GitHub/CI) key when
+    // the other two slots are device-derived (release_signing_pubkey).
+    let count: usize = match a.opt("--count") {
+        None => 3,
+        Some(s) => s
+            .parse::<usize>()
+            .ok()
+            .filter(|n| (1..=3).contains(n))
+            .ok_or("--count must be 1, 2 or 3")?,
+    };
+    let holders = ["ci", "manager", "backup"];
+
+    let mut sks: Vec<SigningKey> = Vec::with_capacity(count);
+    let mut vks: Vec<VerifyingKey> = Vec::with_capacity(count);
+    for _ in 0..count {
+        let mut seed = [0u8; 32];
+        getrandom::getrandom(&mut seed).map_err(|e| format!("OS entropy: {e}"))?;
+        let sk = SigningKey::from_bytes(&seed);
+        seed.fill(0);
+        vks.push(sk.verifying_key());
+        sks.push(sk);
+    }
+
+    // Prove every generated key signs and verifies under the real verifier
+    // BEFORE we trust it or the operator wipes anything. (Works for any count;
+    // the 2-of-3 property is the pair of any two of these, exercised by the
+    // sign/assemble/verify path, not something one key can demonstrate alone.)
+    let msg = b"modpack-keygen-selftest-v1";
+    for i in 0..count {
+        let s = sks[i].sign(msg);
+        vks[i]
+            .verify(msg, &s)
+            .map_err(|e| format!("selftest: slot {i} sign/verify failed: {e}"))?;
+    }
+
+    for (i, sk) in sks.iter().enumerate() {
+        let path = format!("{out_dir}/slot{i}-{}.sk", holders[i]);
+        write(&path, &sk.to_bytes())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| format!("chmod 0600 {path}: {e}"))?;
+        }
+    }
+
+    println!("Self-test PASSED ({count} key(s) sign and verify).\n");
+    println!("Wrote {count} raw secret key(s) (mode 0600) to {out_dir}/:");
+    for i in 0..count {
+        println!("  slot{i}-{}.sk", holders[i]);
+    }
+    println!("\nRelease VERIFYING keys - pin these (they are public, safe to copy):");
+    for (i, vk) in vks.iter().enumerate() {
+        println!("  slot {i} ({}):  {}", holders[i], hex::encode(vk.to_bytes()));
+    }
+    if count == 3 {
+        println!("\nBake into RELEASE_KEY_BYTES (module_host) - or use the zafu.pro ceremony page:");
+        println!("  release_keys: [");
+        for vk in &vks {
+            println!("    VerifyingKey::from_bytes(&hex!(\"{}\")).unwrap(),", hex::encode(vk.to_bytes()));
+        }
+        println!("  ],");
+    } else {
+        println!(
+            "\nThis is {count} of the 3 slots. The remaining {} come from each zigner",
+            3 - count
+        );
+        println!("(Release key screen -> slot:hex). Collect all 3 pubkeys in the zafu.pro");
+        println!("ceremony page, which emits the RELEASE_KEY_BYTES constant with slots ordered.");
+    }
+    println!("\nStill OFFLINE, per holder: age -r <recipient> -o slotN-*.sk.age slotN-*.sk");
+    println!("Then shred the raw:        shred -u {out_dir}/*.sk");
+    if count == 1 {
+        println!("Distribute: slot0 -> CI (commit the .age, age identity -> GitHub secret).");
+    } else {
+        println!("Distribute: slot0 -> CI (age + GitHub secret), slot1 -> you, slot2 -> cold backup.");
+    }
+    Ok(())
+}
+
 const USAGE: &str = "\
 modpack - zigner protocol-module release tooling
+
+  keygen    [--out-dir release-keys] [--count 3]
+
+            OFFLINE, ONCE. Mints independent ed25519 release keys the device
+            pins (2-of-3). --count 1 mints only the software (GitHub/CI) key
+            when the other two slots are zigner-derived. Prints the verifying
+            keys to pin; writes secret keys 0600 to age-encrypt. See CEREMONY.md.
+
+  sign      --slot N --key slotN.sk --prefix prefix.bin
+
+            Sign a prefix with a FILE-held release key (the GitHub/CI slot).
+            Device holders sign on their zigner instead. Prints INDEX:SIGHEX
+            for `assemble`. Same signed bytes as the device, interchangeable.
 
   prepare   --module M.wasm --version N --changelog NOTES.md
             [--base BAKED.wasm] [--min-kernel N]
@@ -290,6 +479,8 @@ fn main() -> ExitCode {
     };
     let args = Args(argv);
     let r = match cmd.as_str() {
+        "keygen" => keygen(&args),
+        "sign" => sign(&args),
         "prepare" => prepare(&args),
         "assemble" => assemble(&args),
         "verify" => verify(&args),
