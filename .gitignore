@@ -121,4 +121,3 @@ fuzz/Cargo.lock
 rust/*/fuzz/target
 rust/*/fuzz/corpus
 rust/*/fuzz/artifacts
-rust/*/fuzz/Cargo.lock
