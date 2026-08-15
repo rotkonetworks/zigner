@@ -633,7 +633,12 @@ mod tests {
         assert_eq!(req.address_index, 7);
 
         // absent: defaults to 0
-        assert_eq!(CosmosSignRequest::from_qr_hex(&build(&[])).unwrap().address_index, 0);
+        assert_eq!(
+            CosmosSignRequest::from_qr_hex(&build(&[]))
+                .unwrap()
+                .address_index,
+            0
+        );
 
         // malformed: any trailing length other than 0 or 4 is rejected
         assert!(CosmosSignRequest::from_qr_hex(&build(&[1, 2, 3])).is_err());
@@ -646,7 +651,10 @@ mod tests {
             {"type":"cosmos-sdk/MsgSend","value":{"from_address":"noble1src","to_address":"noble1dst","amount":[]}},
             {"type":"cosmos-sdk/MsgTransfer","value":{"sender":"noble1src","receiver":"osmo1dst"}}
         ],"fee":{"amount":[],"gas":"0"},"memo":"","account_number":"0","sequence":"0"}"#;
-        assert_eq!(extract_signers(doc).unwrap(), vec!["noble1src", "noble1src"]);
+        assert_eq!(
+            extract_signers(doc).unwrap(),
+            vec!["noble1src", "noble1src"]
+        );
 
         // a message with no recognizable signer field contributes nothing
         let blind = br#"{"msgs":[{"type":"wasm/MsgExecuteContract","value":{"contract":"noble1c","msg":{}}}]}"#;

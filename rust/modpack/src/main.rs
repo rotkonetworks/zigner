@@ -172,7 +172,10 @@ fn assemble(a: &Args) -> Result<(), String> {
             .try_into()
             .map_err(|_| "a signature must be 64 bytes".to_string())?;
         if sigs.contains(&raw) {
-            return Err("the same signature was given twice - two signatures from one key are not 2-of-3".into());
+            return Err(
+                "the same signature was given twice - two signatures from one key are not 2-of-3"
+                    .into(),
+            );
         }
         sigs.push(raw);
     }
@@ -192,7 +195,9 @@ fn assemble(a: &Args) -> Result<(), String> {
         pkg.len(),
         sigs.len()
     );
-    println!("\nVerify before shipping:  modpack verify --package {out} --key HEX --key HEX --key HEX");
+    println!(
+        "\nVerify before shipping:  modpack verify --package {out} --key HEX --key HEX --key HEX"
+    );
     Ok(())
 }
 
@@ -396,13 +401,22 @@ fn keygen(a: &Args) -> Result<(), String> {
     }
     println!("\nRelease VERIFYING keys - pin these (they are public, safe to copy):");
     for (i, vk) in vks.iter().enumerate() {
-        println!("  slot {i} ({}):  {}", holders[i], hex::encode(vk.to_bytes()));
+        println!(
+            "  slot {i} ({}):  {}",
+            holders[i],
+            hex::encode(vk.to_bytes())
+        );
     }
     if count == 3 {
-        println!("\nBake into RELEASE_KEY_BYTES (module_host) - or use the zafu.pro ceremony page:");
+        println!(
+            "\nBake into RELEASE_KEY_BYTES (module_host) - or use the zafu.pro ceremony page:"
+        );
         println!("  release_keys: [");
         for vk in &vks {
-            println!("    VerifyingKey::from_bytes(&hex!(\"{}\")).unwrap(),", hex::encode(vk.to_bytes()));
+            println!(
+                "    VerifyingKey::from_bytes(&hex!(\"{}\")).unwrap(),",
+                hex::encode(vk.to_bytes())
+            );
         }
         println!("  ],");
     } else {
@@ -418,7 +432,9 @@ fn keygen(a: &Args) -> Result<(), String> {
     if count == 1 {
         println!("Distribute: slot0 -> CI (commit the .age, age identity -> GitHub secret).");
     } else {
-        println!("Distribute: slot0 -> CI (age + GitHub secret), slot1 -> you, slot2 -> cold backup.");
+        println!(
+            "Distribute: slot0 -> CI (age + GitHub secret), slot1 -> you, slot2 -> cold backup."
+        );
     }
     Ok(())
 }

@@ -56,13 +56,7 @@ fn same_key_twice_is_rejected() {
 #[test]
 fn rollback_is_rejected() {
     let (sk, vk) = keys();
-    let pkg = build_full_package(
-        b"wasm",
-        5,
-        1,
-        "m",
-        &[sk[0].clone(), sk[1].clone()],
-    );
+    let pkg = build_full_package(b"wasm", 5, 1, "m", &[sk[0].clone(), sk[1].clone()]);
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 5),
         Err(ManifestError::Rollback { .. })
@@ -72,13 +66,7 @@ fn rollback_is_rejected() {
 #[test]
 fn tampered_module_is_rejected() {
     let (sk, vk) = keys();
-    let mut pkg = build_full_package(
-        b"wasm",
-        5,
-        1,
-        "m",
-        &[sk[0].clone(), sk[1].clone()],
-    );
+    let mut pkg = build_full_package(b"wasm", 5, 1, "m", &[sk[0].clone(), sk[1].clone()]);
     let n = pkg.len();
     pkg[n - 1] ^= 1;
     assert!(matches!(
@@ -90,13 +78,7 @@ fn tampered_module_is_rejected() {
 #[test]
 fn tampered_manifest_field_is_rejected() {
     let (sk, vk) = keys();
-    let mut pkg = build_full_package(
-        b"wasm",
-        5,
-        3,
-        "m",
-        &[sk[0].clone(), sk[1].clone()],
-    );
+    let mut pkg = build_full_package(b"wasm", 5, 3, "m", &[sk[0].clone(), sk[1].clone()]);
     pkg[9] = 1; // lower min_kernel_version post-signing
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 0),
@@ -118,13 +100,7 @@ fn sha(b: &[u8]) -> [u8; 32] {
 #[test]
 fn v1_manifests_are_refused() {
     let (sk, vk) = keys();
-    let mut pkg = build_full_package(
-        b"wasm",
-        5,
-        1,
-        "m",
-        &[sk[0].clone(), sk[2].clone()],
-    );
+    let mut pkg = build_full_package(b"wasm", 5, 1, "m", &[sk[0].clone(), sk[2].clone()]);
     pkg[4] = 1; // manifest_version
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 0),
@@ -284,13 +260,7 @@ fn a_corrupt_delta_fails_cleanly() {
 #[test]
 fn tampering_with_the_payload_fails_the_result_hash() {
     let (sk, vk) = keys();
-    let mut pkg = build_full_package(
-        b"wasm",
-        5,
-        1,
-        "m",
-        &[sk[0].clone(), sk[2].clone()],
-    );
+    let mut pkg = build_full_package(b"wasm", 5, 1, "m", &[sk[0].clone(), sk[2].clone()]);
     let n = pkg.len();
     pkg[n - 1] ^= 0xff;
     assert!(matches!(

@@ -259,10 +259,7 @@ mod tests {
         let (_, sig_c) = sign_request(SEED_C, &p).unwrap();
         let package = manifest::assemble_package(
             &p,
-            &[
-                rogue.0,
-                hex::decode(sig_c).unwrap().try_into().unwrap(),
-            ],
+            &[rogue.0, hex::decode(sig_c).unwrap().try_into().unwrap()],
             module,
         );
 

@@ -425,7 +425,10 @@ pub fn build_package(
         description,
     );
     let msg = signing_message(&prefix);
-    let sigs: Vec<[u8; 64]> = signers.iter().map(|key| key.sign(&msg).to_bytes()).collect();
+    let sigs: Vec<[u8; 64]> = signers
+        .iter()
+        .map(|key| key.sign(&msg).to_bytes())
+        .collect();
     assemble_package(&prefix, &sigs, payload)
 }
 

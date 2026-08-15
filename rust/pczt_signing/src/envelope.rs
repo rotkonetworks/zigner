@@ -539,7 +539,11 @@ fn read_contributions(r: &[u8]) -> Result<(Vec<SignatureContribution>, usize), E
         return Err(EnvelopeError::Truncated("sig count"));
     }
     let sig_count = u16::from_le_bytes([r[0], r[1]]) as usize;
-    let mut out = Vec::with_capacity(sig_count);
+    // Reserve against what the buffer could actually hold, not against a
+    // declared count: each contribution costs 1 + 4 + 64 bytes, so a payload
+    // claiming u16::MAX with nothing behind it would otherwise reserve for
+    // 65,535 entries before the first bounds check ran.
+    let mut out = Vec::with_capacity(sig_count.min(r.len() / 69 + 1));
     let mut pos = 2;
     for _ in 0..sig_count {
         if r.len() < pos + 1 + 4 + 64 {

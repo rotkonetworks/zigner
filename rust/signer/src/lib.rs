@@ -264,14 +264,25 @@ fn backend_action(
 fn init_navigation(dbname: &str, seed_names: Vec<String>) -> Result<(), ErrorDisplayed> {
     let val = Some(sled::open(dbname).map_err(|e| ErrorDisplayed::from(e.to_string()))?);
 
-    *DB.write().unwrap() = val;
+    let mut guard = match DB.write() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    *guard = val;
     init_logging("Vault".to_string());
 
     // Bootstrap the anchor-verifier registry with the built-in default
     // on first run. Idempotent: skipped if the tree already has the
     // default key, and skipped entirely if the user has populated their
     // own verifiers (we don't override their explicit configuration).
-    if let Some(database) = DB.read().unwrap().as_ref() {
+    // A poisoned lock means some earlier call panicked while holding it.
+    // unwrap() here would turn that into every subsequent call panicking
+    // too - one transient failure disabling the device until restart.
+    let guard = match DB.read() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(database) = guard.as_ref() {
         if constants::ROTKO_ZCASH_VERIFIER != [0u8; 32] {
             let _ = db_handling::anchor_verifiers::bootstrap_default(
                 database,
@@ -1161,11 +1172,12 @@ fn export_cosmos_accounts(
     // signable on this device at the matching address_index and recoverable
     // from the seed. This is the rotation backbone - see the note in
     // db_handling::cosmos::derive_cosmos_account_xpub.
-    let xpub = derive_cosmos_account_xpub(seed_phrase, SLIP0044_COSMOS, account_index).map_err(
-        |e| ErrorDisplayed::Str {
-            s: format!("Failed to derive Cosmos xpub: {e}"),
-        },
-    )?;
+    let xpub =
+        derive_cosmos_account_xpub(seed_phrase, SLIP0044_COSMOS, account_index).map_err(|e| {
+            ErrorDisplayed::Str {
+                s: format!("Failed to derive Cosmos xpub: {e}"),
+            }
+        })?;
 
     // Generate addresses for supported chains (filter by network_name if specified)
     let all_chains: Vec<(&str, &str)> = vec![

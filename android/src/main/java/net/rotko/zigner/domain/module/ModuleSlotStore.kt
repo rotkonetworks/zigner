@@ -58,6 +58,11 @@ object ModuleSlotStore {
 		var staged: String?,
 		var activeVersion: Long,
 		var lastInstalled: Long,
+		/// What stage() actually verified and showed the user. Activation
+		/// re-reads the slot from disk, so without recording this it would
+		/// install whatever is on disk NOW rather than what was confirmed.
+		var stagedVersion: Long = 0,
+		var stagedHash: String = "",
 	)
 
 	private fun readState(context: Context): State {
@@ -73,6 +78,8 @@ object ModuleSlotStore {
 				j.optString("staged").ifEmpty { null },
 				j.optLong("activeVersion", 0),
 				maxOf(j.optLong("lastInstalled", 0), baked),
+				j.optLong("stagedVersion", 0),
+				j.optString("stagedHash"),
 			)
 		}.getOrElse { State(null, null, 0, baked) }
 	}
@@ -83,7 +90,23 @@ object ModuleSlotStore {
 			.put("staged", s.staged ?: "")
 			.put("activeVersion", s.activeVersion)
 			.put("lastInstalled", s.lastInstalled)
-		stateFile(context).writeText(j.toString())
+			.put("stagedVersion", s.stagedVersion)
+			.put("stagedHash", s.stagedHash)
+
+		// Write-then-rename, because writeText is not atomic. A torn write
+		// leaves unparseable JSON, readState falls back to defaults, and
+		// lastInstalled drops to the baked floor - which reopens the
+		// anti-rollback window between the baked version and whatever was
+		// actually installed. Losing power at the wrong moment should not
+		// hand back a downgrade.
+		val dir = dir(context)
+		val tmp = File(dir, "$STATE.tmp")
+		tmp.writeText(j.toString())
+		if (!tmp.renameTo(stateFile(context))) {
+			// Rename failed: fall back rather than leave no state at all.
+			stateFile(context).writeText(j.toString())
+			tmp.delete()
+		}
 	}
 
 	/**
@@ -102,6 +125,13 @@ object ModuleSlotStore {
 		val target = if (state.active == "a") "b" else "a"
 		slotFile(context, target).writeBytes(packageBytes)
 		state.staged = target
+		// Record WHAT was verified, not just where it was put. activateStaged
+		// re-reads the slot from disk, so without this it installs whatever is
+		// on disk at activation time rather than what the user was shown -
+		// whether that changed through a second scan racing the confirm screen
+		// or through anything else that can write app storage.
+		state.stagedVersion = info.moduleVersion.toLong()
+		state.stagedHash = info.moduleHashHex
 		writeState(context, state)
 		return info
 	}
@@ -122,9 +152,19 @@ object ModuleSlotStore {
 				deltaBase(context).toUByteList(),
 			)
 		}.getOrNull() ?: return false
+		// The slot must still hold what the user confirmed. Re-verification
+		// only proves the bytes on disk are a validly signed package - a
+		// DIFFERENT validly signed package would pass it just as happily.
+		if (info.moduleVersion.toLong() != state.stagedVersion ||
+			info.moduleHashHex != state.stagedHash
+		) {
+			return false
+		}
 		if (!moduleSelfTest(info.wasm)) return false
 		state.active = staged
 		state.staged = null
+		state.stagedVersion = 0
+		state.stagedHash = ""
 		state.activeVersion = info.moduleVersion.toLong()
 		state.lastInstalled = info.moduleVersion.toLong()
 		writeState(context, state)

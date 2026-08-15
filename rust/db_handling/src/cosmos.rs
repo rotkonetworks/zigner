@@ -428,7 +428,10 @@ mod tests {
 
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let xpub_str = derive_cosmos_account_xpub(mnemonic, SLIP0044_COSMOS, 0).unwrap();
-        assert!(xpub_str.starts_with("xpub"), "expected base58 xpub, got {xpub_str}");
+        assert!(
+            xpub_str.starts_with("xpub"),
+            "expected base58 xpub, got {xpub_str}"
+        );
 
         let xpub: XPub = xpub_str.parse().expect("re-parse exported xpub");
         for i in 0..5u32 {
