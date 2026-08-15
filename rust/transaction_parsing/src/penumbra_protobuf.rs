@@ -11,6 +11,28 @@ use definitions::penumbra_schema::{
 use crate::{Error, Result};
 
 /// Decode a transaction plan and extract actions
+
+/// Bounds-checked slice for a length-delimited field.
+///
+/// Every length in this decoder is a varint read out of the payload, i.e.
+/// chosen by whoever produced the QR code. Slicing on one directly panics -
+/// found by the mutation tests below, where a five-byte input produced
+/// `range end index 268435460 out of range for slice of length 5`. The
+/// addition is checked too, because usize is 32-bit on armeabi-v7a and a
+/// large offset plus a large length wraps there rather than merely being big.
+fn take_field(bytes: &[u8], at: usize, len: usize) -> Result<(&[u8], usize)> {
+    let end = at.checked_add(len).ok_or_else(|| {
+        Error::PenumbraParseError(format!("field length {len} at offset {at} overflows"))
+    })?;
+    if end > bytes.len() {
+        return Err(Error::PenumbraParseError(format!(
+            "field claims {len} bytes at offset {at}, buffer holds {}",
+            bytes.len()
+        )));
+    }
+    Ok((&bytes[at..end], end))
+}
+
 pub fn decode_transaction_plan(
     plan_bytes: &[u8],
     schema: &PenumbraActionSchema,
@@ -33,8 +55,8 @@ pub fn decode_transaction_plan(
             let (len, new_offset) = read_varint(plan_bytes, offset)?;
             offset = new_offset;
 
-            let action_bytes = &plan_bytes[offset..offset + len as usize];
-            offset += len as usize;
+            let (action_bytes, next) = take_field(plan_bytes, offset, len as usize)?;
+            offset = next;
 
             // Parse the action
             if let Ok(action) = parse_action(action_bytes, schema, asset_names) {
@@ -82,7 +104,7 @@ fn parse_action(
     let (len, new_offset) = read_varint(action_bytes, offset)?;
     offset = new_offset;
 
-    let nested_bytes = &action_bytes[offset..offset + len as usize];
+    let (nested_bytes, _) = take_field(action_bytes, offset, len as usize)?;
 
     // Parse fields according to schema
     let fields = parse_fields(nested_bytes, &action_def.fields, asset_names)?;
@@ -125,7 +147,7 @@ fn parse_fields(
             }
             1 => {
                 // 64-bit
-                let bytes = msg_bytes[offset..offset + 8].to_vec();
+                let bytes = take_field(msg_bytes, offset, 8)?.0.to_vec();
                 offset += 8;
                 bytes
             }
@@ -133,13 +155,13 @@ fn parse_fields(
                 // Length-delimited
                 let (len, new_offset) = read_varint(msg_bytes, offset)?;
                 offset = new_offset;
-                let bytes = msg_bytes[offset..offset + len as usize].to_vec();
+                let bytes = take_field(msg_bytes, offset, len as usize)?.0.to_vec();
                 offset += len as usize;
                 bytes
             }
             5 => {
                 // 32-bit
-                let bytes = msg_bytes[offset..offset + 4].to_vec();
+                let bytes = take_field(msg_bytes, offset, 4)?.0.to_vec();
                 offset += 4;
                 bytes
             }
@@ -371,16 +393,22 @@ fn skip_field(bytes: &[u8], offset: usize, wire_type: u8) -> Result<usize> {
         }
         1 => {
             // 64-bit
-            Ok(offset + 8)
+            offset
+                .checked_add(8)
+                .ok_or_else(|| Error::PenumbraParseError("offset overflow skipping i64".into()))
         }
         2 => {
             // Length-delimited
             let (len, new_offset) = read_varint(bytes, offset)?;
-            Ok(new_offset + len as usize)
+            new_offset.checked_add(len as usize).ok_or_else(|| {
+                Error::PenumbraParseError("offset overflow skipping length-delimited".into())
+            })
         }
         5 => {
             // 32-bit
-            Ok(offset + 4)
+            offset
+                .checked_add(4)
+                .ok_or_else(|| Error::PenumbraParseError("offset overflow skipping i32".into()))
         }
         _ => Err(Error::PenumbraParseError(format!(
             "unknown wire type: {}",
@@ -429,5 +457,93 @@ mod tests {
         assert_eq!(format_amount(1_000_000, 6), "1.000000");
         assert_eq!(format_amount(123_456_789, 6), "123.456789");
         assert_eq!(format_amount(1, 6), "0.000001");
+    }
+}
+
+#[cfg(test)]
+mod fuzz_smoke {
+    use super::*;
+    use definitions::penumbra_schema::default_penumbra_schema;
+
+    /// xorshift64*, so any failure reproduces from the printed round number.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            self.0 = x;
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+    }
+
+    /// Hand-rolled protobuf decoding over attacker-controlled bytes.
+    ///
+    /// This is reached from the camera: a payload prefixed 530310 routes here.
+    /// The scan-capability gate now defaults Penumbra off, which is the real
+    /// mitigation, but "off by default" is one toggle from reachable and this
+    /// code should not panic either way.
+    ///
+    /// cargo-fuzz cannot build this crate - it reaches definitions -> sp-core,
+    /// the 2022-era Substrate stack, whose duplicate schnorrkel defeats the
+    /// nested workspace cargo-fuzz creates. So the coverage is a seeded
+    /// mutation loop that runs on stable, in the normal test suite, on every
+    /// commit. Shallower than libFuzzer, and it runs rather than not existing.
+    #[test]
+    fn arbitrary_bytes_never_panic() {
+        let schema = default_penumbra_schema();
+        let assets: Vec<String> = vec!["upenumbra".into(), "gm".into()];
+
+        for round in 0..50_000u64 {
+            let mut rng = Rng(round.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let len = (rng.next() % 1024) as usize;
+            let bytes: Vec<u8> = (0..len).map(|_| rng.next() as u8).collect();
+            // Any Ok or Err is fine; not panicking is the assertion, and the
+            // harness enforces it rather than a check we could forget.
+            let _ = decode_transaction_plan(&bytes, &schema, &assets);
+        }
+    }
+
+    /// Varints are where a length-prefixed format usually goes wrong: a
+    /// continuation bit that never terminates, or a length that overruns the
+    /// buffer. Random bytes rarely produce a well-formed tag, so these are
+    /// built deliberately.
+    #[test]
+    fn hostile_varints_and_lengths_never_panic() {
+        let schema = default_penumbra_schema();
+        let assets: Vec<String> = vec!["upenumbra".into()];
+
+        let cases: Vec<Vec<u8>> = vec![
+            // Unterminated varint: every byte sets the continuation bit.
+            vec![0xff; 32],
+            // A single continuation byte with nothing following it.
+            vec![0x80],
+            // Length-delimited field (wire type 2) claiming far more than is
+            // present.
+            vec![0x0a, 0xff, 0xff, 0xff, 0x7f],
+            vec![0x0a, 0xff],
+            // Field number zero, which protobuf forbids.
+            vec![0x00, 0x01, 0x02],
+            // Varint that overflows a u64 if accumulated without a bound.
+            vec![
+                0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
+            ],
+            // Nested length prefixes, each claiming the rest of the buffer.
+            vec![0x0a, 0x05, 0x0a, 0x05, 0x0a, 0x05, 0x0a],
+            // Zero-length field followed by a truncated tag.
+            vec![0x0a, 0x00, 0xff],
+        ];
+
+        for (i, case) in cases.iter().enumerate() {
+            let _ = decode_transaction_plan(case, &schema, &assets);
+            // Also with a byte appended, since off-by-one handling of the
+            // final field is exactly where a decoder stops being careful.
+            let mut extended = case.clone();
+            extended.push(0x00);
+            let _ = decode_transaction_plan(&extended, &schema, &assets);
+            let _ = i;
+        }
     }
 }
