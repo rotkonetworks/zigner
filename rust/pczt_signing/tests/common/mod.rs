@@ -564,7 +564,9 @@ pub fn build_redacted_delegation() -> DelegationFixture {
     let pczt = IoFinalizer::new(pczt).finalize_io().expect("IoFinalizer");
 
     let redacted = redact_pczt_for_signer(pczt);
-    let redacted_pczt = redacted.serialize().expect("serialize redacted delegation PCZT");
+    let redacted_pczt = redacted
+        .serialize()
+        .expect("serialize redacted delegation PCZT");
     Pczt::parse(&redacted_pczt).expect("redacted delegation PCZT parses");
 
     DelegationFixture {

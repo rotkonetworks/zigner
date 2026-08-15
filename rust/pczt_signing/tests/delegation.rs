@@ -58,12 +58,12 @@ fn delegation_pczt_is_recognized_and_shows_zero_value_hotkey_recipient() {
 #[test]
 fn delegation_head_line_reports_kind_delegation() {
     let fx = build_redacted_delegation();
-    let payload = pczt_signing::envelope::encode_request(&pczt_signing::envelope::SignRequest::Single(
-        pczt_signing::envelope::RequestMessage {
+    let payload = pczt_signing::envelope::encode_request(
+        &pczt_signing::envelope::SignRequest::Single(pczt_signing::envelope::RequestMessage {
             id: Vec::new(),
             pczt_bytes: fx.redacted_pczt.clone(),
-        },
-    ))
+        }),
+    )
     .expect("encode single request");
     let summaries = pczt_signing::summarize_request(&payload).expect("summarize_request");
     assert_eq!(summaries.len(), 1);
@@ -96,4 +96,3 @@ fn v6_migration_is_not_misclassified_as_a_delegation() {
         "a value-carrying migration must never render as a delegation: {summary:?}"
     );
 }
-

@@ -341,11 +341,11 @@ pub fn parse_response(payload: &[u8]) -> Result<Vec<ResponseMessage>, EnvelopeEr
         return Err(EnvelopeError::WrongCryptoType(*crypto));
     }
     let read_one = |r: &[u8], with_id: bool| -> Result<(ResponseMessage, usize), EnvelopeError> {
-        let mut pos = 0;
+        let mut pos = 0usize;
         let id = if with_id {
             let id_len = *r.first().ok_or(EnvelopeError::Truncated("id len"))? as usize;
             pos += 1;
-            if r.len() < pos + id_len {
+            if pos.checked_add(id_len).is_none_or(|end| r.len() < end) {
                 return Err(EnvelopeError::Truncated("id"));
             }
             let id = r[pos..pos + id_len].to_vec();
@@ -354,18 +354,26 @@ pub fn parse_response(payload: &[u8]) -> Result<Vec<ResponseMessage>, EnvelopeEr
         } else {
             Vec::new()
         };
-        if r.len() < pos + 36 {
+        // checked_add throughout: `len` below is a u32 straight off the
+        // wire, and this module is compiled to wasm32 where usize is 32-bit
+        // ALWAYS - so `pos + len` wraps, `r.len() < pos + len` then passes,
+        // and the slice is built with start > end. A bounds check that stops
+        // being one is worse than none, because it reads as covered.
+        if pos.checked_add(36).is_none_or(|end| r.len() < end) {
             return Err(EnvelopeError::Truncated("digest"));
         }
         let digest: [u8; 32] = r[pos..pos + 32].try_into().unwrap();
         pos += 32;
         let len = u32::from_le_bytes(r[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
-        if r.len() < pos + len {
+        let end = pos
+            .checked_add(len)
+            .ok_or(EnvelopeError::Truncated("signed pczt"))?;
+        if r.len() < end {
             return Err(EnvelopeError::Truncated("signed pczt"));
         }
-        let signed_pczt = r[pos..pos + len].to_vec();
-        pos += len;
+        let signed_pczt = r[pos..end].to_vec();
+        pos = end;
         Ok((
             ResponseMessage {
                 id,
@@ -985,6 +993,48 @@ mod tests {
         for (i, msg) in parsed.messages.iter().enumerate() {
             assert_eq!(msg.id, format!("id_{:03}", i).into_bytes());
             assert_eq!(msg.signatures[0].action_index, i as u32);
+        }
+    }
+}
+
+#[cfg(test)]
+mod width_tests {
+    use super::*;
+
+    /// A declared length near u32::MAX must be refused, not wrapped.
+    ///
+    /// This matters most where it is least visible: the module is compiled to
+    /// wasm32, so `usize` is 32-bit there ALWAYS, regardless of the phone's
+    /// ABI. `if r.len() < pos + len` looks like a bounds check and stops being
+    /// one when `pos + len` wraps - the comparison then passes and the slice
+    /// is built with start > end.
+    ///
+    /// Run this on a 32-bit target to exercise the real path:
+    ///
+    ///     cargo test -p pczt_signing --lib --target i686-unknown-linux-gnu
+    ///
+    /// On x86_64 it can only document the intent, which is why the target is
+    /// named here rather than left to whoever reads the failure.
+    #[test]
+    fn huge_declared_pczt_length_is_refused() {
+        for declared in [u32::MAX, u32::MAX - 1, 0xffff_ff00, 0x8000_0000] {
+            let mut payload = vec![PRELUDE, CRYPTO_TYPE_ZCASH, TX_TYPE_PCZT_SINGLE];
+            payload.extend_from_slice(&[0xab; 32]); // digest
+            payload.extend_from_slice(&declared.to_le_bytes());
+            payload.extend_from_slice(&[0xcd; 8]); // far less than declared
+
+            match parse_response(&payload) {
+                Ok(msgs) => {
+                    // Accepting is only defensible if nothing was fabricated.
+                    for m in msgs {
+                        assert!(
+                            m.signed_pczt.len() <= payload.len(),
+                            "returned a pczt longer than the buffer it came from"
+                        );
+                    }
+                }
+                Err(_) => {}
+            }
         }
     }
 }

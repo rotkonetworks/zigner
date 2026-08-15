@@ -17,7 +17,7 @@ const MODULE: &[u8] = include_bytes!("../../../android/src/main/assets/modules/m
 /// sha256 of the asset this tree ships. The build is deterministic - a local
 /// rebuild reproduces it byte for byte - so this is a stable pin, not a
 /// snapshot of one machine's output.
-const EXPECTED_SHA256: &str = "d99abfa8eb30b309609fb88740b24a22415e876f2201584109c200bc05455825";
+const EXPECTED_SHA256: &str = "8a35d4dbd063182f82e9f56e8e043312384c80babc329d97d09586b0a78a1516";
 
 #[test]
 fn baked_module_is_pinned_to_its_recorded_version() {
