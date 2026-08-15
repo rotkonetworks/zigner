@@ -1,5 +1,7 @@
 package net.rotko.zigner.screens.keysets.restore.restorephrase
 
+import net.rotko.zigner.components.security.SecureScreen
+
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,6 +64,9 @@ fun EnterSeedPhraseBox(
 	onEnteredChange: (progressWord: String) -> Unit,
 	onScanOpen: Callback,
 ) {
+	// Typing a phrase in is as sensitive as displaying one.
+	SecureScreen()
+
 	val innerRound = dimensionResource(id = R.dimen.innerFramesCornerRadius)
 	val innerShape = RoundedCornerShape(innerRound)
 

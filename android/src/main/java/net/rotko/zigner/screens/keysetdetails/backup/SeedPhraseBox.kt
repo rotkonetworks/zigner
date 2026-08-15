@@ -1,5 +1,7 @@
 package net.rotko.zigner.screens.keysetdetails.backup
 
+import net.rotko.zigner.components.security.SecureScreen
+
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -48,6 +50,10 @@ internal val PhraseWordStyle: TextStyle = TextStyle(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SeedPhraseBox(seedPhrase: String) {
+	// Guard the shared component rather than each screen that uses it, so a
+	// screen added later inherits the protection instead of having to remember.
+	SecureScreen()
+
 	val innerRound = dimensionResource(id = R.dimen.innerFramesCornerRadius)
 	val innerShape =
 		RoundedCornerShape(innerRound, innerRound, innerRound, innerRound)

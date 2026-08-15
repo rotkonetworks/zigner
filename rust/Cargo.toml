@@ -37,3 +37,17 @@ exclude = ["pq_hybrid"]
 [workspace.dependencies]
 frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "06cd04f" }
 zoda-vss = { git = "https://github.com/rotkonetworks/zcli.git", rev = "06cd04f" }
+
+[profile.release]
+# Integer overflow panics instead of wrapping silently.
+#
+# This is a signer: computing the wrong number quietly is strictly worse than
+# stopping. The cost is a branch per arithmetic op on code that spends its time
+# in curve arithmetic and hashing, neither of which is where our own additions
+# live.
+#
+# Not hypothetical. ssh::take_string computed `4 + len` on an attacker-declared
+# u32; on armeabi-v7a, a shipped ABI with 32-bit usize, that wraps and produces
+# a reversed slice range. It was found by reading the code, and release builds
+# would have wrapped silently either way.
+overflow-checks = true
