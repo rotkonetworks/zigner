@@ -17,8 +17,11 @@ const MAX_SIGN_DOC_LEN: usize = 65536;
 
 /// parsed cosmos sign request from QR
 pub struct CosmosSignRequest {
-    /// BIP44 account index
+    /// BIP44 account index (hardened `account'` in m/44'/coin'/account'/0/index)
     pub account_index: u32,
+    /// BIP44 address index (the non-hardened `.../0/index`). Lets the wallet
+    /// spend from fresh, never-reused receive addresses derived off one account.
+    pub address_index: u32,
     /// chain name (e.g. "noble", "osmosis")
     pub chain_name: String,
     /// amino JSON sign doc bytes (UTF-8)
@@ -64,6 +67,7 @@ impl CosmosSignRequest {
     /// [chain_name: N]          NB
     /// [sign_doc_len: 4 LE]     4B
     /// [sign_doc_bytes: N]      NB  canonical amino JSON
+    /// [address_index: 4 LE]    4B  OPTIONAL - absent means 0 (back-compat)
     /// ```
     pub fn from_qr_hex(hex: &str) -> Result<Self> {
         let bytes =
@@ -135,16 +139,26 @@ impl CosmosSignRequest {
         let sign_doc_bytes = bytes[offset..offset + sign_doc_len].to_vec();
         offset += sign_doc_len;
 
-        // reject trailing garbage — ambiguous payloads are a parsing attack vector
-        if offset != bytes.len() {
-            return Err(Error::Other(anyhow::anyhow!(
-                "trailing data after sign doc ({} extra bytes)",
-                bytes.len() - offset
-            )));
-        }
+        // Optional trailing address_index (4 bytes LE). Absent = 0, keeping QRs
+        // that predate fresh-address derivation valid. Any other trailing length
+        // is a malformed/ambiguous payload and is rejected.
+        let address_index = match bytes.len() - offset {
+            0 => 0,
+            4 => u32::from_le_bytes(
+                bytes[offset..offset + 4]
+                    .try_into()
+                    .map_err(|_| Error::Other(anyhow::anyhow!("failed to read address index")))?,
+            ),
+            n => {
+                return Err(Error::Other(anyhow::anyhow!(
+                    "trailing data after sign doc ({n} extra bytes)"
+                )))
+            }
+        };
 
         Ok(CosmosSignRequest {
             account_index,
+            address_index,
             chain_name,
             sign_doc_bytes,
         })
@@ -551,6 +565,34 @@ mod tests {
         assert_eq!(req.account_index, 0);
         assert_eq!(req.chain_name, "noble");
         assert_eq!(req.sign_doc_bytes, sign_doc.to_vec());
+        // no trailing address_index -> defaults to 0 (back-compat)
+        assert_eq!(req.address_index, 0);
+    }
+
+    #[test]
+    fn test_parse_cosmos_sign_request_address_index() {
+        let sign_doc = br#"{"chain_id":"noble-1","memo":"","msgs":[],"fee":{"amount":[],"gas":"0"},"account_number":"0","sequence":"0"}"#;
+        let build = |trailing: &[u8]| {
+            let mut payload = Vec::new();
+            payload.extend_from_slice(&COSMOS_PRELUDE);
+            payload.extend_from_slice(&0u32.to_le_bytes()); // account_index
+            payload.push(b"noble".len() as u8);
+            payload.extend_from_slice(b"noble");
+            payload.extend_from_slice(&(sign_doc.len() as u32).to_le_bytes());
+            payload.extend_from_slice(sign_doc);
+            payload.extend_from_slice(trailing);
+            hex::encode(&payload)
+        };
+
+        // present: 4-byte LE address_index is parsed
+        let req = CosmosSignRequest::from_qr_hex(&build(&7u32.to_le_bytes())).unwrap();
+        assert_eq!(req.address_index, 7);
+
+        // absent: defaults to 0
+        assert_eq!(CosmosSignRequest::from_qr_hex(&build(&[])).unwrap().address_index, 0);
+
+        // malformed: any trailing length other than 0 or 4 is rejected
+        assert!(CosmosSignRequest::from_qr_hex(&build(&[1, 2, 3])).is_err());
     }
 
     #[test]

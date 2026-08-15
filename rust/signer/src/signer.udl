@@ -1522,6 +1522,7 @@ dictionary CosmosMsgDisplay {
 // Cosmos sign request parsed from QR
 dictionary CosmosSignRequest {
     u32 account_index;
+    u32 address_index;
     string chain_name;
     string chain_id;
     sequence<CosmosMsgDisplay> msgs;

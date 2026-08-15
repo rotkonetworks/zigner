@@ -912,6 +912,8 @@ pub struct CosmosMsgDisplay {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CosmosSignRequest {
     pub account_index: u32,
+    /// BIP44 address index (`.../0/index`) - selects a fresh receive address
+    pub address_index: u32,
     /// chain name from QR (e.g. "noble", "osmosis")
     pub chain_name: String,
     /// chain_id from amino JSON (e.g. "noble-1", "osmosis-1")

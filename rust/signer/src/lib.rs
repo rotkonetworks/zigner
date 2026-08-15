@@ -1248,6 +1248,7 @@ fn parse_cosmos_sign_request(qr_hex: &str) -> Result<CosmosSignRequest, ErrorDis
 
     Ok(CosmosSignRequest {
         account_index: req.account_index,
+        address_index: req.address_index,
         chain_name: req.chain_name,
         chain_id: display.chain_id,
         msgs,
@@ -1319,13 +1320,19 @@ fn sign_cosmos_transaction(
         });
     }
 
-    // derive the cosmos key from seed phrase
-    let key =
-        derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, request.account_index, 0).map_err(|e| {
-            ErrorDisplayed::Str {
-                s: format!("Key derivation failed: {e}"),
-            }
-        })?;
+    // derive the cosmos key from seed phrase, at the address index carried by
+    // the re-parsed QR (not the passed struct) so the signing key is bound to
+    // the exact bytes the device displayed. address_index selects a fresh,
+    // never-reused receive address; absent in old QRs it is 0.
+    let key = derive_cosmos_key(
+        seed_phrase,
+        SLIP0044_COSMOS,
+        request.account_index,
+        req.address_index,
+    )
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("Key derivation failed: {e}"),
+    })?;
 
     // sign with SHA256 prehash (NOT blake2b)
     let signature = sign_cosmos_amino(&key.secret_key, &req.sign_doc_bytes).map_err(|e| {
