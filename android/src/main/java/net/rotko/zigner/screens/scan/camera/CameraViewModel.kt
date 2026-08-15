@@ -12,6 +12,7 @@ import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
 import io.parity.signer.uniffi.decodeUrModuleRequest
 import io.parity.signer.uniffi.decodeUrZcashPczt
+import io.parity.signer.uniffi.releaseClassifyRequest
 import io.parity.signer.uniffi.zcashNotesScanProgress
 import io.parity.signer.uniffi.qrparserGetPacketsTotal
 import io.parity.signer.uniffi.qrparserTryDecodeQrSequence
@@ -83,6 +84,12 @@ class CameraViewModel() : ViewModel() {
 	// fountain frames; manifest || wasm starting with "ZIGM").
 	private val _modulePackageBytes = MutableStateFlow<ByteArray?>(null)
 	val modulePackageBytes: StateFlow<ByteArray?> = _modulePackageBytes.asStateFlow()
+
+	// A base64 release-signing prefix (magic "ZIGM"), scanned in one plain QR
+	// from the zafu.pro ceremony. Distinct from a module PACKAGE, which is large
+	// and arrives as ur:zigner-module fountain frames.
+	private val _releaseSignPrefix = MutableStateFlow<ByteArray?>(null)
+	val releaseSignPrefix: StateFlow<ByteArray?> = _releaseSignPrefix.asStateFlow()
 
 	// JSON payloads (detected by {"frost":...} or {"auth":...} prefix)
 	private val _frostPayload = MutableStateFlow<JSONObject?>(null)
@@ -246,6 +253,17 @@ class CameraViewModel() : ViewModel() {
 					// P-frame partial (or complete-but-not-FROST): bail before the
 					// substrate fallback re-processes the P-frame text.
 					if (pFrameMatch != null) {
+						return@forEach
+					}
+
+					// Release-signing prefix: one plain base64 QR (magic "ZIGM"),
+					// authoritative check is releaseClassifyRequest, which accepts
+					// only an EXACT prefix - a module package (trailing sigs/payload)
+					// is rejected here and stays on its ur:zigner-module path.
+					val releasePrefix = frameSource?.let { tryDecodeReleasePrefix(it) }
+					if (releasePrefix != null) {
+						resetScanValues()
+						_releaseSignPrefix.value = releasePrefix
 						return@forEach
 					}
 
@@ -638,6 +656,7 @@ class CameraViewModel() : ViewModel() {
 		_zcashPcztComplete.value = null
 		_zignerModuleFrames.value = emptyList()
 		_modulePackageBytes.value = null
+		_releaseSignPrefix.value = null
 		_frostPayload.value = null
 		_authPayload.value = null
 		_zidSignPayload.value = null
@@ -665,6 +684,36 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetModulePackageBytes() {
 		_modulePackageBytes.value = null
+	}
+
+	fun resetReleaseSignPrefix() {
+		_releaseSignPrefix.value = null
+	}
+
+	// Cheap gates (base64 charset, small, magic "ZIGM") before the FFI, then the
+	// authoritative releaseClassifyRequest, which accepts ONLY an exact signing
+	// prefix. Returns the raw prefix bytes if this scan is one, else null.
+	private fun tryDecodeReleasePrefix(s: String): ByteArray? {
+		val t = s.trim()
+		if (t.length < 8 || t.length > 8192) return null
+		if (!Regex("^[A-Za-z0-9+/=]+$").matches(t)) return null
+		val bytes = try {
+			android.util.Base64.decode(t, android.util.Base64.DEFAULT)
+		} catch (_: Exception) {
+			return null
+		}
+		if (bytes.size < 4 ||
+			bytes[0] != 0x5A.toByte() || bytes[1] != 0x49.toByte() ||
+			bytes[2] != 0x47.toByte() || bytes[3] != 0x4D.toByte()
+		) {
+			return null
+		}
+		return try {
+			releaseClassifyRequest(bytes.map { it.toUByte() })
+			bytes
+		} catch (_: Exception) {
+			null
+		}
 	}
 
 	fun resetFrostPayload() {

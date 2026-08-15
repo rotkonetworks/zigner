@@ -511,6 +511,50 @@ impl CosmosSignDocDisplay {
     }
 }
 
+/// Extract the signer (source) address from every message in an amino sign doc.
+///
+/// Cosmos messages name their signer differently by type; we check the standard
+/// field names in each message's `value`. Messages with no recognizable signer
+/// field contribute nothing - they are already surfaced as `blind` in the
+/// display and cannot be source-bound here (the chain still rejects a signature
+/// from the wrong key).
+///
+/// The device uses this to refuse signing with a key that is not the message's
+/// signer, so a compromised host cannot silently choose which of the user's
+/// addresses pays by varying `address_index`.
+pub fn extract_signers(sign_doc_bytes: &[u8]) -> Result<Vec<String>> {
+    const SIGNER_FIELDS: &[&str] = &[
+        "from_address",      // MsgSend
+        "sender",            // MsgTransfer (IBC), swaps
+        "delegator_address", // staking
+        "signer",            // generic
+        "voter",             // gov vote
+        "depositor",         // gov deposit
+        "granter",           // authz / feegrant
+        "admin",             // wasm
+        "proposer",          // gov submit
+    ];
+
+    let doc: serde_json::Value = serde_json::from_slice(sign_doc_bytes)
+        .map_err(|e| Error::Other(anyhow::anyhow!("sign doc is not JSON: {e}")))?;
+
+    let mut signers = Vec::new();
+    if let Some(msgs) = doc["msgs"].as_array() {
+        for m in msgs {
+            let v = &m["value"];
+            for field in SIGNER_FIELDS {
+                if let Some(addr) = v[*field].as_str() {
+                    if !addr.is_empty() {
+                        signers.push(addr.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    Ok(signers)
+}
+
 /// Sign Cosmos Amino sign doc bytes with `secp256k1` ECDSA.
 ///
 /// Computes `SHA256(sign_doc_bytes)` then signs with the secret key.
@@ -593,6 +637,23 @@ mod tests {
 
         // malformed: any trailing length other than 0 or 4 is rejected
         assert!(CosmosSignRequest::from_qr_hex(&build(&[1, 2, 3])).is_err());
+    }
+
+    #[test]
+    fn test_extract_signers() {
+        // MsgSend -> from_address; MsgTransfer -> sender; both collected in order
+        let doc = br#"{"chain_id":"noble-1","msgs":[
+            {"type":"cosmos-sdk/MsgSend","value":{"from_address":"noble1src","to_address":"noble1dst","amount":[]}},
+            {"type":"cosmos-sdk/MsgTransfer","value":{"sender":"noble1src","receiver":"osmo1dst"}}
+        ],"fee":{"amount":[],"gas":"0"},"memo":"","account_number":"0","sequence":"0"}"#;
+        assert_eq!(extract_signers(doc).unwrap(), vec!["noble1src", "noble1src"]);
+
+        // a message with no recognizable signer field contributes nothing
+        let blind = br#"{"msgs":[{"type":"wasm/MsgExecuteContract","value":{"contract":"noble1c","msg":{}}}]}"#;
+        assert!(extract_signers(blind).unwrap().is_empty());
+
+        // not JSON -> error
+        assert!(extract_signers(b"not json").is_err());
     }
 
     #[test]

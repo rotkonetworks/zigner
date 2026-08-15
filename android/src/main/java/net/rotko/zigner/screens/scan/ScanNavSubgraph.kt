@@ -33,6 +33,7 @@ import net.rotko.zigner.screens.scan.transaction.ZidSignScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostDkgScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostSignScreen
 import net.rotko.zigner.screens.scan.transaction.ModulePcztScreen
+import net.rotko.zigner.screens.scan.transaction.ReleaseSignIntegratedScreen
 import net.rotko.zigner.screens.scan.transaction.ModuleUpdateConfirmScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
@@ -85,6 +86,8 @@ fun ScanNavSubgraph(
 
 	// Module package state
 	val modulePackageData = scanViewModel.modulePackageBytes.collectAsStateWithLifecycle()
+	val releaseSignPrefixValue =
+		scanViewModel.releaseSignPrefix.collectAsStateWithLifecycle().value
 	val modulePackageInfo = scanViewModel.modulePackageInfo.collectAsStateWithLifecycle()
 	val modulePackageError = scanViewModel.modulePackageError.collectAsStateWithLifecycle()
 
@@ -433,6 +436,11 @@ fun ScanNavSubgraph(
 				scanViewModel.clearSignState()
 			}
 		)
+	} else if (releaseSignPrefixValue != null) {
+		ReleaseSignIntegratedScreen(
+			prefixBytes = releaseSignPrefixValue,
+			onDone = { scanViewModel.releaseSignPrefix.value = null },
+		)
 	} else if (transactionsValue == null || showingModals) {
 
 		ScanScreen(
@@ -472,6 +480,9 @@ fun ScanNavSubgraph(
 			},
 			onModulePackage = { packageBytes ->
 				scanViewModel.modulePackageBytes.value = packageBytes
+			},
+			onReleaseSignPrefix = { prefixBytes ->
+				scanViewModel.releaseSignPrefix.value = prefixBytes
 			},
 			onFrost = { json ->
 				scanViewModel.frostPayload.value = json

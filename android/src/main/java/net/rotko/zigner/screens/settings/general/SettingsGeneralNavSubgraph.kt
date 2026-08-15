@@ -48,6 +48,7 @@ internal fun SettingsGeneralNavSubgraph(
 			},
 			onBackup = { coreNavController.navigate(SettingsNavSubgraph.backup) },
 			onMultisigSettings = { coreNavController.navigate(SettingsNavSubgraph.multisig) },
+			onReleaseKey = { coreNavController.navigate(SettingsNavSubgraph.releaseKey) },
 			onAdvancedSettings = { coreNavController.navigate(SettingsNavSubgraph.advanced) },
 			onExposedClicked = { menuNavController.navigate(SettingsGeneralMenu.exposed_shield_alert) },
 			onLightThemeToggle = { vm.toggleLightTheme() },

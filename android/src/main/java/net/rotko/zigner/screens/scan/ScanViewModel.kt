@@ -134,6 +134,7 @@ class ScanViewModel : ViewModel() {
 	var modulePackageBytes: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
 	var modulePackageInfo: MutableStateFlow<ModulePackageInfo?> = MutableStateFlow(null)
 	var modulePackageError: MutableStateFlow<String?> = MutableStateFlow(null)
+	var releaseSignPrefix: MutableStateFlow<ByteArray?> = MutableStateFlow(null)
 
 	// Unified signing state (replaces per-network state above)
 	var signRequest: MutableStateFlow<SignRequest?> = MutableStateFlow(null)
@@ -457,7 +458,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null || modulePackageBytes.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null || modulePackageBytes.value != null || releaseSignPrefix.value != null) {
 			clearState()
 			true
 		} else {
@@ -486,6 +487,7 @@ class ScanViewModel : ViewModel() {
 		modulePackageBytes.value = null
 		modulePackageInfo.value = null
 		modulePackageError.value = null
+		releaseSignPrefix.value = null
 		frostPayload.value = null
 		clearFrostDkgState()
 		clearFrostSignState()

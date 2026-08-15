@@ -1269,7 +1269,8 @@ fn sign_cosmos_transaction(
 ) -> Result<Vec<u8>, ErrorDisplayed> {
     use db_handling::cosmos::{derive_cosmos_key, SLIP0044_COSMOS};
     use transaction_signing::cosmos::{
-        sign_cosmos_amino, CosmosSignDocDisplay, CosmosSignRequest as InternalRequest,
+        extract_signers, sign_cosmos_amino, CosmosSignDocDisplay,
+        CosmosSignRequest as InternalRequest,
     };
 
     // re-parse the QR to get the sign doc bytes
@@ -1320,19 +1321,42 @@ fn sign_cosmos_transaction(
         });
     }
 
-    // derive the cosmos key from seed phrase, at the address index carried by
-    // the re-parsed QR (not the passed struct) so the signing key is bound to
-    // the exact bytes the device displayed. address_index selects a fresh,
+    // derive the cosmos key from seed phrase. BOTH indices come from the
+    // re-parsed QR (`req`), not the caller's struct, so the signing key is bound
+    // to the exact bytes the device displayed. address_index selects a fresh,
     // never-reused receive address; absent in old QRs it is 0.
     let key = derive_cosmos_key(
         seed_phrase,
         SLIP0044_COSMOS,
-        request.account_index,
+        req.account_index,
         req.address_index,
     )
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("Key derivation failed: {e}"),
     })?;
+
+    // Bind the signing key to the transaction source. Derive this device's
+    // address for the chain and require it to equal every message's signer.
+    // Without this, an app-chosen `address_index` could make the device produce
+    // a valid signature spending from a source address the user never saw.
+    // Blind messages (no recognizable signer field) are already warned in the
+    // display and the chain still rejects a signature from the wrong key.
+    let device_addr =
+        db_handling::cosmos::pubkey_to_bech32_address(&key.public_key, &request.chain_name)
+            .map_err(|e| ErrorDisplayed::Str {
+                s: format!("Address derivation failed: {e}"),
+            })?;
+    for signer in extract_signers(&req.sign_doc_bytes).map_err(|e| ErrorDisplayed::Str {
+        s: format!("Failed to read message signers: {e}"),
+    })? {
+        if signer != device_addr {
+            return Err(ErrorDisplayed::Str {
+                s: format!(
+                    "Source mismatch: this key is {device_addr}, but the transaction spends from {signer}"
+                ),
+            });
+        }
+    }
 
     // sign with SHA256 prehash (NOT blake2b)
     let signature = sign_cosmos_amino(&key.secret_key, &req.sign_doc_bytes).map_err(|e| {

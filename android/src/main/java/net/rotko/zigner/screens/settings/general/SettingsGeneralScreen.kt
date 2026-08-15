@@ -62,6 +62,7 @@ internal fun SettingsScreenGeneralView(
 	onShowPrivacyPolicy: Callback,
 	onBackup: Callback,
 	onMultisigSettings: Callback,
+	onReleaseKey: Callback,
 	onAdvancedSettings: Callback,
 	onExposedClicked: Callback,
 	onLightThemeToggle: Callback,
@@ -99,6 +100,11 @@ internal fun SettingsScreenGeneralView(
 					name = "Multisig",
 					icon = Icons.Outlined.Groups,
 					onClick = onMultisigSettings,
+				)
+				SettingsElement(
+					name = "Release key",
+					icon = Icons.Outlined.Key,
+					onClick = onReleaseKey,
 				)
 				SettingsElement(
 					name = "Advanced Settings",
@@ -283,6 +289,7 @@ private fun PreviewSettingsScreen() {
 			onShowPrivacyPolicy = {},
 			onBackup = {},
 			onMultisigSettings = {},
+		onReleaseKey = {},
 			onAdvancedSettings = {},
 			onExposedClicked = {},
 			onLightThemeToggle = {},

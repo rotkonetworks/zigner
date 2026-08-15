@@ -43,6 +43,7 @@ fun ScanScreen(
 	onZcashSimpleSign: (String) -> Unit = {},
 	onZcashModulePczt: (String) -> Unit = {},
 	onModulePackage: (ByteArray) -> Unit = {},
+	onReleaseSignPrefix: (ByteArray) -> Unit = {},
 	onUrBackupRestore: (List<String>) -> Unit = {},
 	onZcashNotes: (List<String>) -> Unit = {},
 	onZcashPczt: (List<String>) -> Unit = {},
@@ -66,6 +67,7 @@ fun ScanScreen(
 	val currentOnZcashSimpleSign by rememberUpdatedState(onZcashSimpleSign)
 	val currentOnZcashModulePczt by rememberUpdatedState(onZcashModulePczt)
 	val currentOnModulePackage by rememberUpdatedState(onModulePackage)
+	val currentOnReleaseSignPrefix by rememberUpdatedState(onReleaseSignPrefix)
 	val currentOnUrBackupRestore by rememberUpdatedState(onUrBackupRestore)
 	val currentOnZcashNotes by rememberUpdatedState(onZcashNotes)
 	val currentOnZcashPczt by rememberUpdatedState(onZcashPczt)
@@ -165,6 +167,16 @@ fun ScanScreen(
 				.collect { packageBytes ->
 					currentOnModulePackage(packageBytes)
 					viewModel.resetModulePackageBytes()
+				}
+		}
+
+		// Release-signing prefix handler (plain base64 "ZIGM" manifest prefix)
+		launch {
+			viewModel.releaseSignPrefix
+				.filterNotNull()
+				.collect { prefixBytes ->
+					currentOnReleaseSignPrefix(prefixBytes)
+					viewModel.resetReleaseSignPrefix()
 				}
 		}
 

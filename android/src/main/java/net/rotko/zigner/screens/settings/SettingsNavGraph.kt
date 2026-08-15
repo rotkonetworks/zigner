@@ -23,6 +23,7 @@ import net.rotko.zigner.screens.settings.logs.logsNavigationSubgraph
 import net.rotko.zigner.screens.settings.networks.details.NetworkDetailsSubgraph
 import net.rotko.zigner.screens.settings.networks.list.networkListDestination
 import net.rotko.zigner.screens.settings.networks.signspecs.signSpecsDestination
+import net.rotko.zigner.screens.settings.releasekey.ReleaseKeyIntegratedScreen
 import net.rotko.zigner.screens.settings.verifiercert.verifierSettingsDestination
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
 
@@ -96,6 +97,11 @@ fun NavGraphBuilder.settingsFullSubgraph(
 				onBack = { coreNavController.popBackStack() },
 			)
 		}
+		composable(SettingsNavSubgraph.releaseKey) {
+			ReleaseKeyIntegratedScreen {
+				coreNavController.popBackStack(SettingsNavSubgraph.home, false)
+			}
+		}
 		composable(SettingsNavSubgraph.advanced) {
 			SettingsAdvancedNavSubgraph(coreNavController = coreNavController)
 		}
@@ -114,6 +120,7 @@ internal object SettingsNavSubgraph {
 	const val zcashTestQr = "settings_zcash_test_qr"
 	const val multisig = "settings_multisig"
 	const val multisigBackup = "settings_multisig_backup"
+	const val releaseKey = "settings_release_key"
 	object NetworkDetails {
 		internal const val networkKey = "network_key"
 		private const val baseRoute = "settings_network_details"
