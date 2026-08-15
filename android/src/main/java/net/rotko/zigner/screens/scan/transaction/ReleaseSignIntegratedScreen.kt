@@ -44,7 +44,6 @@ fun ReleaseSignIntegratedScreen(
 	val request: ReleaseSigningRequest? = remember(prefixBytes) {
 		runCatching { releaseClassifyRequest(prefixBytes.map { it.toUByte() }) }.getOrNull()
 	}
-	var slot by remember { mutableStateOf(1u) }
 	var seedPhrase by remember { mutableStateOf<String?>(null) }
 	var loading by remember { mutableStateOf(false) }
 	val scope = rememberCoroutineScope()
@@ -75,7 +74,6 @@ fun ReleaseSignIntegratedScreen(
 					request = request,
 					prefixBytes = prefixBytes,
 					seedPhrase = phrase,
-					keyIndex = slot,
 					onDone = onDone,
 				)
 			}
@@ -89,46 +87,13 @@ fun ReleaseSignIntegratedScreen(
 				) {
 					ScreenHeaderClose(title = "Sign release", onClose = onDone)
 					Text(
-						text = "Which slot is this device? Slot 0 is the GitHub/CI key, " +
-							"so a zigner is 1 or 2 - it must match how the keys were baked.",
+						text = "Pick the seed to sign this release with. Its release key " +
+							"must be one of the three baked into the app, or the signature " +
+							"will not count.",
 						style = SignerTypeface.BodyM,
 						color = MaterialTheme.colors.textSecondary,
 						modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
 					)
-					Row(
-						modifier = Modifier.padding(horizontal = 24.dp),
-						horizontalArrangement = Arrangement.spacedBy(8.dp),
-					) {
-						for (i in 0u..2u) {
-							val selected = slot == i
-							Box(
-								modifier = Modifier
-									.weight(1f)
-									.clip(RoundedCornerShape(8.dp))
-									.background(
-										if (selected) MaterialTheme.colors.pink500
-										else MaterialTheme.colors.fill6
-									)
-									.clickable { slot = i }
-									.padding(vertical = 12.dp),
-								contentAlignment = Alignment.Center,
-							) {
-								Text(
-									text = "#$i",
-									color = if (selected) Color.White else MaterialTheme.colors.primary,
-									style = SignerTypeface.BodyM,
-								)
-							}
-						}
-					}
-					Spacer(Modifier.padding(top = 24.dp))
-					Text(
-						text = "Pick the seed for this device's release key:",
-						style = SignerTypeface.BodyM,
-						color = MaterialTheme.colors.textSecondary,
-						modifier = Modifier.padding(horizontal = 24.dp),
-					)
-					Spacer(Modifier.padding(top = 8.dp))
 					for (seedName in seeds) {
 						SettingsElement(
 							name = seedName,

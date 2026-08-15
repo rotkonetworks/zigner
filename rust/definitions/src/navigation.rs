@@ -876,6 +876,11 @@ pub struct CosmosAccountExport {
     pub label: String,
     /// Hex-encoded compressed secp256k1 public key (33 bytes)
     pub public_key_hex: String,
+    /// Change-level xpub (m/44'/118'/account'/0), base58. The hot wallet derives
+    /// burner addresses .../0/i from this watch-only; the device signs each at
+    /// the same address_index. This is what makes rotations seed-recoverable
+    /// without a cold import per burner.
+    pub xpub: String,
     /// Bech32 addresses for each chain
     pub addresses: Vec<CosmosChainAddress>,
     /// Binary QR data for Zafu wallet

@@ -638,13 +638,13 @@ namespace signer {
 
     // Release signing: this device as one of the 2-of-3 key holders.
     [Throws=ErrorDisplayed]
-    string release_signing_pubkey([ByRef] string seed_phrase, u32 index);
+    string release_signing_pubkey([ByRef] string seed_phrase);
 
     [Throws=ErrorDisplayed]
     ReleaseSigningRequest release_classify_request([ByRef] sequence<u8> prefix);
 
     [Throws=ErrorDisplayed]
-    string release_sign_request([ByRef] string seed_phrase, u32 index, [ByRef] sequence<u8> prefix);
+    string release_sign_request([ByRef] string seed_phrase, [ByRef] sequence<u8> prefix);
 
     // Version of the module baked into the APK. The slot store uses it so a
     // stale installed slot cannot shadow a newer module from an APK update.
@@ -1500,6 +1500,9 @@ dictionary CosmosAccountExport {
     u32 account_index;
     string label;
     string public_key_hex;
+    // Change-level xpub (m/44'/118'/account'/0). Hot wallet derives burner
+    // addresses .../0/i from this, watch-only; device signs each at the same i.
+    string xpub;
     sequence<CosmosChainAddress> addresses;
     sequence<u8> qr_data;
 };

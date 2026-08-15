@@ -206,7 +206,6 @@ async fn get_ceremony(
 
 #[derive(Deserialize)]
 struct SigReq {
-    index: u8,
     signature_hex: String,
 }
 
@@ -215,9 +214,6 @@ async fn add_signature(
     Path(id): Path<String>,
     Json(req): Json<SigReq>,
 ) -> Result<Json<GetRespSlots>, (StatusCode, String)> {
-    if req.index > 2 {
-        return Err(bad("key slot must be 0, 1 or 2"));
-    }
     let raw = hex::decode(req.signature_hex.trim())
         .map_err(|e| bad(format!("bad signature hex: {e}")))?;
     let sig: [u8; 64] = raw
@@ -229,32 +225,39 @@ async fn add_signature(
         .get_mut(&id)
         .ok_or((StatusCode::NOT_FOUND, "no such ceremony".into()))?;
 
-    // Two signatures from one slot is not 2-of-3, and the device rejects
-    // duplicate indices anyway. Refuse rather than accumulate a package that
-    // is guaranteed to fail.
-    if c.sigs.iter().any(|(i, _)| *i == req.index) {
-        return Err(bad(format!("slot #{} has already signed", req.index)));
-    }
-
-    if let Some(keys) = c.release_keys {
-        // Verify now rather than at install time. Catches the wrong device
-        // signing, or a signature over a different manifest, while the person
-        // who can fix it is still paying attention.
-        let vk = ed25519_dalek::VerifyingKey::from_bytes(&keys[req.index as usize])
-            .map_err(|e| bad(format!("slot #{} public key is invalid: {e}", req.index)))?;
-        let msg = manifest::signing_message(&c.prefix);
-        let signature = ed25519_dalek::Signature::from_bytes(&sig);
+    // Signatures are untagged - the signer no longer declares a slot - so the
+    // ceremony must know the pinned keys to make sense of one. DISCOVER which
+    // key signed by matching, which is also the verification: it catches the
+    // wrong device or a signature over a different manifest, now, while the
+    // person who can fix it is still paying attention.
+    let keys = c.release_keys.ok_or_else(|| {
+        bad("this ceremony has no release keys configured - cannot match an untagged signature")
+    })?;
+    let msg = manifest::signing_message(&c.prefix);
+    let signature = ed25519_dalek::Signature::from_bytes(&sig);
+    let mut slot: Option<u8> = None;
+    for (k, kb) in keys.iter().enumerate() {
+        let vk = ed25519_dalek::VerifyingKey::from_bytes(kb)
+            .map_err(|e| bad(format!("slot #{k} public key is invalid: {e}")))?;
         // verify_strict for the same reason the kernel uses it: the permissive
         // form accepts small-order keys and non-canonical R.
-        vk.verify_strict(&msg, &signature)
-            .map_err(|_| bad(format!(
-                "signature does not verify against the slot #{} release key - \
-                 wrong device, or signed over a different manifest",
-                req.index
-            )))?;
+        if vk.verify_strict(&msg, &signature).is_ok() {
+            slot = Some(k as u8);
+            break;
+        }
+    }
+    let slot = slot.ok_or_else(|| {
+        bad("signature does not verify against any pinned release key - \
+             wrong device, or signed over a different manifest")
+    })?;
+
+    // One key filling two slots is not 2-of-3. Refuse rather than accumulate a
+    // package the kernel is guaranteed to reject.
+    if c.sigs.iter().any(|(i, _)| *i == slot) {
+        return Err(bad(format!("slot #{slot} has already signed")));
     }
 
-    c.sigs.push((req.index, sig));
+    c.sigs.push((slot, sig));
     c.sigs.sort_by_key(|(i, _)| *i);
     Ok(Json(GetRespSlots {
         signed_slots: c.sigs.iter().map(|(i, _)| *i).collect(),
@@ -283,7 +286,10 @@ async fn package(
             manifest::REQUIRED_SIGS
         )));
     }
-    let pkg = manifest::assemble_package(&c.prefix, &c.sigs, &c.payload);
+    // Internally we keep the discovered slot per signature (for dedup and slot
+    // reporting); the package format is untagged, so hand assemble the bare sigs.
+    let bare_sigs: Vec<[u8; 64]> = c.sigs.iter().map(|(_, s)| *s).collect();
+    let pkg = manifest::assemble_package(&c.prefix, &bare_sigs, &c.payload);
 
     // Self-check when we can. This is the server marking its own homework, so
     // it proves nothing to anyone else - run `modpack verify` before shipping.

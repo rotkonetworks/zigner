@@ -64,7 +64,7 @@ fn seed_package() -> Vec<u8> {
         5,
         1,
         "changelog text",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     )
 }
 
@@ -134,7 +134,7 @@ fn arbitrary_delta_payloads_never_panic() {
             5,
             1,
             "delta",
-            &[(0, sk[0].clone()), (2, sk[2].clone())],
+            &[sk[0].clone(), sk[2].clone()],
         );
         let _ = verify_package_with_base(&pkg, &vk, 1, 0, Some(&base));
     }

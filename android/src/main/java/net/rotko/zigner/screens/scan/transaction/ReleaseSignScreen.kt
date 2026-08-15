@@ -52,7 +52,6 @@ fun ReleaseSignScreen(
 	request: ReleaseSigningRequest,
 	prefixBytes: ByteArray,
 	seedPhrase: String,
-	keyIndex: UInt,
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
@@ -87,8 +86,6 @@ fun ReleaseSignScreen(
 				ReleaseRow("Module version", request.moduleVersion.toString())
 				SignerDivider()
 				ReleaseRow("Minimum app version", request.minKernelVersion.toString())
-				SignerDivider()
-				ReleaseRow("Signing as key", "#${keyIndex}")
 
 				Spacer(Modifier.padding(top = 24.dp))
 				Text(
@@ -150,7 +147,6 @@ fun ReleaseSignScreen(
 							signatureHex = withContext(Dispatchers.Default) {
 								releaseSignRequest(
 									seedPhrase,
-									keyIndex,
 									prefixBytes.map { it.toUByte() },
 								)
 							}
@@ -182,10 +178,10 @@ fun ReleaseSignScreen(
 				Spacer(Modifier.padding(top = 16.dp))
 				val qr = remember(signatureHex) {
 					runCatching {
-						// index:hex, the shape `modpack assemble --sig` takes.
-						val payload = "$keyIndex:$signatureHex"
+						// Just the signature hex - `modpack assemble --sig` takes it
+						// untagged; the verifier matches it against the pinned keys.
 						kotlinx.coroutines.runBlocking {
-							encodeToQr(payload.toByteArray(Charsets.UTF_8).map { it.toUByte() }, false)
+							encodeToQr(signatureHex.toByteArray(Charsets.UTF_8).map { it.toUByte() }, false)
 						}
 					}.getOrNull()
 				}
@@ -201,7 +197,7 @@ fun ReleaseSignScreen(
 						)
 					} else {
 						Text(
-							text = "$keyIndex:$signatureHex",
+							text = signatureHex,
 							color = MaterialTheme.colors.primary,
 							fontFamily = FontFamily.Monospace,
 							fontSize = 11.sp,
@@ -213,7 +209,7 @@ fun ReleaseSignScreen(
 				// Also readable as text: a holder signing remotely can type or
 				// dictate this rather than needing a camera pointed at them.
 				Text(
-					text = "$keyIndex:$signatureHex",
+					text = signatureHex,
 					color = MaterialTheme.colors.textTertiary,
 					fontFamily = FontFamily.Monospace,
 					fontSize = 10.sp,

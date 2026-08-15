@@ -27,7 +27,7 @@ fn appended_bytes_to_a_signed_delta_package_are_refused() {
         5,
         1,
         "d",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     assert!(
         verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)).is_ok(),

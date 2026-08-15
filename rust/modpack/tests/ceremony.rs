@@ -45,12 +45,7 @@ fn sign_as_holder(prefix: &[u8], n: u8) -> String {
 
 fn keyspecs() -> Vec<String> {
     (0u8..3)
-        .map(|i| {
-            format!(
-                "{i}:{}",
-                hex::encode(holder(i + 1).verifying_key().to_bytes())
-            )
-        })
+        .map(|i| hex::encode(holder(i + 1).verifying_key().to_bytes()))
         .collect()
 }
 
@@ -100,8 +95,8 @@ fn a_full_package_survives_the_three_machine_ceremony() {
     let prefix = std::fs::read(d.join("prefix.bin")).expect("prepare wrote a prefix");
 
     // Two holders, signing independently. Neither process sees the other key.
-    let s0 = format!("0:{}", sign_as_holder(&prefix, 1));
-    let s2 = format!("2:{}", sign_as_holder(&prefix, 3));
+    let s0 = sign_as_holder(&prefix, 1);
+    let s2 = sign_as_holder(&prefix, 3);
 
     let (ok, out) = run(
         &d,
@@ -176,8 +171,8 @@ fn a_delta_package_rebuilds_the_module_and_is_far_smaller() {
     );
 
     let prefix = std::fs::read(d.join("prefix.bin")).unwrap();
-    let s0 = format!("0:{}", sign_as_holder(&prefix, 1));
-    let s1 = format!("1:{}", sign_as_holder(&prefix, 2));
+    let s0 = sign_as_holder(&prefix, 1);
+    let s1 = sign_as_holder(&prefix, 2);
     let (ok, out) = run(
         &d,
         &[
@@ -253,7 +248,7 @@ fn assemble_refuses_one_signature_and_refuses_one_key_signing_twice() {
     assert!(ok, "prepare failed: {out}");
     let prefix = std::fs::read(d.join("prefix.bin")).unwrap();
 
-    let s0 = format!("0:{}", sign_as_holder(&prefix, 1));
+    let s0 = sign_as_holder(&prefix, 1);
     let (ok, out) = run(
         &d,
         &[
@@ -291,7 +286,7 @@ fn assemble_refuses_one_signature_and_refuses_one_key_signing_twice() {
             "dup.zmod",
         ],
     );
-    assert!(!ok, "a duplicate key index must be refused: {out}");
+    assert!(!ok, "a duplicate signature must be refused: {out}");
 }
 
 /// The changelog is not optional, and that is a security property rather than

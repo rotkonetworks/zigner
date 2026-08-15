@@ -44,16 +44,13 @@ fun ReleaseKeyScreen(
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
-	var keyIndex by remember { mutableStateOf(0u) }
 	var pubkeyHex by remember { mutableStateOf("") }
 	var error by remember { mutableStateOf("") }
 
-	LaunchedEffect(keyIndex) {
-		pubkeyHex = ""
-		error = ""
+	LaunchedEffect(Unit) {
 		try {
 			pubkeyHex = withContext(Dispatchers.Default) {
-				releaseSigningPubkey(seedPhrase, keyIndex)
+				releaseSigningPubkey(seedPhrase)
 			}
 		} catch (e: Exception) {
 			error = e.message ?: "derivation failed"
@@ -78,44 +75,6 @@ fun ReleaseKeyScreen(
 				"to whoever is assembling the 2-of-3 set.",
 			color = MaterialTheme.colors.textSecondary,
 			style = SignerTypeface.BodyM,
-		)
-
-		Spacer(Modifier.padding(top = 24.dp))
-		Text(
-			text = "Key slot",
-			color = MaterialTheme.colors.textTertiary,
-			style = SignerTypeface.BodyM,
-		)
-		Spacer(Modifier.padding(top = 8.dp))
-		Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-			for (i in 0u..2u) {
-				val selected = keyIndex == i
-				Box(
-					modifier = Modifier
-						.weight(1f)
-						.clip(RoundedCornerShape(8.dp))
-						.background(
-							if (selected) MaterialTheme.colors.pink500
-							else MaterialTheme.colors.fill6
-						)
-						.clickable { keyIndex = i }
-						.padding(vertical = 12.dp),
-					contentAlignment = Alignment.Center,
-				) {
-					Text(
-						text = "#$i",
-						color = if (selected) Color.White else MaterialTheme.colors.primary,
-						style = SignerTypeface.BodyM,
-					)
-				}
-			}
-		}
-		Spacer(Modifier.padding(top = 4.dp))
-		Text(
-			text = "Each of the three devices takes a different slot. The slot is " +
-				"the position in RELEASE_KEY_BYTES, not a ranking.",
-			color = MaterialTheme.colors.textTertiary,
-			style = SignerTypeface.CaptionM,
 		)
 
 		Spacer(Modifier.padding(top = 24.dp))
@@ -145,13 +104,12 @@ fun ReleaseKeyScreen(
 			)
 
 			Spacer(Modifier.padding(top = 16.dp))
-			val qr = remember(pubkeyHex, keyIndex) {
+			val qr = remember(pubkeyHex) {
 				runCatching {
-					// `index:hex`, the same shape as a signature, so the
-					// collector parses one format rather than two.
-					val payload = "$keyIndex:$pubkeyHex"
+					// Just the public key hex - signatures are untagged, so there
+					// is no slot to encode alongside it.
 					kotlinx.coroutines.runBlocking {
-						encodeToQr(payload.toByteArray(Charsets.UTF_8).map { it.toUByte() }, false)
+						encodeToQr(pubkeyHex.toByteArray(Charsets.UTF_8).map { it.toUByte() }, false)
 					}
 				}.getOrNull()
 			}
@@ -170,7 +128,7 @@ fun ReleaseKeyScreen(
 
 			Spacer(Modifier.padding(top = 8.dp))
 			Text(
-				text = "$keyIndex:$pubkeyHex",
+				text = pubkeyHex,
 				color = MaterialTheme.colors.textTertiary,
 				fontFamily = FontFamily.Monospace,
 				fontSize = 10.sp,
@@ -183,9 +141,9 @@ fun ReleaseKeyScreen(
 
 			Spacer(Modifier.padding(top = 20.dp))
 			Text(
-				text = "Three keys, three seeds, three devices. If two of them share " +
-					"a seed or sit in the same place, the threshold protects nothing " +
-					"- a single theft or a single compromise takes both.",
+				text = "One key per seed. The trust set is any three of these, from " +
+					"three different seeds - if two come from the same seed or sit in " +
+					"the same place, the threshold protects nothing.",
 				color = MaterialTheme.colors.textTertiary,
 				style = SignerTypeface.CaptionM,
 			)

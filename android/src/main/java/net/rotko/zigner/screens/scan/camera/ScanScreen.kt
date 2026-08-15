@@ -16,6 +16,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -52,6 +55,27 @@ fun ScanScreen(
 	onZidSign: (org.json.JSONObject) -> Unit = {},
 ) {
 	val viewModel: CameraViewModel = viewModel()
+
+	// Load the scan policy before any frame is processed. Without this the
+	// view model falls back to defaults, which still exclude Substrate,
+	// Penumbra and Cosmos - a missed call weakens the user's own choices but
+	// never opens the parsers the gate exists to keep unreachable.
+	val policyContext = LocalContext.current
+	LaunchedEffect(policyContext) { viewModel.applyPolicy(policyContext) }
+
+	// A refused payload must say so. Silently ignoring a QR code looks like a
+	// broken camera, and someone debugging that will reach for the setting
+	// that turns the parser back on without knowing why it was off.
+	val refused by viewModel.refusedCapability.collectAsStateWithLifecycle()
+	LaunchedEffect(refused) {
+		val cap = refused ?: return@LaunchedEffect
+		Toast.makeText(
+			policyContext,
+			"${cap.label} scanning is off. Enable it in settings if you meant to use it.",
+			Toast.LENGTH_LONG,
+		).show()
+		viewModel.clearRefusal()
+	}
 
 	val captured by viewModel.captured.collectAsStateWithLifecycle()
 	val total by viewModel.total.collectAsStateWithLifecycle()

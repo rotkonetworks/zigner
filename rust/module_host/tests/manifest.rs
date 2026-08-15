@@ -23,7 +23,7 @@ fn two_of_three_verifies() {
         5,
         1,
         "test module",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     let m = verify_package(&pkg, &vk, 1, 4).expect("verifies");
     assert_eq!(m.module_version, 5);
@@ -33,7 +33,7 @@ fn two_of_three_verifies() {
 #[test]
 fn one_signature_is_rejected() {
     let (sk, vk) = keys();
-    let pkg = build_full_package(b"wasm", 5, 1, "m", &[(0, sk[0].clone())]);
+    let pkg = build_full_package(b"wasm", 5, 1, "m", &[sk[0].clone()]);
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 0),
         Err(ManifestError::NotEnoughSignatures(1))
@@ -43,16 +43,13 @@ fn one_signature_is_rejected() {
 #[test]
 fn same_key_twice_is_rejected() {
     let (sk, vk) = keys();
-    let pkg = build_full_package(
-        b"wasm",
-        5,
-        1,
-        "m",
-        &[(1, sk[1].clone()), (1, sk[1].clone())],
-    );
+    // One key signing twice must not reach the threshold. Untagged, the second
+    // signature matches only an already-counted key, so it advances nothing and
+    // is rejected as a bad signature (position 1) rather than counted twice.
+    let pkg = build_full_package(b"wasm", 5, 1, "m", &[sk[1].clone(), sk[1].clone()]);
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 0),
-        Err(ManifestError::DuplicateKey(1))
+        Err(ManifestError::BadSignature(1))
     ));
 }
 
@@ -64,7 +61,7 @@ fn rollback_is_rejected() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (1, sk[1].clone())],
+        &[sk[0].clone(), sk[1].clone()],
     );
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 5),
@@ -80,7 +77,7 @@ fn tampered_module_is_rejected() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (1, sk[1].clone())],
+        &[sk[0].clone(), sk[1].clone()],
     );
     let n = pkg.len();
     pkg[n - 1] ^= 1;
@@ -98,7 +95,7 @@ fn tampered_manifest_field_is_rejected() {
         5,
         3,
         "m",
-        &[(0, sk[0].clone()), (1, sk[1].clone())],
+        &[sk[0].clone(), sk[1].clone()],
     );
     pkg[9] = 1; // lower min_kernel_version post-signing
     assert!(matches!(
@@ -126,7 +123,7 @@ fn v1_manifests_are_refused() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     pkg[4] = 1; // manifest_version
     assert!(matches!(
@@ -148,7 +145,7 @@ fn full_payload_with_a_base_hash_is_refused() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 0),
@@ -167,7 +164,7 @@ fn a_patch_without_a_base_is_refused() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     assert!(matches!(
         verify_package(&pkg, &vk, 1, 0),
@@ -186,7 +183,7 @@ fn a_patch_against_the_wrong_base_is_refused() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     assert!(matches!(
         verify_package_with_base(&pkg, &vk, 1, 0, Some(b"a different base")),
@@ -227,7 +224,7 @@ fn a_patch_package_reconstructs_the_module() {
         5,
         1,
         "delta update",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     let m = verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)).expect("patch applies");
     assert_eq!(&m.module_bytes[..], &new[..]);
@@ -252,7 +249,7 @@ fn a_patch_producing_the_wrong_module_is_refused() {
         5,
         1,
         "delta update",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     assert!(matches!(
         verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)),
@@ -273,7 +270,7 @@ fn a_corrupt_delta_fails_cleanly() {
         5,
         1,
         "delta update",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     assert!(matches!(
         verify_package_with_base(&pkg, &vk, 1, 0, Some(&base)),
@@ -292,7 +289,7 @@ fn tampering_with_the_payload_fails_the_result_hash() {
         5,
         1,
         "m",
-        &[(0, sk[0].clone()), (2, sk[2].clone())],
+        &[sk[0].clone(), sk[2].clone()],
     );
     let n = pkg.len();
     pkg[n - 1] ^= 0xff;

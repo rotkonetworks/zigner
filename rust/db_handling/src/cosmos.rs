@@ -196,6 +196,42 @@ pub fn derive_cosmos_key(
     })
 }
 
+/// Derive the account's change-level extended public key (xpub) at
+/// `m/44'/coin_type'/account'/0`.
+///
+/// This is the parent of the address-index leaves, so a watch-only holder can
+/// derive `m/44'/coin_type'/account'/0/i` for any `i` via non-hardened CKD
+/// WITHOUT the seed. That is the whole point: one cold export lets the hot
+/// wallet mint unlimited burner receive addresses, each still signable on the
+/// device at the matching `address_index`, and each recoverable from the seed.
+///
+/// Serialized as a standard base58 `xpub...` string (mainnet public prefix), so
+/// any BIP32 library can consume it.
+pub fn derive_cosmos_account_xpub(
+    seed_phrase: &str,
+    coin_type: u32,
+    account: u32,
+) -> Result<String> {
+    use bip32::Prefix;
+    use bip39::{Language, Mnemonic, Seed};
+
+    let mnemonic = Mnemonic::from_phrase(seed_phrase, Language::English)
+        .map_err(|e| Error::Other(anyhow::anyhow!("Invalid mnemonic: {}", e)))?;
+    let seed = Seed::new(&mnemonic, "");
+
+    // Change level: m/44'/coin_type'/account'/0. Stop above address_index so the
+    // returned xpub can derive every leaf non-hardened.
+    let path_str = format!("m/44'/{}'/{}'/0", coin_type, account);
+    let path: DerivationPath = path_str
+        .parse()
+        .map_err(|e| Error::Other(anyhow::anyhow!("Invalid derivation path: {}", e)))?;
+
+    let xprv = XPrv::derive_from_path(seed.as_bytes(), &path)
+        .map_err(|e| Error::Other(anyhow::anyhow!("BIP32 derivation error: {}", e)))?;
+
+    Ok(xprv.public_key().to_string(Prefix::XPUB))
+}
+
 /// Derive a Cosmos Hub key (m/44'/118'/account'/0/index)
 pub fn derive_cosmos_hub_key(seed_phrase: &str, account: u32, index: u32) -> Result<CosmosKeyPair> {
     derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account, index)
@@ -380,6 +416,32 @@ mod tests {
         assert!(cosmos_addr.starts_with("cosmos1"));
         assert!(osmo_addr.starts_with("osmo1"));
         assert!(noble_addr.starts_with("noble1"));
+    }
+
+    #[test]
+    fn test_xpub_derives_same_children_as_seed() {
+        // The watch-only contract: a burner derived from the exported xpub at
+        // .../0/i must be byte-identical to what the device signs with at the
+        // same i. If this fails, the hot wallet shows an address the device can
+        // never spend from - and post-store-release that is unfixable.
+        use bip32::{ChildNumber, XPub};
+
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let xpub_str = derive_cosmos_account_xpub(mnemonic, SLIP0044_COSMOS, 0).unwrap();
+        assert!(xpub_str.starts_with("xpub"), "expected base58 xpub, got {xpub_str}");
+
+        let xpub: XPub = xpub_str.parse().expect("re-parse exported xpub");
+        for i in 0..5u32 {
+            let child = xpub
+                .derive_child(ChildNumber::new(i, false).unwrap())
+                .unwrap();
+            let seed_key = derive_cosmos_key(mnemonic, SLIP0044_COSMOS, 0, i).unwrap();
+            assert_eq!(
+                child.to_bytes().as_slice(),
+                &seed_key.public_key[..],
+                "xpub child {i} must equal the seed-derived leaf",
+            );
+        }
     }
 
     #[test]

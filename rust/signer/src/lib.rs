@@ -1144,7 +1144,8 @@ fn export_cosmos_accounts(
     network_name: &str,
 ) -> Result<CosmosAccountExport, ErrorDisplayed> {
     use db_handling::cosmos::{
-        derive_cosmos_key, PREFIX_CELESTIA, PREFIX_NOBLE, PREFIX_OSMOSIS, SLIP0044_COSMOS,
+        derive_cosmos_account_xpub, derive_cosmos_key, PREFIX_CELESTIA, PREFIX_NOBLE,
+        PREFIX_OSMOSIS, SLIP0044_COSMOS,
     };
 
     let key = derive_cosmos_key(seed_phrase, SLIP0044_COSMOS, account_index, 0).map_err(|e| {
@@ -1154,6 +1155,17 @@ fn export_cosmos_accounts(
     })?;
 
     let pubkey_hex = hex::encode(&key.public_key);
+
+    // Change-level xpub (m/44'/118'/account'/0). Lets the hot wallet derive
+    // burner receive addresses at .../0/i locally, watch-only, each still
+    // signable on this device at the matching address_index and recoverable
+    // from the seed. This is the rotation backbone - see the note in
+    // db_handling::cosmos::derive_cosmos_account_xpub.
+    let xpub = derive_cosmos_account_xpub(seed_phrase, SLIP0044_COSMOS, account_index).map_err(
+        |e| ErrorDisplayed::Str {
+            s: format!("Failed to derive Cosmos xpub: {e}"),
+        },
+    )?;
 
     // Generate addresses for supported chains (filter by network_name if specified)
     let all_chains: Vec<(&str, &str)> = vec![
@@ -1194,6 +1206,7 @@ fn export_cosmos_accounts(
         "label": label_str,
         "account_index": account_index,
         "public_key": pubkey_hex,
+        "xpub": xpub,
         "addresses": addresses.iter().map(|a| {
             serde_json::json!({
                 "chain_id": a.chain_id,
@@ -1212,6 +1225,7 @@ fn export_cosmos_accounts(
         account_index,
         label: label_str.to_string(),
         public_key_hex: pubkey_hex,
+        xpub,
         addresses,
         qr_data,
     })
@@ -4749,10 +4763,10 @@ pub struct ModulePackageInfo {
 
 /// Verify a module package against the kernel trust anchors. Fails closed
 /// while the release keys are unprovisioned placeholders.
-/// This device's release public key, hex. Collected from three devices to
-/// form the 2-of-3 set baked into RELEASE_KEY_BYTES.
-pub fn release_signing_pubkey(seed_phrase: &str, index: u32) -> Result<String, ErrorDisplayed> {
-    release_signing::public_key_hex(seed_phrase, index).map_err(|s| ErrorDisplayed::Str { s })
+/// This seed's release public key, hex - one key per seed. Collect three (from
+/// three seeds) to form the 2-of-3 set baked into RELEASE_KEY_BYTES.
+pub fn release_signing_pubkey(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
+    release_signing::public_key_hex(seed_phrase).map_err(|s| ErrorDisplayed::Str { s })
 }
 
 /// Parse a scanned manifest prefix for the approve screen. Refuses anything
@@ -4765,12 +4779,8 @@ pub fn release_classify_request(prefix: &[u8]) -> Result<ReleaseSigningRequest, 
 /// Sign a manifest prefix. The signed message is built on-device as
 /// "zigner-module-v1" || prefix - never accepted pre-domained from the host.
 /// Returns the signature hex; the caller shows it as a QR.
-pub fn release_sign_request(
-    seed_phrase: &str,
-    index: u32,
-    prefix: &[u8],
-) -> Result<String, ErrorDisplayed> {
-    release_signing::sign_request(seed_phrase, index, prefix)
+pub fn release_sign_request(seed_phrase: &str, prefix: &[u8]) -> Result<String, ErrorDisplayed> {
+    release_signing::sign_request(seed_phrase, prefix)
         .map(|(_pubkey, sig)| sig)
         .map_err(|s| ErrorDisplayed::Str { s })
 }

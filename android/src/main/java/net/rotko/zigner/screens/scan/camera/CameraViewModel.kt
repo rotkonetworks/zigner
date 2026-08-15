@@ -20,12 +20,53 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+import net.rotko.zigner.domain.scan.ScanCapability
+import net.rotko.zigner.domain.scan.ScanPolicy
 import timber.log.Timber
 
 
 private const val PROBE_EVERY_N = 4
 
 class CameraViewModel() : ViewModel() {
+
+	// ── scan policy ─────────────────────────────────────────────────────────
+	//
+	// The camera is the only untrusted input this app has, and the dispatcher
+	// below routes purely on payload content. Without a gate, every parser
+	// compiled in is reachable by anyone who can put a QR code in front of the
+	// lens - including chains the user never enabled, which are also the least
+	// exercised code here.
+	//
+	// Every route therefore passes through `allow()` BEFORE the payload
+	// reaches a parser. Classifying by prefix first is a fixed-length string
+	// compare, not the thing being defended against.
+	//
+	// Defaults rather than empty when unset: a missed wiring call should not
+	// brick scanning, and the defaults already exclude Substrate, Penumbra and
+	// Cosmos, so the security property survives that mistake.
+	private var allowed: Set<ScanCapability> = ScanPolicy.DEFAULT_ON
+
+	private val _refusedCapability = MutableStateFlow<ScanCapability?>(null)
+
+	/** Set when a payload was refused, so the UI can say why rather than
+	 *  appearing to ignore the code. */
+	val refusedCapability: StateFlow<ScanCapability?> = _refusedCapability.asStateFlow()
+
+	fun applyPolicy(context: android.content.Context) {
+		allowed = ScanPolicy.enabled(context)
+	}
+
+	fun clearRefusal() {
+		_refusedCapability.value = null
+	}
+
+	private fun allow(cap: ScanCapability): Boolean {
+		if (allowed.contains(cap)) return true
+		Timber.w("[SCAN] refused a ${cap.label} payload - capability disabled")
+		_refusedCapability.value = cap
+		return false
+	}
+
 
 	val isTorchEnabled = MutableStateFlow(false)
 
@@ -230,12 +271,14 @@ class CameraViewModel() : ViewModel() {
 							val json = JSONObject(jsonText)
 							Timber.d("[FROST] JSON parsed; keys=${json.keys().asSequence().toList()}")
 							if (json.has("frost")) {
+								if (!allow(ScanCapability.FROST)) return@forEach
 								Timber.d("[FROST] frost type=${json.optString("frost")} -> setting frostPayload")
 								resetScanValues()
 								_frostPayload.value = json
 								return@forEach
 							}
 							if (json.has("auth")) {
+								if (!allow(ScanCapability.AUTH)) return@forEach
 								resetScanValues()
 								_authPayload.value = json
 								return@forEach
@@ -262,6 +305,7 @@ class CameraViewModel() : ViewModel() {
 					// is rejected here and stays on its ur:zigner-module path.
 					val releasePrefix = frameSource?.let { tryDecodeReleasePrefix(it) }
 					if (releasePrefix != null) {
+						if (!allow(ScanCapability.MODULE)) return@forEach
 						resetScanValues()
 						_releaseSignPrefix.value = releasePrefix
 						return@forEach
@@ -321,24 +365,28 @@ class CameraViewModel() : ViewModel() {
 			val firstPayload = completePayload.firstOrNull() ?: return
 
 			if (isPenumbraTransaction(firstPayload)) {
+				if (!allow(ScanCapability.PENUMBRA)) return
 				resetScanValues()
 				_penumbraSignRequestPayload.value = firstPayload
 				return
 			}
 
 			if (isCosmosSignRequest(firstPayload)) {
+				if (!allow(ScanCapability.COSMOS)) return
 				resetScanValues()
 				_cosmosSignRequestPayload.value = firstPayload
 				return
 			}
 
 			if (isZcashSimpleSignRequest(firstPayload)) {
+				if (!allow(ScanCapability.ZCASH)) return
 				resetScanValues()
 				_zcashSimpleSignPayload.value = firstPayload
 				return
 			}
 
 			if (isZcashModulePcztRequest(firstPayload)) {
+				if (!allow(ScanCapability.ZCASH)) return
 				resetScanValues()
 				_zcashModulePcztPayload.value = firstPayload
 				return
@@ -357,6 +405,7 @@ class CameraViewModel() : ViewModel() {
 						}
 
 						BananaSplitRecoveryResult.RequestPassword -> {
+							if (!allow(ScanCapability.BACKUP)) return
 							resetScanValues()
 							_bananaSplitPayload.value = completePayload
 						}
@@ -368,18 +417,25 @@ class CameraViewModel() : ViewModel() {
 					// Multi-frame PCZT module requests arrive here after the
 					// Rust sequence decoder reassembles them into one hex payload.
 					if (isZcashModulePcztRequest(payload.s)) {
+						if (!allow(ScanCapability.ZCASH)) return
 						_zcashModulePcztPayload.value = payload.s
 					} else {
+						// The Substrate path: SCALE plus runtime metadata, the
+						// largest parser in the app and the one with the most
+						// upstream churn.
+						if (!allow(ScanCapability.SUBSTRATE)) return
 						addPendingTransaction(payload.s)
 					}
 				}
 
 				is DecodeSequenceResult.DynamicDerivations -> {
+					if (!allow(ScanCapability.SUBSTRATE)) return
 					resetScanValues()
 					_dynamicDerivationPayload.value = payload.s
 				}
 
 				is DecodeSequenceResult.DynamicDerivationTransaction -> {
+					if (!allow(ScanCapability.SUBSTRATE)) return
 					resetScanValues()
 					_dynamicDerivationTransactionPayload.value = payload.s
 				}
@@ -452,16 +508,19 @@ class CameraViewModel() : ViewModel() {
 
 		when {
 			normalizedUr.startsWith("ur:zigner-backup") -> {
+				if (!allow(ScanCapability.BACKUP)) return
 				processUrFrameForType(urString, normalizedUr, "ur:zigner-backup", _urBackupFrames) { frames ->
 					_urBackupComplete.value = frames
 				}
 			}
 			normalizedUr.startsWith("ur:zcash-notes") -> {
+				if (!allow(ScanCapability.ZCASH)) return
 				processUrFrameForType(urString, normalizedUr, "ur:zcash-notes", _zcashNotesFrames) { frames ->
 					_zcashNotesComplete.value = frames
 				}
 			}
 			normalizedUr.startsWith("ur:zcash-pczt") -> {
+				if (!allow(ScanCapability.ZCASH)) return
 				processUrFountainFrame(urString, normalizedUr, "ur:zcash-pczt", _zcashPcztFrames,
 					tryDecode = { frames ->
 						try { decodeUrZcashPczt(frames); true } catch (_: Exception) { false }
@@ -476,6 +535,10 @@ class CameraViewModel() : ViewModel() {
 			// 2. Module package: manifest || wasm, starting with magic "ZIGM" [0x5A][0x49][0x47][0x4D]
 			// Fountain-decode to raw bytes, then dispatch based on magic/prelude.
 			normalizedUr.startsWith("ur:zigner-module") -> {
+				// Carries both module packages and Zcash PCZT requests, so it
+				// needs either capability to be worth decoding at all; the
+				// inner dispatch gates each on its own below.
+				if (!allow(ScanCapability.MODULE) && !allow(ScanCapability.ZCASH)) return
 				processUrFountainFrame(urString, normalizedUr, "ur:zigner-module", _zignerModuleFrames,
 					tryDecode = { frames ->
 						try { decodeUrModuleRequest(frames); true } catch (_: Exception) { false }
@@ -497,12 +560,14 @@ class CameraViewModel() : ViewModel() {
 							payloadBytes[3] == 0x4D.toByte()) {
 							// Module package detected
 							Timber.d("[MODULE] ur:zigner-module decoded to module package: ${payloadBytes.size}B")
+							if (!allow(ScanCapability.MODULE)) return@processUrFountainFrame
 							resetZignerModuleFrames()
 							_modulePackageBytes.value = payloadBytes
 						} else if (isZcashModulePcztRequest(payloadBytes.take(4).toByteArray().encodeHex())) {
 							// PCZT request detected
 							val payloadHex = payloadBytes.encodeHex()
 							Timber.d("[MODULE] ur:zigner-module decoded to PCZT request: prelude=${payloadHex.take(6)}")
+							if (!allow(ScanCapability.ZCASH)) return@processUrFountainFrame
 							resetZignerModuleFrames()
 							_zcashModulePcztPayload.value = payloadHex
 						} else {
@@ -528,6 +593,7 @@ class CameraViewModel() : ViewModel() {
 	// completeness probe rather than parsing zoda's wire layout here.
 	private fun processZtFrame(ztString: String) {
 		val normalized = ztString.lowercase()
+		if (!allow(ScanCapability.ZCASH)) return
 		if (!normalized.startsWith("zt:zcash-notes/")) {
 			Timber.d("Ignoring unknown zt type: ${normalized.take(24)}")
 			return

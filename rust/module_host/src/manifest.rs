@@ -5,7 +5,7 @@
 //!   magic "ZIGM" | manifest_version:u8=1 | module_version:u32 |
 //!   min_kernel_version:u32 | module_hash:[32] | payload_kind:u8 |
 //!   base_hash:[32] | payload_len:u32 | desc_len:u16 | desc |
-//!   sig_count:u8 | sig_count * ( key_index:u8 | sig:[64] )
+//!   sig_count:u8 | sig_count * sig:[64]   (untagged; verifier matches keys)
 //!
 //! `module_hash` is always the sha256 of the RESULTING module. For
 //! payload_kind FULL the payload is that module verbatim. For a patch the
@@ -208,28 +208,39 @@ pub fn verify_package_with_base<'a>(
     msg.extend_from_slice(&package[..signed_len]);
 
     let (sc, mut rest) = take(rest, 1)?;
-    let mut seen = [false; 3];
+    // No key index on the wire: a signature identifies its own key. For each
+    // signature, find which pinned key it verifies under, and count DISTINCT
+    // keys. This makes the threshold about *how many different keys signed*,
+    // the property we actually want, instead of a self-declared index the
+    // signer could set wrong. One key cannot fill two slots: once a key is
+    // matched it is skipped, so a second signature from it advances nothing.
+    let mut matched = [false; 3];
     let mut valid = 0usize;
-    for _ in 0..sc[0] {
-        let (ki, r) = take(rest, 1)?;
-        let (sig, r) = take(r, 64)?;
+    for i in 0..sc[0] {
+        let (sig, r) = take(rest, 64)?;
         rest = r;
-        let idx = ki[0] as usize;
-        if idx >= 3 {
-            return Err(ManifestError::UnknownKey(ki[0]));
-        }
-        if seen[idx] {
-            return Err(ManifestError::DuplicateKey(ki[0]));
-        }
-        seen[idx] = true;
         let signature = Signature::from_bytes(sig.try_into().unwrap());
         // verify_strict, not verify: the permissive form accepts small-order
         // public keys and non-canonical R, both of which admit forgeries. This
-        // is a trust anchor, so take the strict equation.
-        release_keys[idx]
-            .verify_strict(&msg, &signature)
-            .map_err(|_| ManifestError::BadSignature(ki[0]))?;
-        valid += 1;
+        // is a trust anchor, so take the strict equation. A given (msg, sig)
+        // verifies under at most one key, so the first match is the only match.
+        let mut advanced = false;
+        for k in 0..3 {
+            if matched[k] {
+                continue;
+            }
+            if release_keys[k].verify_strict(&msg, &signature).is_ok() {
+                matched[k] = true;
+                valid += 1;
+                advanced = true;
+                break;
+            }
+        }
+        // A signature that matches no unmatched pinned key is either forged, from
+        // a key we do not pin, or a duplicate of one already counted. Fail closed.
+        if !advanced {
+            return Err(ManifestError::BadSignature(i));
+        }
     }
     if valid < REQUIRED_SIGS {
         return Err(ManifestError::NotEnoughSignatures(valid));
@@ -375,11 +386,13 @@ pub fn signing_message(prefix: &[u8]) -> Vec<u8> {
 }
 
 /// Join a prefix with signatures collected from offline devices, plus payload.
-pub fn assemble_package(prefix: &[u8], sigs: &[(u8, [u8; 64])], payload: &[u8]) -> Vec<u8> {
+///
+/// Signatures are untagged - the verifier matches each against the pinned keys -
+/// so the order they are joined in does not matter.
+pub fn assemble_package(prefix: &[u8], sigs: &[[u8; 64]], payload: &[u8]) -> Vec<u8> {
     let mut out = prefix.to_vec();
     out.push(sigs.len() as u8);
-    for (idx, sig) in sigs {
-        out.push(*idx);
+    for sig in sigs {
         out.extend_from_slice(sig);
     }
     out.extend_from_slice(payload);
@@ -399,7 +412,7 @@ pub fn build_package(
     module_version: u32,
     min_kernel_version: u32,
     description: &str,
-    signers: &[(u8, ed25519_dalek::SigningKey)],
+    signers: &[ed25519_dalek::SigningKey],
 ) -> Vec<u8> {
     use ed25519_dalek::Signer as _;
     let prefix = build_signing_prefix(
@@ -412,10 +425,7 @@ pub fn build_package(
         description,
     );
     let msg = signing_message(&prefix);
-    let sigs: Vec<(u8, [u8; 64])> = signers
-        .iter()
-        .map(|(idx, key)| (*idx, key.sign(&msg).to_bytes()))
-        .collect();
+    let sigs: Vec<[u8; 64]> = signers.iter().map(|key| key.sign(&msg).to_bytes()).collect();
     assemble_package(&prefix, &sigs, payload)
 }
 
@@ -425,7 +435,7 @@ pub fn build_full_package(
     module_version: u32,
     min_kernel_version: u32,
     description: &str,
-    signers: &[(u8, ed25519_dalek::SigningKey)],
+    signers: &[ed25519_dalek::SigningKey],
 ) -> Vec<u8> {
     build_package(
         module_bytes,

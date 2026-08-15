@@ -161,22 +161,20 @@ fn assemble(a: &Args) -> Result<(), String> {
     let prefix = read(&a.req("--prefix")?)?;
     let payload = read(&a.req("--payload")?)?;
 
-    let mut sigs: Vec<(u8, [u8; 64])> = Vec::new();
+    // Untagged signatures: the verifier matches each against the pinned keys, so
+    // order does not matter and there is no index to pass. Reject a byte-identical
+    // signature given twice (ed25519 is deterministic, so one key signing the same
+    // prefix twice produces the same bytes) - that is one key, not two.
+    let mut sigs: Vec<[u8; 64]> = Vec::new();
     for spec in a.all("--sig") {
-        let (idx, hexsig) = spec
-            .split_once(':')
-            .ok_or_else(|| format!("--sig must be INDEX:HEX, got '{spec}'"))?;
-        let idx: u8 = idx
-            .parse()
-            .map_err(|_| format!("bad key index in '{spec}'"))?;
-        let raw = hex::decode(hexsig).map_err(|e| format!("bad signature hex: {e}"))?;
+        let raw = hex::decode(spec.trim()).map_err(|e| format!("bad signature hex: {e}"))?;
         let raw: [u8; 64] = raw
             .try_into()
             .map_err(|_| "a signature must be 64 bytes".to_string())?;
-        if sigs.iter().any(|(i, _)| *i == idx) {
-            return Err(format!("key index {idx} given twice - the device rejects duplicate indices, and two signatures from one key are not 2-of-3"));
+        if sigs.contains(&raw) {
+            return Err("the same signature was given twice - two signatures from one key are not 2-of-3".into());
         }
-        sigs.push((idx, raw));
+        sigs.push(raw);
     }
     if sigs.len() < manifest::REQUIRED_SIGS {
         return Err(format!(
@@ -194,7 +192,7 @@ fn assemble(a: &Args) -> Result<(), String> {
         pkg.len(),
         sigs.len()
     );
-    println!("\nVerify before shipping:  modpack verify --package {out} --key 0:HEX --key 1:HEX --key 2:HEX");
+    println!("\nVerify before shipping:  modpack verify --package {out} --key HEX --key HEX --key HEX");
     Ok(())
 }
 
@@ -202,26 +200,21 @@ fn assemble(a: &Args) -> Result<(), String> {
 fn verify(a: &Args) -> Result<(), String> {
     let pkg = read(&a.req("--package")?)?;
 
+    // The full pinned set, order-independent (the verifier matches each signature
+    // against all three). Pass three bare --key HEX; no index.
+    let key_specs = a.all("--key");
+    if key_specs.len() != 3 {
+        return Err(format!(
+            "exactly 3 release public keys required - verification is against the full set the kernel bakes in, not just the signers; got {}",
+            key_specs.len()
+        ));
+    }
     let mut keys = [[0u8; 32]; 3];
-    let mut seen = [false; 3];
-    for spec in a.all("--key") {
-        let (idx, hexkey) = spec
-            .split_once(':')
-            .ok_or_else(|| format!("--key must be INDEX:HEX, got '{spec}'"))?;
-        let idx: usize = idx
-            .parse()
-            .map_err(|_| format!("bad key index in '{spec}'"))?;
-        if idx >= 3 {
-            return Err(format!("key index {idx} out of range"));
-        }
-        let raw = hex::decode(hexkey).map_err(|e| format!("bad key hex: {e}"))?;
-        keys[idx] = raw
+    for (i, spec) in key_specs.iter().enumerate() {
+        let raw = hex::decode(spec.trim()).map_err(|e| format!("bad key hex: {e}"))?;
+        keys[i] = raw
             .try_into()
             .map_err(|_| "a public key must be 32 bytes".to_string())?;
-        seen[idx] = true;
-    }
-    if !seen.iter().all(|s| *s) {
-        return Err("all three release public keys are required - verification is against the full set the kernel bakes in, not just the signers".into());
     }
 
     let vks: Vec<ed25519_dalek::VerifyingKey> = keys
@@ -270,19 +263,12 @@ fn verify(a: &Args) -> Result<(), String> {
 /// signature over `manifest::signing_message(prefix)` = DOMAIN || prefix, so a
 /// file-key signature and a device signature are interchangeable in a package.
 ///
-/// Output is one line `INDEX:SIGHEX`, ready to paste into `modpack assemble
-/// --sig INDEX:SIGHEX`. The pubkey is printed to stderr for the operator to
-/// eyeball against the pinned slot.
+/// Output is one line `SIGHEX`, ready to paste into `modpack assemble --sig
+/// SIGHEX`. The pubkey is printed to stderr so the operator can eyeball it
+/// against the pinned set. Untagged: the verifier matches it against the keys.
 fn sign(a: &Args) -> Result<(), String> {
     use ed25519_dalek::{Signer, SigningKey, Verifier};
 
-    let slot: u8 = a
-        .req("--slot")?
-        .parse()
-        .map_err(|_| "--slot must be 0, 1 or 2".to_string())?;
-    if slot > 2 {
-        return Err("--slot must be 0, 1 or 2".into());
-    }
     let prefix = read(&a.req("--prefix")?)?;
 
     // Parse with the real parser before signing - never sign bytes we cannot
@@ -315,10 +301,10 @@ fn sign(a: &Args) -> Result<(), String> {
         .map_err(|e| format!("self-verify failed (bad key?): {e}"))?;
 
     eprintln!(
-        "signed slot {slot} with release pubkey {}",
+        "signed with release pubkey {}",
         hex::encode(sk.verifying_key().to_bytes())
     );
-    println!("{slot}:{}", hex::encode(sig.to_bytes()));
+    println!("{}", hex::encode(sig.to_bytes()));
     Ok(())
 }
 
@@ -447,11 +433,11 @@ modpack - zigner protocol-module release tooling
             when the other two slots are zigner-derived. Prints the verifying
             keys to pin; writes secret keys 0600 to age-encrypt. See CEREMONY.md.
 
-  sign      --slot N --key slotN.sk --prefix prefix.bin
+  sign      --key key.sk --prefix prefix.bin
 
-            Sign a prefix with a FILE-held release key (the GitHub/CI slot).
-            Device holders sign on their zigner instead. Prints INDEX:SIGHEX
-            for `assemble`. Same signed bytes as the device, interchangeable.
+            Sign a prefix with a FILE-held release key (the GitHub/CI key).
+            Device holders sign on their zigner instead. Prints SIGHEX for
+            `assemble`. Same signed bytes as the device, interchangeable.
 
   prepare   --module M.wasm --version N --changelog NOTES.md
             [--base BAKED.wasm] [--min-kernel N]
@@ -461,11 +447,11 @@ modpack - zigner protocol-module release tooling
             delta instead of the whole module.
 
   assemble  --prefix prefix.bin --payload payload.bin
-            --sig INDEX:HEX --sig INDEX:HEX [--out package.zmod]
+            --sig HEX --sig HEX [--out package.zmod]
 
             Joins signatures collected from offline devices.
 
-  verify    --package package.zmod --key 0:HEX --key 1:HEX --key 2:HEX
+  verify    --package package.zmod --key HEX --key HEX --key HEX
             [--base BAKED.wasm] [--last-installed N]
 
             Runs the real device verifier. Do this before shipping.
