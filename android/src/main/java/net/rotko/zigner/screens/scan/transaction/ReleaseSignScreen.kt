@@ -20,6 +20,7 @@ import io.parity.signer.uniffi.releaseSignRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.rotko.zigner.components.security.TapjackGuard
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
@@ -55,6 +56,9 @@ fun ReleaseSignScreen(
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// Approval screen: reject touches while an overlay is up.
+	TapjackGuard()
+
 	val scope = rememberCoroutineScope()
 	var state by remember { mutableStateOf(ReleaseSignState.REVIEW) }
 	var errorMsg by remember { mutableStateOf("") }

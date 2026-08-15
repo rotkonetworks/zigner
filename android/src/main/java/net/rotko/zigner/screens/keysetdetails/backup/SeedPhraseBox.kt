@@ -1,7 +1,5 @@
 package net.rotko.zigner.screens.keysetdetails.backup
 
-import net.rotko.zigner.components.security.SecureScreen
-
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -24,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import net.rotko.zigner.components.security.SecureScreen
 import net.rotko.zigner.R
 import net.rotko.zigner.domain.KeepScreenOn
 import net.rotko.zigner.domain.DisableScreenshots

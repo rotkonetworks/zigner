@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import net.rotko.zigner.components.security.TapjackGuard
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
@@ -50,6 +51,9 @@ fun AuthChallengeScreen(
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// Approval screen: reject touches while an overlay is up.
+	TapjackGuard()
+
 	val scope = rememberCoroutineScope()
 	var state by remember { mutableStateOf(AuthState.REVIEW) }
 	var errorMsg by remember { mutableStateOf("") }

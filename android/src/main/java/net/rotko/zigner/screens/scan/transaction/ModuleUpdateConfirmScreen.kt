@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import net.rotko.zigner.components.security.TapjackGuard
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
@@ -53,6 +54,9 @@ fun ModuleUpdateConfirmScreen(
 	onConfirm: Callback,
 	onCancel: Callback,
 ) {
+	// Approval screen: reject touches while an overlay is up.
+	TapjackGuard()
+
 	Column(
 		modifier = Modifier
 			.verticalScroll(rememberScrollState())

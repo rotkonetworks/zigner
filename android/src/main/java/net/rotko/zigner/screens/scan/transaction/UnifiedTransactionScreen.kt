@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import net.rotko.zigner.components.security.TapjackGuard
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.ScreenHeader
 import net.rotko.zigner.components.base.SecondaryButtonWide
@@ -39,6 +40,9 @@ fun UnifiedTransactionScreen(
 	onDecline: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// Approval screen: reject touches while an overlay is up.
+	TapjackGuard()
+
 	var selectedTab by remember { mutableStateOf(0) }
 	val tabs = listOf("Simple", "Advanced")
 

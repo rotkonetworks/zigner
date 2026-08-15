@@ -81,6 +81,15 @@ android {
 		}
 	}
 	buildTypes {
+		debug {
+			// Debug and release shared the application id, so they could not
+			// coexist and an install of one silently replaced the other. That
+			// is how a phone ends up running a DEBUGGABLE build of a signer -
+			// debuggable means any app with adb access can attach to the
+			// process holding the seed.
+			applicationIdSuffix ".debug"
+			versionNameSuffix "-debug"
+		}
 		release {
 			minifyEnabled false
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

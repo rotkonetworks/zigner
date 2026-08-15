@@ -1,7 +1,5 @@
 package net.rotko.zigner.screens.keysets.restore.restorephrase
 
-import net.rotko.zigner.components.security.SecureScreen
-
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +38,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.rotko.zigner.components.security.SecureScreen
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.ScanIconPlain
 import net.rotko.zigner.domain.Callback

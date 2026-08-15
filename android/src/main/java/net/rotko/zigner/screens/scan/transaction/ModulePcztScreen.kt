@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import net.rotko.zigner.components.security.TapjackGuard
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.base.SignerDivider
@@ -68,6 +69,9 @@ fun ModulePcztScreen(
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// Approval screen: reject touches while an overlay is up.
+	TapjackGuard()
+
 	val context = LocalContext.current
 	val scope = rememberCoroutineScope()
 	LaunchedEffect(Unit) { QrPlaybackSpeed.init(context.applicationContext) }
