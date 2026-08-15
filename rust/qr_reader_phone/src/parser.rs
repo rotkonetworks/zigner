@@ -34,10 +34,28 @@ impl RaptorqFrame {
         // If one additional packet is added, it is ~ 0.99998.
         // It was decided to add one additional packet in the printed estimate, so that
         // the user expectations are lower.
-        self.size
-            .checked_div(self.payload.len() as u32 - Self::HEADER_SIZE)
+        // checked_sub, not `len - HEADER_SIZE`. A frame whose payload is
+        // shorter than the header underflows, and this is reached from
+        // get_length() on EVERY scanned frame - ahead of any chain dispatch
+        // and ahead of the scan-capability gate, which cannot cover it because
+        // the chain is not known until the header has been parsed. So any
+        // QR code that can be put in front of the camera reaches it.
+        //
+        // Found by fuzzing, from a 5-byte input. Without overflow checks it
+        // wrapped to a huge divisor and quietly returned 1; with them it
+        // panics, which turns a malformed QR into a crash. Both are wrong, and
+        // returning 1 for a frame we cannot size is at least deliberate.
+        self.payload
+            .len()
+            .checked_sub(Self::HEADER_SIZE as usize)
+            .and_then(|divisor| self.size.checked_div(divisor as u32))
             .unwrap_or_default()
-            + 1
+            // saturating, because `size` is read straight out of the frame
+            // header and is therefore attacker-chosen: a frame declaring
+            // u32::MAX with a five-byte payload divides to u32::MAX and then
+            // overflows on the +1. Caught by the property test below rather
+            // than the single fuzz case, which only covered the subtraction.
+            .saturating_add(1)
     }
 }
 
@@ -153,5 +171,46 @@ mod tests {
         let res = parse_qr_payload("40001abf");
         assert!(res.is_ok(), "{}", "Expected ok, {res:?}");
         assert_eq!(res.unwrap(), "ab");
+    }
+}
+
+#[cfg(test)]
+mod overflow_tests {
+    use super::*;
+
+    /// A raptor frame whose payload is shorter than the 4-byte header used to
+    /// underflow `total()`.
+    ///
+    /// These exact five bytes came out of the fuzzer. The path matters more
+    /// than the arithmetic: `get_length()` calls this on EVERY scanned frame,
+    /// before any chain dispatch and before the scan-capability gate - which
+    /// cannot cover it, because which chain a payload belongs to is not known
+    /// until after this header has been parsed. Anything that can be put in
+    /// front of the camera reaches it.
+    ///
+    /// Before the fix it wrapped to a huge divisor and quietly returned 1
+    /// without overflow checks, and panicked with them - turning a malformed
+    /// QR code into a crash.
+    #[test]
+    fn short_raptor_payload_does_not_underflow_total() {
+        let crash = [0x88u8, 0x00, 0x03, 0x0a, 0x03];
+        if let Ok(frame) = RaptorqFrame::try_from(&crash[..]) {
+            // Any value is acceptable; not panicking is the point. 1 is what a
+            // frame we cannot size should report.
+            assert_eq!(frame.total(), 1);
+        }
+    }
+
+    /// The same property stated generally, so a future rewrite of `total()`
+    /// cannot reintroduce it for a payload length the one case above misses.
+    #[test]
+    fn total_never_panics_for_any_short_payload() {
+        for len in 0..8usize {
+            let frame = RaptorqFrame {
+                size: u32::MAX,
+                payload: vec![0u8; len],
+            };
+            let _ = frame.total();
+        }
     }
 }

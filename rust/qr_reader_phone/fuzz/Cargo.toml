@@ -1,25 +1,32 @@
 [package]
 name = "qr_reader_phone-fuzz"
-version = "0.1.0"
-authors = ["Parity Technologies Ltd."]
+version = "0.0.0"
 publish = false
-edition = "2018"
+edition = "2021"
 
 [package.metadata]
 cargo-fuzz = true
 
+# Deliberately does NOT depend on qr_reader_phone.
+#
+# That crate reaches definitions -> sp-core, i.e. the 2022-era Substrate stack,
+# and cargo-fuzz's nested workspace cannot resolve it (schnorrkel ends up
+# duplicated, and matching the parent's resolver=1 does not rescue it).
+#
+# The framing parser itself needs none of that - only nom - so it is compiled
+# in directly against a minimal Error shim. What is fuzzed is the real
+# src/parser.rs, not a copy: it is #[path]-included, so it cannot drift.
 [dependencies]
 libfuzzer-sys = "0.4"
-
-[dependencies.qr_reader_phone]
-path = ".."
-
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
+nom = "7.1.3"
+hex = "0.4.3"
 
 [[bin]]
-name = "fuzz_parser"
-path = "fuzz_targets/fuzz_parser.rs"
+name = "qr_frame"
+path = "fuzz_targets/qr_frame.rs"
 test = false
 doc = false
+bench = false
+
+[workspace]
+members = ["."]
