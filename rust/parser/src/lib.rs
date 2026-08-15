@@ -220,8 +220,17 @@ pub fn cut_method_extensions(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     let pre_method = get_compact::<u32>(data).map_err(|_| Error::SeparateMethodExtensions)?;
     let method_length = pre_method.compact_found as usize;
     match pre_method.start_next_unit {
-        Some(start) => match data.get(start..start + method_length) {
-            Some(a) => Ok((a.to_vec(), data[start + method_length..].to_vec())),
+        // checked_add before .get(): the .get() itself is safe, but the
+        // addition happens first and usize is 32-bit on armeabi-v7a, a shipped
+        // ABI. There a near-u32::MAX method_length - it is compact-decoded
+        // straight out of the payload - wraps to a small range that .get()
+        // then happily accepts, yielding the WRONG slice instead of None.
+        // Silent misparsing of a transaction is worse than refusing it.
+        Some(start) => match start
+            .checked_add(method_length)
+            .and_then(|end| data.get(start..end).map(|a| (a, end)))
+        {
+            Some((a, end)) => Ok((a.to_vec(), data[end..].to_vec())),
             None => Err(Error::SeparateMethodExtensions),
         },
         None => {
@@ -269,4 +278,81 @@ pub enum MetadataBundle<'a> {
         meta_v14: &'a RuntimeMetadataV14,
         network_version: u32,
     },
+}
+
+#[cfg(test)]
+mod fuzz_smoke {
+    use super::*;
+
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            self.0 = x;
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+    }
+
+    /// Splits a Substrate payload on a compact-encoded length taken straight
+    /// from the data, so the length is attacker-chosen.
+    ///
+    /// Substrate is now off by default in the scan policy, but this runs
+    /// before any signing decision for anyone who turns it on, and it is the
+    /// entry point to the largest parser in the app.
+    #[test]
+    fn cut_method_extensions_never_panics() {
+        for round in 0..40_000u64 {
+            let mut rng = Rng(round.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let len = (rng.next() % 96) as usize;
+            let bytes: Vec<u8> = (0..len).map(|_| rng.next() as u8).collect();
+            let _ = cut_method_extensions(&bytes);
+        }
+    }
+
+    /// Compact encodings that declare enormous lengths.
+    ///
+    /// `data.get(start..start + method_length)` is safe on 64-bit - .get()
+    /// returns None - but the addition happens first, and usize is 32-bit on
+    /// armeabi-v7a, a shipped ABI. There a near-u32::MAX length wraps to a
+    /// small range that .get() then accepts, returning the WRONG slice rather
+    /// than None. Silent misparsing is worse than a panic, and it is the case
+    /// random bytes will not produce: a four-byte compact prefix encoding a
+    /// huge value has to be built deliberately.
+    #[test]
+    fn huge_declared_method_lengths_are_refused() {
+        let mut cases: Vec<Vec<u8>> = Vec::new();
+        // big-mode compact (low two bits = 0b11) followed by a large u32
+        for v in [
+            u32::MAX,
+            u32::MAX - 1,
+            0x8000_0000,
+            0x7fff_ffff,
+            0x0100_0000,
+        ] {
+            let mut c = vec![0b0000_0011u8];
+            c.extend_from_slice(&v.to_le_bytes());
+            cases.push(c.clone());
+            c.extend_from_slice(&[0xaa; 8]);
+            cases.push(c);
+        }
+        // two-byte and four-byte compact modes at their maxima
+        cases.push(vec![0b0000_0001, 0xff, 0xff]);
+        cases.push(vec![0b0000_0010, 0xff, 0xff, 0xff, 0xff]);
+
+        for case in &cases {
+            match cut_method_extensions(case) {
+                // A length this size cannot be satisfied by these buffers, so
+                // the only correct answer is refusal.
+                Ok((method, _)) => assert!(
+                    method.len() <= case.len(),
+                    "accepted a method longer than the buffer it came from"
+                ),
+                Err(_) => {}
+            }
+        }
+    }
 }
