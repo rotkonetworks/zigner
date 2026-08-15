@@ -60,6 +60,45 @@ class CameraViewModel() : ViewModel() {
 		_refusedCapability.value = null
 	}
 
+	// Upper bound on accumulated frames for one payload.
+	//
+	// Sized off the largest LEGITIMATE scan, not off what feels tidy: a full
+	// 2.7 MB module is ~6,000 fragments and the emitter sends roughly twice
+	// that for fountain coverage, so anything under ~15,000 would reject a
+	// real module update. Deltas need a few hundred.
+	//
+	// It bounds memory rather than preventing an attack outright. Exhausting
+	// RAM this way means holding the camera at a hostile display for hours at
+	// frame rate; the reason to cap is that unbounded growth driven by an
+	// attacker-declared count should not be possible at all.
+	private val MAX_ACCUMULATED_FRAMES = 20_000
+
+	// Membership sets for frame dedup, one per accumulating flow.
+	//
+	// The list itself is still the payload; this only answers "seen already".
+	// Scanning the list with `any { }` is O(n) per frame and O(n^2) per scan,
+	// and a real module update runs to thousands of frames - enough string
+	// comparison on the main thread to make scanning visibly stutter.
+	private val seenFrameSets =
+		mutableMapOf<MutableStateFlow<List<String>>, MutableSet<String>>()
+
+	private fun seenFrames(flow: MutableStateFlow<List<String>>): MutableSet<String> =
+		seenFrameSets.getOrPut(flow) {
+			// Rebuild from whatever the flow already holds, so a set created
+			// mid-scan does not forget frames taken before it existed.
+			flow.value.map { it.lowercase() }.toMutableSet()
+		}
+
+	private fun forgetFrames(flow: MutableStateFlow<List<String>>) {
+		seenFrameSets.remove(flow)
+	}
+
+	private fun tooManyFrames(count: Int, what: String): Boolean {
+		if (count < MAX_ACCUMULATED_FRAMES) return false
+		Timber.w("[SCAN] $what exceeded $MAX_ACCUMULATED_FRAMES frames - discarding")
+		return true
+	}
+
 	private fun allow(cap: ScanCapability): Boolean {
 		if (allowed.contains(cap)) return true
 		Timber.w("[SCAN] refused a ${cap.label} payload - capability disabled")
@@ -284,6 +323,11 @@ class CameraViewModel() : ViewModel() {
 								return@forEach
 							}
 							if (json.optString("type") == "zid-sign") {
+								// zid-sign is the identity surface, same as
+								// {"auth":...} above - it was missed when the
+								// gate went in, sitting one branch away from a
+								// route that is gated.
+								if (!allow(ScanCapability.AUTH)) return@forEach
 								resetScanValues()
 								_zidSignPayload.value = json
 								return@forEach
@@ -628,10 +672,20 @@ class CameraViewModel() : ViewModel() {
 		onComplete: (List<String>) -> Unit,
 	) {
 		val currentFrames = framesFlow.value
-		if (currentFrames.any { it.lowercase() == normalizedUr }) return
+		// Dedup against a set: `any { }` is O(n) per frame and so O(n^2) over a
+		// scan. At the frame counts a real module update needs, that is enough
+		// string comparison on the main thread to make scanning visibly slow.
+		if (normalizedUr in seenFrames(framesFlow)) return
+		if (tooManyFrames(currentFrames.size, "fountain frames")) {
+			framesFlow.value = emptyList()
+			forgetFrames(framesFlow)
+			resetScanValues()
+			return
+		}
 
 		val updatedFrames = currentFrames + urString
 		framesFlow.value = updatedFrames
+		seenFrames(framesFlow).add(normalizedUr)
 
 		val sequenceMatch = Regex("$urPrefix/(\\d+)-(\\d+)/").find(normalizedUr)
 		if (sequenceMatch == null) {
@@ -715,12 +769,16 @@ class CameraViewModel() : ViewModel() {
 		_zcashSimpleSignPayload.value = null
 		_zcashModulePcztPayload.value = null
 		_urBackupFrames.value = emptyList()
+		forgetFrames(_urBackupFrames)
 		_urBackupComplete.value = null
 		_zcashNotesFrames.value = emptyList()
+		forgetFrames(_zcashNotesFrames)
 		_zcashNotesComplete.value = null
 		_zcashPcztFrames.value = emptyList()
+		forgetFrames(_zcashPcztFrames)
 		_zcashPcztComplete.value = null
 		_zignerModuleFrames.value = emptyList()
+		forgetFrames(_zignerModuleFrames)
 		_modulePackageBytes.value = null
 		_releaseSignPrefix.value = null
 		_frostPayload.value = null
@@ -731,21 +789,25 @@ class CameraViewModel() : ViewModel() {
 
 	fun resetUrBackup() {
 		_urBackupFrames.value = emptyList()
+		forgetFrames(_urBackupFrames)
 		_urBackupComplete.value = null
 	}
 
 	fun resetZcashNotes() {
 		_zcashNotesFrames.value = emptyList()
+		forgetFrames(_zcashNotesFrames)
 		_zcashNotesComplete.value = null
 	}
 
 	fun resetZcashPczt() {
 		_zcashPcztFrames.value = emptyList()
+		forgetFrames(_zcashPcztFrames)
 		_zcashPcztComplete.value = null
 	}
 
 	fun resetZignerModuleFrames() {
 		_zignerModuleFrames.value = emptyList()
+		forgetFrames(_zignerModuleFrames)
 	}
 
 	fun resetModulePackageBytes() {
