@@ -529,3 +529,82 @@ mod tests {
         assert_eq!(request.summary, "Send 1.0 ZEC");
     }
 }
+
+#[cfg(test)]
+mod fuzz_smoke {
+    use super::*;
+
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            self.0 = x;
+            x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        }
+    }
+
+    /// Zcash is enabled by default in the scan policy, so unlike the Penumbra
+    /// decoder this parser is reachable on a stock device. Anything a camera
+    /// can be pointed at gets here.
+    ///
+    /// Random bytes alone would be rejected at the prefix, so most rounds
+    /// start from the real envelope prefix and mutate what follows - that is
+    /// what gets past the early checks and into the length handling.
+    #[test]
+    fn hostile_sign_requests_never_panic() {
+        for round in 0..30_000u64 {
+            let mut rng = Rng(round.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let len = (rng.next() % 160) as usize;
+            let mut bytes: Vec<u8> = (0..len).map(|_| rng.next() as u8).collect();
+
+            // Most rounds wear a valid-looking prefix so they survive
+            // classification; the rest stay fully random so nothing upstream
+            // of it is skipped.
+            if round % 4 != 0 && bytes.len() >= 3 {
+                bytes[0] = 0x53;
+                bytes[1] = 0x04;
+                bytes[2] = (rng.next() % 8) as u8;
+            }
+
+            let _ = ZcashSignRequestData::from_qr_bytes(&bytes);
+            let _ = is_zcash_transaction(&hex::encode(&bytes));
+            let _ = ZcashSignRequestData::from_qr_hex(&hex::encode(&bytes));
+        }
+    }
+
+    /// Counts and lengths declared far larger than the buffer, which is where
+    /// a parser that checks some bounds and not others gives way. Built by
+    /// hand because random bytes almost never produce a large count field.
+    #[test]
+    fn oversized_counts_and_truncations_never_panic() {
+        let mut cases: Vec<Vec<u8>> = Vec::new();
+        for kind in 0u8..8 {
+            for count in [0xffffu16, 0xfffe, 0x8000, 1, 0] {
+                let mut v = vec![0x53u8, 0x04, kind, 0x00];
+                v.extend_from_slice(&0xffff_ffffu32.to_le_bytes());
+                v.extend_from_slice(&count.to_le_bytes());
+                cases.push(v.clone());
+                // Same header, then a single byte: the truncation that lands
+                // between a declared count and the data it describes.
+                v.push(0x01);
+                cases.push(v);
+            }
+        }
+        // Every truncation of a plausible envelope.
+        let full: Vec<u8> = (0..96u8).collect();
+        for n in 0..full.len() {
+            let mut v = vec![0x53u8, 0x04, 0x01];
+            v.extend_from_slice(&full[..n]);
+            cases.push(v);
+        }
+
+        for case in &cases {
+            let _ = ZcashSignRequestData::from_qr_bytes(case);
+            let _ = is_zcash_transaction(&hex::encode(case));
+        }
+    }
+}
