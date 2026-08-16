@@ -35,6 +35,13 @@ import net.rotko.zigner.ui.theme.*
 import timber.log.Timber
 
 /**
+ * First line of an ASCII-armored age file. Used to tell the two backup
+ * formats apart on restore, so the user does not have to remember which way
+ * they exported months ago.
+ */
+internal const val AGE_ARMOR_HEADER = "-----BEGIN AGE ENCRYPTED FILE-----"
+
+/**
  * Back up every FROST share encrypted to public keys instead of a passphrase.
  *
  * The difference that matters is not the cipher - both paths are fine - it is
@@ -89,7 +96,7 @@ fun FrostBackupAgeScreen(onBack: Callback) {
 		if (line.isEmpty()) return
 		// Catch the obvious mistake here rather than letting Rust reject the
 		// whole export after the user has already authenticated.
-		if (!line.startsWith("ssh-") && !line.startsWith("age1")) {
+		if (!looksLikeRecipient(line)) {
 			error = "not a public key: expected an ssh-... line or an age1... recipient"
 			return
 		}
@@ -317,12 +324,20 @@ fun FrostBackupAgeScreen(onBack: Callback) {
 						busy = true
 						scope.launch {
 							try {
-								// Anything half-typed in the field is intent to
-								// include it; losing it silently on export is
-								// how a co-signer ends up quietly left out.
-								val extras = recipients + listOfNotNull(
-									draft.trim().takeIf { it.isNotEmpty() },
-								)
+								// Anything left in the field is intent to
+								// include it; dropping it silently is how a
+								// co-signer ends up quietly left out. It gets
+								// the same check the Add button applies, so a
+								// half-typed line fails here rather than after
+								// the user has already authenticated.
+								val pending = draft.trim()
+								if (pending.isNotEmpty() && !looksLikeRecipient(pending)) {
+									error = "not a public key: $pending"
+									busy = false
+									return@launch
+								}
+								val extras =
+									recipients + listOfNotNull(pending.takeIf { it.isNotEmpty() })
 								val armored =
 									FrostExportUseCase.exportAllToRecipients(seed, extras)
 								if (armored == null) {
@@ -345,6 +360,14 @@ fun FrostBackupAgeScreen(onBack: Callback) {
 		}
 	}
 }
+
+/**
+ * Cheap shape check, not validation — Rust does the real parse. This only
+ * exists so an obvious typo is caught before the user authenticates rather
+ * than after.
+ */
+private fun looksLikeRecipient(line: String): Boolean =
+	line.startsWith("ssh-") || line.startsWith("age1")
 
 /**
  * Show enough of a key to be recognised, not enough to be compared.

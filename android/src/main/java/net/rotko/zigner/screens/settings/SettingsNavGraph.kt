@@ -15,6 +15,7 @@ import androidx.navigation.navigation
 import net.rotko.zigner.components.documents.PpScreen
 import net.rotko.zigner.components.documents.TosScreen
 import net.rotko.zigner.screens.settings.backup.SeedBackupIntegratedScreen
+import net.rotko.zigner.screens.settings.frost.FrostBackupAgeScreen
 import net.rotko.zigner.screens.settings.frost.FrostBackupSelectionScreen
 import net.rotko.zigner.screens.settings.frost.FrostSettingsScreen
 import net.rotko.zigner.screens.settings.general.SettingsAdvancedNavSubgraph
@@ -90,10 +91,16 @@ fun NavGraphBuilder.settingsFullSubgraph(
 			FrostSettingsScreen(
 				onBack = { coreNavController.popBackStack() },
 				onBackup = { coreNavController.navigate(SettingsNavSubgraph.multisigBackup) },
+				onBackupToKey = { coreNavController.navigate(SettingsNavSubgraph.multisigBackupAge) },
 			)
 		}
 		composable(SettingsNavSubgraph.multisigBackup) {
 			FrostBackupSelectionScreen(
+				onBack = { coreNavController.popBackStack() },
+			)
+		}
+		composable(SettingsNavSubgraph.multisigBackupAge) {
+			FrostBackupAgeScreen(
 				onBack = { coreNavController.popBackStack() },
 			)
 		}
@@ -120,6 +127,7 @@ internal object SettingsNavSubgraph {
 	const val zcashTestQr = "settings_zcash_test_qr"
 	const val multisig = "settings_multisig"
 	const val multisigBackup = "settings_multisig_backup"
+	const val multisigBackupAge = "settings_multisig_backup_age"
 	const val releaseKey = "settings_release_key"
 	object NetworkDetails {
 		internal const val networkKey = "network_key"
