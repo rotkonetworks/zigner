@@ -36,12 +36,37 @@ import timber.log.Timber
 fun FrostSettingsScreen(
 	onBack: Callback,
 	onBackup: Callback,
+	onBackupToKey: Callback,
 ) {
 	val ctx = LocalContext.current
 	val scope = rememberCoroutineScope()
 	var toast by remember { mutableStateOf<String?>(null) }
 	var error by remember { mutableStateOf<String?>(null) }
 	var importEnvelopeJson by remember { mutableStateOf<String?>(null) }
+	var importAgeText by remember { mutableStateOf<String?>(null) }
+
+	val seedNames = remember { ServiceLocator.seedStorage.getSeedNames().toList() }
+
+	/** Restore an age backup with `seedName`, reporting the same summary. */
+	fun restoreFromAge(armored: String, seedName: String) {
+		scope.launch {
+			try {
+				val resultJson = FrostExportUseCase.importAllFromAge(seedName, armored)
+					?: return@launch // auth cancelled; the auth layer already said so
+				val result = org.json.JSONObject(resultJson)
+				val imported = result.optInt("imported", 0)
+				val skipped = result.optInt("skipped", 0)
+				toast = buildString {
+					append("$imported wallet${if (imported == 1) "" else "s"} restored")
+					if (skipped > 0) append(" ($skipped already present)")
+				}
+				error = null
+			} catch (e: Exception) {
+				Timber.e(e, "[frost-settings] age restore failed")
+				error = e.message ?: "restore failed"
+			}
+		}
+	}
 
 	val openLauncher = rememberLauncherForActivityResult(
 		ActivityResultContracts.OpenDocument()
@@ -50,7 +75,19 @@ fun FrostSettingsScreen(
 			scope.launch {
 				try {
 					val text = withContext(Dispatchers.IO) { readFile(ctx, uri) }
-					importEnvelopeJson = text
+					// Dispatch on what the file IS, rather than making the user
+					// remember which of two ways they backed up months ago.
+					if (text.trimStart().startsWith(AGE_ARMOR_HEADER)) {
+						if (seedNames.size == 1) {
+							restoreFromAge(text, seedNames.first())
+						} else {
+							// Ambiguous: only one of these seeds can open it,
+							// and trying each would force-auth once per seed.
+							importAgeText = text
+						}
+					} else {
+						importEnvelopeJson = text
+					}
 				} catch (e: Exception) {
 					Timber.e(e, "[frost-settings] read failed")
 					error = e.message ?: "read failed"
@@ -93,8 +130,25 @@ fun FrostSettingsScreen(
 			onClick = onBackup
 		)
 		SettingsElement(
+			name = "Backup to a key",
+			onClick = onBackupToKey
+		)
+		SettingsElement(
 			name = "Restore from file",
-			onClick = { openLauncher.launch(arrayOf("application/json")) }
+			// Both backup formats, because the file identifies itself and the
+			// user should not have to recall which way they exported.
+			onClick = { openLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }
+		)
+	}
+
+	importAgeText?.let { armored ->
+		FrostSeedPickerDialog(
+			seedNames = seedNames,
+			onPick = { name ->
+				importAgeText = null
+				restoreFromAge(armored, name)
+			},
+			onCancel = { importAgeText = null },
 		)
 	}
 

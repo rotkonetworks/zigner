@@ -28,7 +28,21 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 use crate::auth::derive_domain_seed;
-use crate::ssh::SSH_DOMAIN;
+
+/// Own domain, NOT the zigner-ssh or ZID key.
+///
+/// Both of those exist to SIGN, and the ZID key signs challenges chosen by
+/// whatever site asked for one. age's ssh recipients work by mapping an
+/// ed25519 key onto X25519, so pointing one at this would make a single
+/// keypair both a signing oracle for attacker-chosen input and a decryption
+/// key - the sort of cross-protocol reuse that is hard to reason about and
+/// unnecessary here.
+///
+/// Unnecessary because this recipient is self-addressed: no counterparty has
+/// to know it in advance, so a dedicated key costs nothing. Co-signers still
+/// paste their ordinary ssh public keys, which is their call to make and the
+/// normal way age is used.
+pub const AGE_BACKUP_DOMAIN: &str = "zigner-backup-age";
 
 /// Parse one recipient string, accepting either flavour.
 ///
@@ -84,10 +98,22 @@ pub fn encrypt_to_recipients(plaintext: &[u8], recipients: &[String]) -> Result<
     String::from_utf8(armored).map_err(|e| format!("armor utf8: {e}"))
 }
 
-/// This device's SSH public key as an `ssh-ed25519 ...` line — the recipient
-/// to hand out so a backup can be encrypted back to this device.
+/// The device's backup keypair, in the shape ssh-key uses.
+fn device_keypair(
+    seed_phrase: &str,
+    index: u32,
+) -> Result<ssh_key::private::Ed25519Keypair, String> {
+    let seed = derive_domain_seed(seed_phrase, AGE_BACKUP_DOMAIN, index)?;
+    Ok(ssh_key::private::Ed25519Keypair::from_seed(&seed))
+}
+
+/// This device's recipient as an `ssh-ed25519 ...` line — what to hand out so
+/// a backup can be addressed back to this device.
 pub fn device_recipient(seed_phrase: &str, index: u32) -> Result<String, String> {
-    crate::ssh::public_key_line(seed_phrase, index, "")
+    let keypair = device_keypair(seed_phrase, index)?;
+    ssh_key::PublicKey::from(keypair.public)
+        .to_openssh()
+        .map_err(|e| format!("openssh public encode: {e}"))
 }
 
 /// Rebuild this device's SSH key as an OpenSSH private key file.
@@ -98,8 +124,7 @@ pub fn device_recipient(seed_phrase: &str, index: u32) -> Result<String, String>
 /// the life of this call, so it is built here and dropped here rather than
 /// handed to a caller.
 fn device_identity(seed_phrase: &str, index: u32) -> Result<age::ssh::Identity, String> {
-    let seed = derive_domain_seed(seed_phrase, SSH_DOMAIN, index)?;
-    let keypair = ssh_key::private::Ed25519Keypair::from_seed(&seed);
+    let keypair = device_keypair(seed_phrase, index)?;
     let pem = ssh_key::PrivateKey::from(keypair)
         .to_openssh(ssh_key::LineEnding::LF)
         .map_err(|e| format!("openssh encode: {e}"))?;
