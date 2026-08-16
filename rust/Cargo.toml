@@ -35,8 +35,8 @@ exclude = ["pq_hybrid"]
 
 # Shared crates — single source of truth across zcli/zafu/zigner
 [workspace.dependencies]
-frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "06cd04f" }
-zoda-vss = { git = "https://github.com/rotkonetworks/zcli.git", rev = "06cd04f" }
+frost-spend = { git = "https://github.com/rotkonetworks/zcli.git", rev = "bd9c63e" }
+zoda-vss = { git = "https://github.com/rotkonetworks/zcli.git", rev = "bd9c63e" }
 
 [profile.release]
 # Integer overflow panics instead of wrapping silently.
