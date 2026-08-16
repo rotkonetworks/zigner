@@ -42,6 +42,14 @@ hkdf = "0.12"
 # FROST multisig backup: PBKDF2-SHA512 + AES-GCM-256 (matches zafu @repo/encryption).
 pbkdf2 = "0.12"
 aes-gcm = "0.10"
+# Backup-to-a-public-key, as an alternative to backup-under-a-passphrase.
+# "ssh" so an ordinary ssh-ed25519 line is a recipient; "armor" so the result
+# is text that survives being pasted somewhere. Default features are off:
+# they pull in a CLI-oriented plugin/pinentry stack this has no use for.
+age = { version = "0.11", default-features = false, features = ["ssh", "armor"] }
+# Only to render the device's derived seed as an OpenSSH key file, which is
+# the shape age's ssh identity accepts.
+ssh-key = { version = "0.6", default-features = false, features = ["ed25519", "alloc"] }
 base64 = { version = "0.22", default-features = false, features = ["std"] }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }

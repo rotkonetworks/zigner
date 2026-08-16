@@ -29,6 +29,7 @@
 // to satisfy the unused_crate_dependencies lint
 use zcash_transparent as _;
 
+pub mod age_backup;
 pub mod auth;
 pub mod backup;
 mod ffi_types;

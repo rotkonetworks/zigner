@@ -154,6 +154,36 @@ fn derive_base_keypair(seed_phrase: &str, index: u32) -> Result<ed25519::Pair, S
     Ok(ed25519::Pair::from_seed(&seed))
 }
 
+/// The raw 32-byte ed25519 seed behind [`derive_domain_keypair`].
+///
+/// Needed because some consumers want the key in a FORMAT rather than as an
+/// sp_core Pair - age's ssh identity takes an OpenSSH private key file, which
+/// has to be built from the seed.
+///
+/// This is the single definition of the domain-scoped seed, and
+/// `derive_domain_keypair` is a thin wrapper over it. Two copies of the
+/// derivation would be free to drift, and the drift would surface as a backup
+/// that will not open rather than as anything that looks like a bug.
+pub(crate) fn derive_domain_seed(
+    seed_phrase: &str,
+    domain: &str,
+    index: u32,
+) -> Result<[u8; 32], String> {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    type HmacSha512 = Hmac<Sha512>;
+
+    let hmac_key = format!("zafu-identity:{domain}");
+    let data = format!("{seed_phrase}\0{index}");
+    let mut mac =
+        HmacSha512::new_from_slice(hmac_key.as_bytes()).map_err(|e| format!("hmac init: {e}"))?;
+    mac.update(data.as_bytes());
+    let result = mac.finalize().into_bytes();
+    result[..32]
+        .try_into()
+        .map_err(|_| "hmac output too short".to_string())
+}
+
 /// Domain-scoped derivation — extends zafu's scheme with domain separation:
 ///   HMAC-SHA512(key="zafu-identity:" + domain, data=mnemonic + '\0' + index_str)
 ///
@@ -166,22 +196,7 @@ pub(crate) fn derive_domain_keypair(
     if domain.is_empty() {
         return derive_base_keypair(seed_phrase, index);
     }
-
-    use hmac::{Hmac, Mac};
-    use sha2::Sha512;
-    type HmacSha512 = Hmac<Sha512>;
-
-    let hmac_key = format!("zafu-identity:{domain}");
-    let data = format!("{seed_phrase}\0{index}");
-
-    let mut mac =
-        HmacSha512::new_from_slice(hmac_key.as_bytes()).map_err(|e| format!("hmac init: {e}"))?;
-    mac.update(data.as_bytes());
-    let result = mac.finalize().into_bytes();
-
-    let seed: [u8; 32] = result[..32]
-        .try_into()
-        .map_err(|_| "hmac output too short".to_string())?;
+    let seed = derive_domain_seed(seed_phrase, domain, index)?;
     Ok(ed25519::Pair::from_seed(&seed))
 }
 
