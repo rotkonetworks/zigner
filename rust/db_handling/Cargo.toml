@@ -42,7 +42,6 @@ bip32 = { version = "0.5", default-features = false, features = ["secp256k1", "a
 ripemd = { version = "0.1", optional = true }
 
 # Bitcoin (BIP-32/44/84/86)
-bitcoin = { version = "0.32", default-features = false, features = ["std", "base64"], optional = true }
 secp256k1 = { version = "0.29", default-features = false, features = ["global-context", "std"], optional = true }
 
 # Nostr (reuses secp256k1 from above for Schnorr)
@@ -59,15 +58,12 @@ tempfile = { version = "3.10" }
 
 [features]
 default = []
-active = ["defaults/active", "definitions/active", "tiny-bip39", "sp-core", "sp-runtime", "zeroize", "penumbra", "ledger", "cosmos", "zcash", "bitcoin_keys", "nostr_keys", "atproto"]
+active = ["defaults/active", "definitions/active", "tiny-bip39", "sp-core", "sp-runtime", "zeroize", "penumbra", "ledger", "cosmos", "zcash"]
 test = []
 penumbra = ["decaf377", "decaf377-rdsa", "poseidon377", "f4jumble", "bech32", "blake2b_simd", "aes", "tiny-bip39", "zeroize"]
 ledger = ["hmac", "sha2", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
 cosmos = ["bip32", "bech32", "sha2", "ripemd", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
 zcash = ["bip32/bip39", "tiny-bip39", "zeroize", "orchard", "zcash_address", "zip32", "serde"]
-bitcoin_keys = ["bitcoin", "secp256k1", "bech32", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
-nostr_keys = ["secp256k1", "bech32", "sha2", "serde", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
-atproto = ["bip32", "secp256k1", "sha2", "serde", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
 
 [lib]
 name = "db_handling"

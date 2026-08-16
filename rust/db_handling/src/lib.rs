@@ -64,14 +64,8 @@ pub mod frost;
 
 pub mod contacts;
 
-#[cfg(feature = "bitcoin_keys")]
-pub mod bitcoin;
 
-#[cfg(feature = "nostr_keys")]
-pub mod nostr;
 
-#[cfg(feature = "atproto")]
-pub mod atproto;
 
 pub use error::{Error, Result};
 
