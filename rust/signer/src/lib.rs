@@ -4291,10 +4291,13 @@ fn verify_envelope_threshold(
 
 /// Encrypt every FROST wallet on this device into a single envelope.
 /// Returns the envelope JSON string. Caller writes to a `.json` file.
-fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDisplayed> {
-    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
-    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
-
+/// Gather every FROST share on this device into transport-independent form.
+///
+/// Shared by both backup transports - the passphrase envelope and the age
+/// path - so the two can never disagree about what a backup contains.
+fn collect_all_frost_shares(
+    database: &sled::Db,
+) -> Result<Vec<frost_backup::ShareEntry>, ErrorDisplayed> {
     let summaries =
         db_handling::frost::list_frost_wallets(database).map_err(|e| ErrorDisplayed::Str {
             s: format!("list FROST wallets: {e}"),
@@ -4329,7 +4332,13 @@ fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDis
             created_at: data.created_at,
         });
     }
+    Ok(shares)
+}
 
+fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+    let shares = collect_all_frost_shares(database)?;
     frost_backup::seal_batch_envelope(&shares, passphrase).map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
@@ -4342,7 +4351,13 @@ fn frost_import_all_backup_envelope(
 ) -> Result<String, ErrorDisplayed> {
     let shares = frost_backup::open_batch_envelope(envelope_json, passphrase)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    import_frost_shares(shares)
+}
 
+/// Store a decrypted share list. The half of import that is the same however
+/// the bytes were protected - including the envelope-vs-KeyPackage threshold
+/// cross-check, which must not be skippable by arriving via a new transport.
+fn import_frost_shares(shares: Vec<frost_backup::ShareEntry>) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
@@ -4394,6 +4409,66 @@ fn frost_import_all_backup_envelope(
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("serialize result: {e}"),
     })
+}
+
+// ── FROST backup, addressed to public keys instead of to a passphrase ──
+
+/// Fixed derivation index for the backup recipient.
+///
+/// Pinned rather than threaded up to the UI: a different index is a different
+/// key, so an index that disagreed between export and import would produce a
+/// backup that simply never opens, with nothing to indicate why.
+const AGE_BACKUP_INDEX: u32 = 0;
+
+/// This device's own recipient line, for the UI to display and share.
+fn age_device_recipient(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
+    age_backup::device_recipient(seed_phrase, AGE_BACKUP_INDEX)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Export every FROST share, encrypted to public keys rather than under a
+/// passphrase. Returns armored age text for the caller to write to a file.
+///
+/// This device's own recipient is always included, so the seed alone can
+/// always restore it. `extra_recipients` adds co-signers or a second device -
+/// which is the point, since a backup only this seed can open fails at the
+/// same moment the seed does.
+fn frost_export_all_backup_age(
+    seed_phrase: &str,
+    extra_recipients: Vec<String>,
+) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+    let shares = collect_all_frost_shares(database)?;
+    let plaintext = frost_backup::batch_plaintext(&shares).map_err(|e| ErrorDisplayed::Str { s: e })?;
+
+    let mut recipients = vec![age_backup::device_recipient(seed_phrase, AGE_BACKUP_INDEX)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?];
+    // A duplicate recipient is not an error in age, but it does put a
+    // confusing second stanza in the file for the same key. Drop the case
+    // where the user pasted this device's own line by hand.
+    for r in extra_recipients {
+        let r = r.trim().to_string();
+        if !r.is_empty() && !recipients.contains(&r) {
+            recipients.push(r);
+        }
+    }
+
+    age_backup::encrypt_to_recipients(&plaintext, &recipients)
+        .map_err(|e| ErrorDisplayed::Str { s: e })
+}
+
+/// Import an age-encrypted batch backup addressed to this device.
+/// Returns the same `{ "imported": N, "skipped": M }` as the passphrase path.
+fn frost_import_all_backup_age(
+    seed_phrase: &str,
+    armored: &str,
+) -> Result<String, ErrorDisplayed> {
+    let plaintext = age_backup::decrypt_with_device_key(seed_phrase, AGE_BACKUP_INDEX, armored)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let shares =
+        frost_backup::parse_batch_plaintext(&plaintext).map_err(|e| ErrorDisplayed::Str { s: e })?;
+    import_frost_shares(shares)
 }
 
 // ── anchor verifier registry FFI ──

@@ -267,14 +267,34 @@ pub struct ShareEntry {
     pub created_at: u64,
 }
 
-/// Seal a batch of FROST shares into one envelope.
-pub fn seal_batch_envelope(shares: &[ShareEntry], passphrase: &str) -> Result<String, String> {
+/// The batch plaintext — what gets encrypted, independent of HOW.
+///
+/// Split out because there are now two transports over these bytes: the
+/// passphrase envelope below, and age encryption to public keys. They are
+/// deliberately the same format, so a change to what a share contains happens
+/// once here rather than twice in two places free to disagree.
+pub fn batch_plaintext(shares: &[ShareEntry]) -> Result<Vec<u8>, String> {
     let payload = PlaintextBatch {
         version: 1,
         kind: "frost-share-batch".into(),
         shares: shares.to_vec(),
     };
-    let bytes = serde_json::to_vec(&payload).map_err(|e| format!("serialize batch: {e}"))?;
+    serde_json::to_vec(&payload).map_err(|e| format!("serialize batch: {e}"))
+}
+
+/// Inverse of [`batch_plaintext`].
+pub fn parse_batch_plaintext(bytes: &[u8]) -> Result<Vec<ShareEntry>, String> {
+    let payload: PlaintextBatch =
+        serde_json::from_slice(bytes).map_err(|e| format!("parse batch payload: {e}"))?;
+    if payload.version != 1 || payload.kind != "frost-share-batch" {
+        return Err("unsupported plaintext batch format".to_string());
+    }
+    Ok(payload.shares)
+}
+
+/// Seal a batch of FROST shares into one envelope.
+pub fn seal_batch_envelope(shares: &[ShareEntry], passphrase: &str) -> Result<String, String> {
+    let bytes = batch_plaintext(shares)?;
     let label = format!(
         "{} multisig wallet{}",
         shares.len(),
@@ -293,12 +313,7 @@ pub fn open_batch_envelope(
     if kind != "frost-share-batch-backup" {
         return Err(format!("expected frost-share-batch-backup, got '{kind}'"));
     }
-    let payload: PlaintextBatch =
-        serde_json::from_slice(&bytes).map_err(|e| format!("parse batch payload: {e}"))?;
-    if payload.version != 1 || payload.kind != "frost-share-batch" {
-        return Err("unsupported plaintext batch format".to_string());
-    }
-    Ok(payload.shares)
+    parse_batch_plaintext(&bytes)
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -357,6 +372,50 @@ mod tests {
         let tampered = env.replacen("cipherText\":\"", "cipherText\":\"A", 1);
         let result = open_envelope(&tampered, "p");
         assert!(result.is_err());
+    }
+
+    /// The two transports must carry the SAME bytes.
+    ///
+    /// This is the property that lets the age path reuse the passphrase
+    /// path's import code. If the formats ever diverge, a backup taken one
+    /// way and restored the other would fail at restore time - and a backup
+    /// is only ever tested at the moment it is needed.
+    #[test]
+    fn both_transports_carry_the_same_plaintext() {
+        let shares = vec![fixture_share("a"), fixture_share("b")];
+        let plaintext = batch_plaintext(&shares).unwrap();
+
+        // via the passphrase envelope
+        let sealed = seal_batch_envelope(&shares, "correct horse").unwrap();
+        let from_envelope = open_batch_envelope(&sealed, "correct horse").unwrap();
+
+        // via age, to a public key
+        let recipient = crate::age_backup::device_recipient(
+            "bottom drive obey lake curtain smoke basket hold race lonely fit walk",
+            0,
+        )
+        .unwrap();
+        let armored = crate::age_backup::encrypt_to_recipients(&plaintext, &[recipient]).unwrap();
+        let opened = crate::age_backup::decrypt_with_device_key(
+            "bottom drive obey lake curtain smoke basket hold race lonely fit walk",
+            0,
+            &armored,
+        )
+        .unwrap();
+        let from_age = parse_batch_plaintext(&opened).unwrap();
+
+        assert_eq!(from_envelope.len(), 2);
+        assert_eq!(from_age.len(), 2);
+        for (a, b) in from_envelope.iter().zip(from_age.iter()) {
+            assert_eq!(a.public_key_package, b.public_key_package);
+            assert_eq!(a.key_package, b.key_package);
+            assert_eq!(a.ephemeral_seed, b.ephemeral_seed);
+            assert_eq!(a.threshold, b.threshold);
+            assert_eq!(a.max_signers, b.max_signers);
+            assert_eq!(a.label, b.label);
+            assert_eq!(a.orchard_fvk, b.orchard_fvk);
+            assert_eq!(a.created_at, b.created_at);
+        }
     }
 
     fn fixture_share(suffix: &str) -> ShareEntry {

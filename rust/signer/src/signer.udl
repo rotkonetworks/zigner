@@ -1188,6 +1188,41 @@ namespace signer {
         [ByRef] string passphrase
     );
 
+    // This device's backup recipient, as an `ssh-ed25519 AAAA...` line.
+    // Show it so the user can hand it to a co-signer who wants to address a
+    // backup to this device.
+    [Throws=ErrorDisplayed]
+    string age_device_recipient([ByRef] string seed_phrase);
+
+    // Export every FROST share encrypted to public keys instead of under a
+    // passphrase, removing the separate-secret failure mode: the seed the
+    // user already backs up is what opens it.
+    //
+    // This device's own recipient is always included; extra_recipients adds
+    // co-signers or a second device, which is the point - a backup only this
+    // seed can open dies at the same moment the seed does.
+    //
+    // Recipients are `ssh-ed25519 ...` lines or native age1... recipients.
+    // Returns armored age text; the caller writes it to a file.
+    //
+    // NOTE: deliberately NOT a zafu-readable format. The passphrase envelope
+    // matches zafu's @repo/encryption shape; this one is an age file and zafu
+    // cannot open it. Device-to-device restore is the intended use, and the
+    // passphrase path stays for backing up to someone with no such key.
+    [Throws=ErrorDisplayed]
+    string frost_export_all_backup_age(
+        [ByRef] string seed_phrase,
+        sequence<string> extra_recipients
+    );
+
+    // Import an age-encrypted batch backup addressed to this device.
+    // Returns the same JSON {"imported": N, "skipped": M}.
+    [Throws=ErrorDisplayed]
+    string frost_import_all_backup_age(
+        [ByRef] string seed_phrase,
+        [ByRef] string armored
+    );
+
     // List every anchor verifier the device trusts (enabled and disabled).
     // The first call after install returns the built-in entry.
     [Throws=ErrorDisplayed]
