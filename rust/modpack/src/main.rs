@@ -336,13 +336,44 @@ fn sign(a: &Args) -> Result<(), String> {
 fn keygen(a: &Args) -> Result<(), String> {
     use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 
+    let holders = ["ci", "manager", "backup"];
+
     let out_dir = a.opt("--out-dir").unwrap_or_else(|| "release-keys".into());
-    // Fail closed rather than clobber an existing trust root.
+    // Fail closed rather than clobber an existing trust root - but REPRINT the
+    // verifying keys already in it, because "what were my pubkeys again" is the
+    // whole reason someone re-runs this. Deriving the public key from the raw
+    // secret leaks nothing (the pubkey is public); we never overwrite.
     if std::path::Path::new(&out_dir).exists() {
-        return Err(format!(
-            "{out_dir} already exists - refusing to overwrite a trust root. \
-             Pick a fresh --out-dir or move the old one aside."
-        ));
+        println!(
+            "{out_dir} already exists - NOT overwriting the trust root. Verifying keys for \
+             the secret keys already there (public, safe to copy):\n"
+        );
+        let mut found = 0;
+        for (i, h) in holders.iter().enumerate() {
+            let path = format!("{out_dir}/slot{i}-{h}.sk");
+            let raw = match read(&path) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            match <[u8; 32]>::try_from(raw.as_slice()) {
+                Ok(bytes) => {
+                    let vk = SigningKey::from_bytes(&bytes).verifying_key();
+                    println!("  slot {i} ({h}):  {}", hex::encode(vk.to_bytes()));
+                    found += 1;
+                }
+                Err(_) => println!("  slot {i} ({h}):  <malformed {}-byte .sk>", raw.len()),
+            }
+        }
+        if found == 0 {
+            return Err(format!(
+                "{out_dir} exists but holds no readable slotN-*.sk keys. \
+                 Move it aside and re-run to mint a fresh trust root."
+            ));
+        }
+        println!(
+            "\nTo mint a NEW trust root, pick a fresh --out-dir or move {out_dir} aside first."
+        );
+        return Ok(());
     }
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("mkdir {out_dir}: {e}"))?;
 
@@ -358,7 +389,6 @@ fn keygen(a: &Args) -> Result<(), String> {
             .filter(|n| (1..=3).contains(n))
             .ok_or("--count must be 1, 2 or 3")?,
     };
-    let holders = ["ci", "manager", "backup"];
 
     let mut sks: Vec<SigningKey> = Vec::with_capacity(count);
     let mut vks: Vec<VerifyingKey> = Vec::with_capacity(count);
