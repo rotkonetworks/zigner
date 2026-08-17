@@ -2,6 +2,37 @@
 
 All notable changes to zigner are documented in this file.
 
+## 0.11.1 - 2026-08-17
+
+### Fixes
+
+- Startup could freeze: the navigation path took a DB write lock and then
+  read through it, deadlocking against itself. The lock is released
+  before the read now.
+
+### Changes
+
+- The launch and settings logo is the Zafu enso.
+
+## 0.11.1 - 2026-08-17
+
+Patch over 0.11.0. Fixes a startup deadlock that froze every launch, and
+rebrands to the zafu enso mark.
+
+### Fixes
+
+- **Unfreeze startup.** `init_navigation` held the DB `RwLock` write guard in a
+  bound variable (from the poisoned-lock recovery refactor) and then called
+  `read()` on the same lock — a self-deadlock that hung every launch at
+  "Verifying with secure hardware" until Android killed it (universal, all
+  devices, both build types). Each guard is now scoped so it drops before the
+  next lock, restoring 0.10.0's temporary-lock behaviour.
+
+### Branding
+
+- Launch/unlock screen and settings footer now use the zafu enso logo (was the
+  Rotko wordmark).
+
 ## 0.11.0 - 2026-08-17
 
 Minor, not patch. The FROST DKG wire format changed and three key
