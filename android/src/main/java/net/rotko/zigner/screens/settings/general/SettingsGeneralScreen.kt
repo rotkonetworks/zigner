@@ -132,7 +132,7 @@ internal fun SettingsScreenGeneralView(
 				) {
 					Image(
 						painter = painterResource(id = R.drawable.rotko_logo),
-						contentDescription = "Rotko Networks",
+						contentDescription = "Zafu",
 						modifier = Modifier.height(40.dp)
 					)
 					Spacer(modifier = Modifier.height(8.dp))
