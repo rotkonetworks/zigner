@@ -84,12 +84,14 @@ pub fn encrypt_to_recipients(plaintext: &[u8], recipients: &[String]) -> Result<
             .map_err(|e| format!("age encryptor: {e}"))?;
 
     let mut armored = Vec::new();
-    let writer = age::armor::ArmoredWriter::wrap_output(&mut armored, age::armor::Format::AsciiArmor)
-        .map_err(|e| format!("armor: {e}"))?;
+    let writer =
+        age::armor::ArmoredWriter::wrap_output(&mut armored, age::armor::Format::AsciiArmor)
+            .map_err(|e| format!("armor: {e}"))?;
     let mut w = encryptor
         .wrap_output(writer)
         .map_err(|e| format!("age encrypt: {e}"))?;
-    w.write_all(plaintext).map_err(|e| format!("age write: {e}"))?;
+    w.write_all(plaintext)
+        .map_err(|e| format!("age write: {e}"))?;
     w.finish()
         .map_err(|e| format!("age finish: {e}"))?
         .finish()
@@ -177,8 +179,14 @@ mod tests {
         let a = device_recipient(SEED_A, 0).unwrap();
         let b = device_recipient(SEED_B, 0).unwrap();
         let armored = encrypt_to_recipients(b"two holders", &[a, b]).unwrap();
-        assert_eq!(decrypt_with_device_key(SEED_A, 0, &armored).unwrap(), b"two holders");
-        assert_eq!(decrypt_with_device_key(SEED_B, 0, &armored).unwrap(), b"two holders");
+        assert_eq!(
+            decrypt_with_device_key(SEED_A, 0, &armored).unwrap(),
+            b"two holders"
+        );
+        assert_eq!(
+            decrypt_with_device_key(SEED_B, 0, &armored).unwrap(),
+            b"two holders"
+        );
     }
 
     /// A device that is not a recipient must not be able to read it, which is
@@ -209,6 +217,10 @@ mod tests {
     #[test]
     fn refuses_a_recipient_it_cannot_parse() {
         let err = encrypt_to_recipients(b"x", &["not-a-key".to_string()]).unwrap_err();
-        assert!(err.contains("not a usable recipient"), "unexpected: {}", err);
+        assert!(
+            err.contains("not a usable recipient"),
+            "unexpected: {}",
+            err
+        );
     }
 }

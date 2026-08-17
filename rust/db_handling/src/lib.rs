@@ -64,9 +64,6 @@ pub mod frost;
 
 pub mod contacts;
 
-
-
-
 pub use error::{Error, Result};
 
 #[cfg(test)]

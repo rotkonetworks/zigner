@@ -4457,7 +4457,8 @@ fn frost_export_all_backup_age(
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
     let shares = collect_all_frost_shares(database)?;
-    let plaintext = frost_backup::batch_plaintext(&shares).map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let plaintext =
+        frost_backup::batch_plaintext(&shares).map_err(|e| ErrorDisplayed::Str { s: e })?;
 
     let mut recipients = vec![age_backup::device_recipient(seed_phrase, AGE_BACKUP_INDEX)
         .map_err(|e| ErrorDisplayed::Str { s: e })?];
@@ -4477,14 +4478,11 @@ fn frost_export_all_backup_age(
 
 /// Import an age-encrypted batch backup addressed to this device.
 /// Returns the same `{ "imported": N, "skipped": M }` as the passphrase path.
-fn frost_import_all_backup_age(
-    seed_phrase: &str,
-    armored: &str,
-) -> Result<String, ErrorDisplayed> {
+fn frost_import_all_backup_age(seed_phrase: &str, armored: &str) -> Result<String, ErrorDisplayed> {
     let plaintext = age_backup::decrypt_with_device_key(seed_phrase, AGE_BACKUP_INDEX, armored)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
-    let shares =
-        frost_backup::parse_batch_plaintext(&plaintext).map_err(|e| ErrorDisplayed::Str { s: e })?;
+    let shares = frost_backup::parse_batch_plaintext(&plaintext)
+        .map_err(|e| ErrorDisplayed::Str { s: e })?;
     import_frost_shares(shares)
 }
 
