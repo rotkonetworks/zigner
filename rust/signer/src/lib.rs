@@ -265,38 +265,55 @@ fn backend_action(
 fn init_navigation(dbname: &str, seed_names: Vec<String>) -> Result<(), ErrorDisplayed> {
     let val = Some(sled::open(dbname).map_err(|e| ErrorDisplayed::from(e.to_string()))?);
 
-    let mut guard = match DB.write() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    *guard = val;
+    // Each DB lock MUST be released before the next is acquired. `DB` is a
+    // std RwLock: a thread that holds the write guard and then calls read()
+    // on the same lock deadlocks forever. 0.10.0 released the write lock
+    // implicitly (`*DB.write().unwrap() = val;` drops the temporary at the
+    // `;`); the poisoned-recovery refactor bound the write guard to a
+    // variable that stayed alive across the reads below, freezing
+    // init_navigation on EVERY launch (universal startup ANR). Keep the
+    // poisoned recovery, but scope each guard so it drops before the next.
+    // (A poisoned lock means an earlier call panicked while holding it;
+    // unwrap() would then make every subsequent call panic too.)
+    {
+        let mut guard = match DB.write() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *guard = val;
+    }
     init_logging("Vault".to_string());
 
     // Bootstrap the anchor-verifier registry with the built-in default
     // on first run. Idempotent: skipped if the tree already has the
     // default key, and skipped entirely if the user has populated their
     // own verifiers (we don't override their explicit configuration).
-    // A poisoned lock means some earlier call panicked while holding it.
-    // unwrap() here would turn that into every subsequent call panicking
-    // too - one transient failure disabling the device until restart.
-    let guard = match DB.read() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if let Some(database) = guard.as_ref() {
-        if constants::ROTKO_ZCASH_VERIFIER != [0u8; 32] {
-            let _ = db_handling::anchor_verifiers::bootstrap_default(
-                database,
-                &constants::ROTKO_ZCASH_VERIFIER,
-                "Rotko Networks (built-in)",
-            );
+    {
+        let guard = match DB.read() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(database) = guard.as_ref() {
+            if constants::ROTKO_ZCASH_VERIFIER != [0u8; 32] {
+                let _ = db_handling::anchor_verifiers::bootstrap_default(
+                    database,
+                    &constants::ROTKO_ZCASH_VERIFIER,
+                    "Rotko Networks (built-in)",
+                );
+            }
         }
     }
 
-    Ok(navigator::init_navigation(
-        DB.clone().read().unwrap().as_ref().unwrap().clone(),
-        seed_names,
-    )?)
+    // Clone the sled handle out under a short-lived read lock, then release it
+    // before calling navigator::init_navigation (which may lock DB itself).
+    let database = {
+        let guard = match DB.read() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        guard.as_ref().unwrap().clone()
+    };
+    Ok(navigator::init_navigation(database, seed_names)?)
 }
 
 /// Should be called every time any change could have been done to seeds. Accepts updated list of
