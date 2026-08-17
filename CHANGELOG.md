@@ -2,6 +2,18 @@
 
 All notable changes to zigner are documented in this file.
 
+## 0.11.2 - 2026-08-17
+
+Patch. Makes the release-key QR scannable on poor cameras.
+
+### Fixes
+
+- The Release-key screen QR encoded the 64-char hex *string* (64 bytes) for a
+  32-byte key - twice the payload it needed, in dense byte-mode. It now carries
+  the 32 raw bytes as base64 (44 chars), so the QR is a couple of versions
+  sparser and a low-res desktop webcam can lock it. The zafu.pro ceremony page
+  decodes base64 or 64-hex; the printed hex for manual entry is unchanged.
+
 ## 0.11.1 - 2026-08-17
 
 Patch over 0.11.0. Fixes a startup deadlock that froze every launch, and

@@ -106,10 +106,15 @@ fun ReleaseKeyScreen(
 			Spacer(Modifier.padding(top = 16.dp))
 			val qr = remember(pubkeyHex) {
 				runCatching {
-					// Just the public key hex - signatures are untagged, so there
-					// is no slot to encode alongside it.
+					// Transport the 32 RAW key bytes as base64 (44 chars), not the
+					// 64-char hex string. Half the payload -> a much sparser QR a
+					// poor desktop webcam can actually lock. Signatures are untagged,
+					// so there is no slot to encode alongside it. The ceremony page
+					// base64-decodes this back to the key.
+					val raw = pubkeyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+					val b64 = android.util.Base64.encodeToString(raw, android.util.Base64.NO_WRAP)
 					kotlinx.coroutines.runBlocking {
-						encodeToQr(pubkeyHex.toByteArray(Charsets.UTF_8).map { it.toUByte() }, false)
+						encodeToQr(b64.toByteArray(Charsets.UTF_8).map { it.toUByte() }, false)
 					}
 				}.getOrNull()
 			}
