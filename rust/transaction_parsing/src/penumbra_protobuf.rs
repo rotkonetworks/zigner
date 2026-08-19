@@ -10,8 +10,6 @@ use definitions::penumbra_schema::{
 
 use crate::{Error, Result};
 
-/// Decode a transaction plan and extract actions
-
 /// Bounds-checked slice for a length-delimited field.
 ///
 /// Every length in this decoder is a varint read out of the payload, i.e.

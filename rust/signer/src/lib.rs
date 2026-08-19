@@ -1587,6 +1587,9 @@ fn sign_zcash_simple(
     Ok(response.to_qr_hex())
 }
 
+// hand-rolls ZcashAccounts CBOR with per-byte annotated pushes (clearer than a
+// dense vec![...] literal); silence the resulting vec-init-then-push lint.
+#[allow(clippy::vec_init_then_push)]
 fn export_zcash_fvk(
     seed_phrase: &str,
     account_index: u32,
@@ -1640,6 +1643,8 @@ fn export_zcash_fvk(
         .and_then(|b| b.try_into().ok());
 
     let ur_string = {
+        // hand-rolled CBOR: the per-byte pushes below are annotated with their
+        // CBOR meaning, which reads clearer than a dense vec![...] literal.
         let mut cbor_data = Vec::new();
 
         // ZcashAccounts: map with 2 entries

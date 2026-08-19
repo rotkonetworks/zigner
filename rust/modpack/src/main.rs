@@ -426,8 +426,8 @@ fn keygen(a: &Args) -> Result<(), String> {
 
     println!("Self-test PASSED ({count} key(s) sign and verify).\n");
     println!("Wrote {count} raw secret key(s) (mode 0600) to {out_dir}/:");
-    for i in 0..count {
-        println!("  slot{i}-{}.sk", holders[i]);
+    for (i, holder) in holders.iter().enumerate().take(count) {
+        println!("  slot{i}-{holder}.sk");
     }
     println!("\nRelease VERIFYING keys - pin these (they are public, safe to copy):");
     for (i, vk) in vks.iter().enumerate() {

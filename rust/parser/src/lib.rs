@@ -344,14 +344,14 @@ mod fuzz_smoke {
         cases.push(vec![0b0000_0010, 0xff, 0xff, 0xff, 0xff]);
 
         for case in &cases {
-            match cut_method_extensions(case) {
-                // A length this size cannot be satisfied by these buffers, so
-                // the only correct answer is refusal.
-                Ok((method, _)) => assert!(
+            // A length this size cannot be satisfied by these buffers, so the
+            // only correct answer is refusal. If it parses anyway, the method
+            // must at least fit the buffer it came from.
+            if let Ok((method, _)) = cut_method_extensions(case) {
+                assert!(
                     method.len() <= case.len(),
                     "accepted a method longer than the buffer it came from"
-                ),
-                Err(_) => {}
+                );
             }
         }
     }

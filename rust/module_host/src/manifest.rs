@@ -404,6 +404,7 @@ pub fn assemble_package(prefix: &[u8], sigs: &[[u8; 64]], payload: &[u8]) -> Vec
 /// The real release path never does this - it would need every signing key on
 /// one machine, exactly what the 2-of-3 custody model forbids. That path is
 /// [`build_signing_prefix`], offline devices, then [`assemble_package`].
+#[allow(clippy::too_many_arguments)] // test helper: mirrors the full package field set
 pub fn build_package(
     payload: &[u8],
     module_hash: [u8; 32],
