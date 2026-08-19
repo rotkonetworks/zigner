@@ -216,7 +216,7 @@ fun ZidSignScreen(
 
 			ZidSignState.DISPLAY_RESPONSE -> {
 				Text(
-					text = "Show this QR to zafu",
+					text = "Show this QR to your companion wallet",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp)

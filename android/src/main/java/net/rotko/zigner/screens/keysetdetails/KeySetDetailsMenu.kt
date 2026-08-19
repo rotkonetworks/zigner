@@ -86,11 +86,18 @@ fun KeyDetailsMenuGeneral(
 			}
 		)
 
-		MenuItemForBottomSheet(
-			Icons.Outlined.QrCode,
-			label = stringResource(R.string.key_set_menu_option_export_wallet),
-			onclick = onExportToDeviceClicked
-		)
+		// Export to New Device — animated backup QR (exportBackupQr) carrying
+		// account metadata only, no seed. Scanning it on a fresh phone errors
+		// "hot wallet not found - import the seed phrase first via Banana Split
+		// or manual entry", which is confusing. Banana Split is now the sole
+		// keyset backup/transfer path. Hidden (dormant, not deleted); the
+		// BackupExport destination + onExportToDeviceClicked wiring remain so
+		// this is trivially reversible.
+		// MenuItemForBottomSheet(
+		// 	Icons.Outlined.QrCode,
+		// 	label = stringResource(R.string.key_set_menu_option_export_wallet),
+		// 	onclick = onExportToDeviceClicked
+		// )
 
 		MenuItemForBottomSheet(
 			Icons.Outlined.FileDownload,

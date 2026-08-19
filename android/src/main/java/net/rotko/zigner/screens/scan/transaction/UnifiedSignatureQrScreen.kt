@@ -43,7 +43,7 @@ fun UnifiedSignatureQrScreen(
 		)
 
 		Text(
-			text = "Scan this QR code with Zafu to complete the transaction",
+			text = "Scan this QR code with your companion wallet to complete the transaction",
 			style = SignerTypeface.BodyL,
 			color = MaterialTheme.colors.textSecondary,
 			modifier = Modifier.padding(bottom = 24.dp),

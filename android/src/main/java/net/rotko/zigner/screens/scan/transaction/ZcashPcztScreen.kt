@@ -292,7 +292,7 @@ fun ZcashPcztScreen(
 
 			PcztState.DISPLAY_SIGNATURE -> {
 				Text(
-					text = "Show this QR to your wallet (zafu / zodl / vizor)",
+					text = "Show this QR to your companion wallet",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp),
@@ -319,16 +319,13 @@ fun ZcashPcztScreen(
 						}
 					}
 				}
-				Text(
-					text = if (signedQrFrames.size > 1)
-						"frame ${currentFrameIdx + 1} / ${signedQrFrames.size}"
-					else
-						"single frame",
-					style = SignerTypeface.CaptionM,
-					color = MaterialTheme.colors.textTertiary,
-					modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally),
-				)
 				if (signedQrFrames.size > 1) {
+					Text(
+						text = "frame ${currentFrameIdx + 1} / ${signedQrFrames.size}",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+						modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally),
+					)
 					QrPlaybackSpeedSlider(modifier = Modifier.align(Alignment.CenterHorizontally))
 				}
 				SignerDivider()

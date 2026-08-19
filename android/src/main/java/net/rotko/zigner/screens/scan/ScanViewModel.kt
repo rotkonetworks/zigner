@@ -86,10 +86,14 @@ class ScanViewModel : ViewModel() {
 	 *  name on-screen makes "which key is about to sign" visible to the user.
 	 */
 	suspend fun getFirstSeedName(): String {
-		return when (val result = seedRepository.getAllSeeds()) {
-			is RepoResult.Success -> result.result.keys.firstOrNull() ?: ""
-			is RepoResult.Failure -> ""
-		}
+		// Display-only: the seed NAME is not a secret (already shown without auth
+		// on the key list, e.g. KeySetDetailsViewModel). Read it from the cached
+		// non-auth source so the summarize/review step does NOT trigger a PIN /
+		// biometric prompt - auth must fire exactly once, at Approve & Sign.
+		// lastKnownSeedNames is populated at unlock (ResetUseCase.totalRefreshDbExist
+		// -> getSeedNames) and stays sorted, matching the seed getFirstSeedPhrase
+		// selects (getAllSeeds().values.firstOrNull() over the same sorted order).
+		return seedRepository.getLastKnownSeedNames().firstOrNull() ?: ""
 	}
 	private val importKeysRepository: ImportDerivedKeysRepository by lazy {
 		ImportDerivedKeysRepository(seedRepository)

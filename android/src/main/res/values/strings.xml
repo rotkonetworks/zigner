@@ -477,7 +477,10 @@
 	<string name="create_bs_notification_frame_text">Banana Split backup will recover the key set without derived keys. To back up derived keys, use the manual backup option. Each key will have to be added individually by entering the derivation path name.</string>
 	<string name="create_bs_password_header">Passphrase for the Recovery</string>
 	<string name="create_bs_refresh_password_icon_description">Refresh Password</string>
-	<string name="create_bs_export_notification_text">Scan this animated QR code into the bs.parity.io or compatible app to print QR code shards.</string>
+	<string name="create_bs_export_notification_text">Store each shard in a separate place. Only the required number of shards together can recover the key set.</string>
+	<string name="create_bs_shard_counter">Shard %1$d of %2$d</string>
+	<string name="create_bs_shard_prev">Previous</string>
+	<string name="create_bs_shard_next">Next</string>
 	<string name="banana_split_menu_remove_confirm_title">Remove Banana Split</string>
 	<string name="banana_split_menu_remove_confirm_description">You can still use this backup if you have QR code shards printed and have passphrase written down on paper.</string>
 	<string name="banana_split_menu_option_show_password">Show Passphrase</string>

@@ -132,7 +132,7 @@ fun ModulePcztScreen(
 			.padding(16.dp)
 	) {
 		Text(
-			text = "Zcash Transaction (module)",
+			text = "Zcash Transaction",
 			style = SignerTypeface.TitleL,
 			color = MaterialTheme.colors.primary,
 			modifier = Modifier.padding(bottom = 16.dp)
@@ -232,20 +232,11 @@ fun ModulePcztScreen(
 
 			ModulePcztState.DISPLAY_RESPONSE -> {
 				Text(
-					text = "Show this QR to your wallet (zafu / zodl / vizor)",
+					text = "Show this QR to your companion wallet",
 					style = SignerTypeface.LabelM,
 					color = MaterialTheme.colors.textTertiary,
 					modifier = Modifier.padding(bottom = 8.dp),
 				)
-				if (compactResponse) {
-					// Ironwood QR shrink: the wallet asked for signatures only.
-					Text(
-						text = "Compact signature response - far fewer QR frames",
-						style = SignerTypeface.CaptionM,
-						color = MaterialTheme.colors.pink500,
-						modifier = Modifier.padding(bottom = 8.dp),
-					)
-				}
 				Box(
 					modifier = Modifier.weight(1f).fillMaxWidth(),
 					contentAlignment = Alignment.Center,
@@ -268,16 +259,13 @@ fun ModulePcztScreen(
 						}
 					}
 				}
-				Text(
-					text = if (responseQrFrames.size > 1)
-						"frame ${currentFrameIdx + 1} / ${responseQrFrames.size}"
-					else
-						"single frame",
-					style = SignerTypeface.CaptionM,
-					color = MaterialTheme.colors.textTertiary,
-					modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally),
-				)
 				if (responseQrFrames.size > 1) {
+					Text(
+						text = "frame ${currentFrameIdx + 1} / ${responseQrFrames.size}",
+						style = SignerTypeface.CaptionM,
+						color = MaterialTheme.colors.textTertiary,
+						modifier = Modifier.padding(top = 8.dp).align(Alignment.CenterHorizontally),
+					)
 					QrPlaybackSpeedSlider(modifier = Modifier.align(Alignment.CenterHorizontally))
 				}
 				SignerDivider()
