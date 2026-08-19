@@ -19,7 +19,11 @@ class DerivationPathAnalyzer {
 	private val regexCheckPath: Regex = "^((//?[^/]+)*)(///.*)?$".toRegex()
 
 	fun isCorrect(path: String): Boolean {
-		return path.isEmpty() || regexCheckPath.matches(path)
+		// BIP44/ZIP-32 paths (zcash m/32'/133'/account', penumbra m/44'/6532'/0',
+		// cosmos, ...) are not substrate junctions - the substrate regex can never
+		// match them. Their format is validated by the backend/module, so accept
+		// them here rather than rejecting as WRONG_PATH.
+		return path.isEmpty() || path.startsWith("m/") || regexCheckPath.matches(path)
 	}
 
 	fun getHint(path: String): Hint {

@@ -78,19 +78,43 @@ class DerivationCreateViewModel : ViewModel() {
 	}
 
 	private fun getInitialPath(netWork: NetworkModel): String {
-		var path = netWork.pathId
+		val base = netWork.pathId
 		val keys = existingKeys.filter { it.network.networkSpecsKey == netWork.key }
-		if (!keys.any { it.key.path == path }) {
-			return path
-		} else {
-			for (i in 0..Int.MAX_VALUE) {
-				path = "${netWork.pathId}//$i"
-				if (!keys.any { it.key.path == path }) {
-					return path
-				}
-			}
+		val taken = { p: String -> keys.any { it.key.path == p } }
+		if (!taken(base)) return base
+		// BIP44/ZIP-32 networks (zcash m/32'/133'/account', penumbra
+		// m/44'/6532'/0', cosmos m/44'/118'/0'/0/0) derive additional keys by
+		// bumping the last numeric segment (account / address index), NOT by
+		// appending a substrate `//i` junction which would be an invalid path.
+		if (base.startsWith("m/")) {
+			return nextBip44Path(base, taken)
+		}
+		var path = base
+		for (i in 0..Int.MAX_VALUE) {
+			path = "$base//$i"
+			if (!taken(path)) return path
 		}
 		return path
+	}
+
+	/**
+	 * Next unused BIP44/ZIP-32 path derived from [base] by incrementing its last
+	 * numeric segment, preserving a hardened `'` suffix. e.g.
+	 * `m/32'/133'/0'` -> `m/32'/133'/1'`.
+	 */
+	private fun nextBip44Path(base: String, taken: (String) -> Boolean): String {
+		val slash = base.lastIndexOf('/')
+		if (slash < 0) return base
+		val head = base.substring(0, slash + 1)
+		val seg = base.substring(slash + 1)
+		val hardened = seg.endsWith("'")
+		val num = seg.trimEnd('\'').toIntOrNull() ?: return base
+		var i = num + 1
+		while (true) {
+			val candidate = head + i + (if (hardened) "'" else "")
+			if (!taken(candidate)) return candidate
+			i++
+		}
 	}
 
 	fun checkPath(path: String): DerivationPathValidity {

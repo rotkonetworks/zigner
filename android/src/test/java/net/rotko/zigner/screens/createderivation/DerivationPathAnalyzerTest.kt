@@ -57,6 +57,12 @@ class DerivationPathAnalyzerTest {
 		assertTrue(analyzer.isCorrect("///")) // no password is another error - not correctness
 		assertTrue(analyzer.isCorrect("//seed///")) // no password is another error
 
+		// BIP44/ZIP-32 paths are valid here - format is judged by the backend/module.
+		assertTrue(analyzer.isCorrect("m/32'/133'/0'")) // zcash orchard
+		assertTrue(analyzer.isCorrect("m/32'/133'/1'"))
+		assertTrue(analyzer.isCorrect("m/44'/6532'/0'")) // penumbra
+		assertTrue(analyzer.isCorrect("m/44'/118'/0'/0/0")) // cosmos
+
 		assertFalse(analyzer.isCorrect("//"))
 	}
 }

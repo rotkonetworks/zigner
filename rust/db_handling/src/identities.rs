@@ -1788,13 +1788,30 @@ pub fn derivation_check(
     path: &str,
     network_specs_key: &NetworkSpecsKey,
 ) -> Result<DerivationCheck> {
-    match is_passworded(path) {
+    // BIP44/ZIP-32 paths (zcash `m/32'/133'/account'`, penumbra
+    // `m/44'/6532'/0'`, cosmos, ...) are not substrate junctions and carry no
+    // password. The substrate-only `is_passworded`/`REG_PATH` rejects them,
+    // which used to surface as `Error::InvalidDerivation` from
+    // `try_create_address`. Mirror `create_address`'s `path.starts_with("m/")`
+    // handling: treat them as valid, unpassworded paths and only run the
+    // exact-collision check.
+    let passworded = if path.starts_with("m/") {
+        false
+    } else {
+        match is_passworded(path) {
+            Ok(p) => p,
+            // Proposed derivation is not suitable, UI would not allow to
+            // proceed. Note that this is **not** an error.
+            Err(_) => return Ok(DerivationCheck::BadFormat),
+        }
+    };
+    match passworded {
         // Proposed derivation has password, no checks could be made, proceed.
-        Ok(true) => Ok(DerivationCheck::Password),
+        true => Ok(DerivationCheck::Password),
 
         // Proposed derivation has no password, checking the database for exact
         // coincidence.
-        Ok(false) => {
+        false => {
             let mut found_exact = None;
             for (multisigner, address_details) in get_all_addresses(database)?.into_iter() {
                 if (address_details.seed_name == seed_name) // seed name
@@ -1809,10 +1826,6 @@ pub fn derivation_check(
             }
             Ok(DerivationCheck::NoPassword(found_exact))
         }
-
-        // Proposed derivation is not suitable, UI would not allow to proceed.
-        // Note that this is **not** an error.
-        Err(_) => Ok(DerivationCheck::BadFormat),
     }
 }
 
