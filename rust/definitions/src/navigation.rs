@@ -1070,6 +1070,10 @@ pub struct ZcashNoteSyncResult {
     /// Unix seconds (device clock) when these verified notes were stored.
     /// 0 = unknown (older anchor written before the field existed).
     pub synced_at: u64,
+    /// Unix seconds of the anchor block's own header (chain truth). 0 = unknown
+    /// (bundle produced before the field existed). Lets the UI show the anchor
+    /// as a real date toggleable with its height.
+    pub anchor_time: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1179,6 +1183,8 @@ pub struct ZcashSyncInfo {
     pub anchor_height: u32,
     pub mainnet: bool,
     pub synced_at: u64,
+    /// Unix seconds of the anchor block's own header (chain truth), 0 = unknown.
+    pub anchor_time: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

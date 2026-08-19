@@ -1750,7 +1750,8 @@ dictionary ZcashSyncInfo {
     string anchor_hex;
     u32 anchor_height;
     boolean mainnet;
-    u64 synced_at;  // unix timestamp (seconds)
+    u64 synced_at;  // unix timestamp (seconds), device clock at import
+    u32 anchor_time;  // anchor block header unix time (chain truth), 0 = unknown
 };
 
 // Zcash verified note display (from note sync)
@@ -1769,6 +1770,7 @@ dictionary ZcashNoteSyncResult {
     boolean mainnet;
     boolean anchor_verified;
     u64 synced_at;
+    u32 anchor_time;  // anchor block header unix time (chain truth), 0 = unknown
 };
 
 // Live scan progress for animated zcash-notes QR (zoda transport).

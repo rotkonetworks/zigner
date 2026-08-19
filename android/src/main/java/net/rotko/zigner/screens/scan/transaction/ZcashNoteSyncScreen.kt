@@ -1,6 +1,7 @@
 package net.rotko.zigner.screens.scan.transaction
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +34,10 @@ fun ZcashNoteSyncScreen(
 	onDone: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// The anchor can be read as its block height or that block's real date (the
+	// block header's own time — chain truth, not this device's clock). Tap to
+	// toggle; the date only exists when the bundle carried anchorTime.
+	var showAnchorDate by remember { mutableStateOf(false) }
 	Column(
 		modifier = modifier
 			.fillMaxSize()
@@ -97,10 +102,18 @@ fun ZcashNoteSyncScreen(
 						style = SignerTypeface.LabelM,
 						color = MaterialTheme.colors.textTertiary
 					)
+					val hasAnchorDate = result.anchorTime > 0u
 					Text(
-						text = "as of block ${NumberFormat.getNumberInstance(Locale.US).format(result.anchorHeight.toLong())}",
+						text = if (showAnchorDate && hasAnchorDate)
+							"as of ${formatSyncDate(result.anchorTime.toULong())}"
+						else
+							"as of block ${NumberFormat.getNumberInstance(Locale.US).format(result.anchorHeight.toLong())}",
 						style = SignerTypeface.CaptionM,
-						color = MaterialTheme.colors.textSecondary
+						color = MaterialTheme.colors.textSecondary,
+						modifier = if (hasAnchorDate)
+							Modifier.clickable { showAnchorDate = !showAnchorDate }
+						else
+							Modifier
 					)
 				}
 				Text(

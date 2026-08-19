@@ -2020,7 +2020,7 @@ fn get_zcash_sign_context() -> Result<ZcashSignContext, ErrorDisplayed> {
         .ok()
         .flatten();
 
-    let (anchor_height, synced_at) = anchor.map(|(_, h, _, ts)| (h, ts)).unwrap_or((0, 0));
+    let (anchor_height, synced_at) = anchor.map(|(_, h, _, ts, _)| (h, ts)).unwrap_or((0, 0));
 
     Ok(ZcashSignContext {
         verified_balance: balance,
@@ -2318,7 +2318,7 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
             let mainnet = db_handling::zcash::get_verified_anchor(database)
                 .ok()
                 .flatten()
-                .map(|(_, _, m, _)| m)
+                .map(|(_, _, m, _, _)| m)
                 .unwrap_or(true);
             let notes = db_handling::zcash::get_verified_notes(database).unwrap_or_default();
             let nullifiers: std::collections::HashSet<String> = notes
@@ -2832,7 +2832,7 @@ fn decode_and_verify_zcash_notes(
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
     // Monotonic height check: reject anchors older than what we already have
-    if let Ok(Some((_, stored_height, _, _))) = db_handling::zcash::get_verified_anchor(database) {
+    if let Ok(Some((_, stored_height, _, _, _))) = db_handling::zcash::get_verified_anchor(database) {
         if bundle.anchor_height < stored_height {
             return Err(ErrorDisplayed::Str {
                 s: format!(
@@ -2964,6 +2964,7 @@ fn decode_and_verify_zcash_notes(
         &bundle.anchor,
         bundle.anchor_height,
         bundle.mainnet,
+        bundle.anchor_time.unwrap_or(0),
     )
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to store notes: {e}"),
@@ -2976,7 +2977,7 @@ fn decode_and_verify_zcash_notes(
     let synced_at = db_handling::zcash::get_verified_anchor(database)
         .ok()
         .flatten()
-        .map(|(_, _, _, ts)| ts)
+        .map(|(_, _, _, ts, _)| ts)
         .unwrap_or(0);
 
     Ok(ZcashNoteSyncResult {
@@ -2987,6 +2988,7 @@ fn decode_and_verify_zcash_notes(
         mainnet: bundle.mainnet,
         anchor_verified,
         synced_at,
+        anchor_time: bundle.anchor_time.unwrap_or(0),
     })
 }
 
@@ -3028,11 +3030,12 @@ fn get_zcash_sync_info() -> Result<Option<ZcashSyncInfo>, ErrorDisplayed> {
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
     match db_handling::zcash::get_verified_anchor(database) {
-        Ok(Some((anchor, height, mainnet, synced_at))) => Ok(Some(ZcashSyncInfo {
+        Ok(Some((anchor, height, mainnet, synced_at, anchor_time))) => Ok(Some(ZcashSyncInfo {
             anchor_hex: hex::encode(anchor),
             anchor_height: height,
             mainnet,
             synced_at,
+            anchor_time,
         })),
         Ok(None) => Ok(None),
         Err(e) => Err(ErrorDisplayed::Str {

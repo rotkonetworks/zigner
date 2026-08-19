@@ -75,6 +75,8 @@ import io.parity.signer.uniffi.encodeToQr
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -112,6 +114,8 @@ fun KeyDetailsPublicKeyScreen(
 	zcashVerifiedBalance: ULong? = null,
 	zcashVerifiedNotes: List<ZcashVerifiedNoteDisplay> = emptyList(),
 	zcashSyncedAt: ULong? = null,
+	zcashAnchorHeight: UInt? = null,
+	zcashAnchorTime: UInt? = null,
 ) {
 	val isFvkNetwork = isFvkNetwork(model.networkInfo.networkLogo)
 	val isZcash = model.networkInfo.networkLogo.lowercase().contains("zcash")
@@ -501,6 +505,8 @@ fun KeyDetailsPublicKeyScreen(
 						balance = zcashVerifiedBalance,
 						notes = zcashVerifiedNotes,
 						syncedAt = zcashSyncedAt,
+						anchorHeight = zcashAnchorHeight,
+						anchorTime = zcashAnchorTime,
 					)
 				}
 
@@ -515,6 +521,8 @@ private fun ZcashVerifiedBalanceSection(
 	balance: ULong,
 	notes: List<ZcashVerifiedNoteDisplay>,
 	syncedAt: ULong? = null,
+	anchorHeight: UInt? = null,
+	anchorTime: UInt? = null,
 ) {
 	val plateShape = RoundedCornerShape(dimensionResource(id = R.dimen.qrShapeCornerRadius))
 	Column(
@@ -549,6 +557,26 @@ private fun ZcashVerifiedBalanceSection(
 			style = SignerTypeface.TitleL,
 			color = MaterialTheme.colors.primary
 		)
+		// This balance is a snapshot, not a live figure — it is only true as of
+		// the block the notes were verified against. State that block explicitly
+		// so a passively-viewed balance never implies it is current. Tap to read
+		// it as the block's real date (the block header's own time) when known.
+		if (anchorHeight != null && anchorHeight.toLong() > 0) {
+			var showAnchorDate by remember { mutableStateOf(false) }
+			val hasAnchorDate = anchorTime != null && anchorTime.toLong() > 0
+			Text(
+				text = if (showAnchorDate && hasAnchorDate)
+					"as of ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(anchorTime!!.toLong() * 1000L))}"
+				else
+					"as of block ${NumberFormat.getNumberInstance(Locale.US).format(anchorHeight.toLong())}",
+				style = SignerTypeface.CaptionM,
+				color = MaterialTheme.colors.textTertiary,
+				modifier = if (hasAnchorDate)
+					Modifier.clickable { showAnchorDate = !showAnchorDate }
+				else
+					Modifier
+			)
+		}
 		if (notes.isNotEmpty()) {
 			SignerDivider(sidePadding = 0.dp)
 			Text(

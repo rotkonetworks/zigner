@@ -128,6 +128,8 @@ fun KeyDetailsScreenSubgraph(
 			zcashVerifiedBalance = zcashVerifiedBalance,
 			zcashVerifiedNotes = zcashVerifiedNotes,
 			zcashSyncedAt = zcashSyncInfo?.syncedAt,
+			zcashAnchorHeight = zcashSyncInfo?.anchorHeight,
+			zcashAnchorTime = zcashSyncInfo?.anchorTime,
 		)
 	}
 

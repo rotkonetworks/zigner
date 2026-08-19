@@ -748,6 +748,10 @@ pub struct ZcashNotesBundle {
     /// Optional anchor attestation signature (variable length).
     /// 64 bytes = ed25519 (rotko verifier), 96 bytes = FROST (threshold group).
     pub anchor_attestation: Option<Vec<u8>>,
+    /// Optional Unix timestamp (seconds) of the anchor block's header. Chain
+    /// truth for "as of block N" — unlike the device clock we stamp at import.
+    /// Absent from bundles produced before this field existed.
+    pub anchor_time: Option<u32>,
 }
 
 /// Result of note sync verification
@@ -968,6 +972,7 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
     let mut mainnet = true;
     let mut notes = Vec::new();
     let mut anchor_attestation: Option<Vec<u8>> = None;
+    let mut anchor_time: Option<u32> = None;
 
     for _ in 0..map_len {
         let (key, consumed) = cbor_decode_uint(data, offset)?;
@@ -1027,6 +1032,12 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 }
                 anchor_attestation = Some(bytes);
             }
+            7 => {
+                // anchor_time: uint (unix seconds of the anchor block header)
+                let (val, consumed) = cbor_decode_uint(data, offset)?;
+                offset = consumed;
+                anchor_time = Some(val as u32);
+            }
             _ => {
                 // skip unknown keys
                 let consumed = cbor_skip_value(data, offset)?;
@@ -1041,6 +1052,7 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
         mainnet,
         notes,
         anchor_attestation,
+        anchor_time,
     })
 }
 
@@ -2377,6 +2389,7 @@ mod tests {
                 },
             ],
             anchor_attestation: None,
+            anchor_time: None,
         };
 
         let cbor = encode_notes_bundle_to_cbor(&bundle);
@@ -2406,6 +2419,7 @@ mod tests {
             mainnet: false,
             notes: vec![],
             anchor_attestation: None,
+            anchor_time: None,
         };
 
         let cbor = encode_notes_bundle_to_cbor(&bundle);

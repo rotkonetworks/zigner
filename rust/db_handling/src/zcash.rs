@@ -131,8 +131,12 @@ pub type VerifiedNoteInput = (u64, [u8; 32], [u8; 32], u32, u32);
 /// Verified note as stored: (value, nullifier_hex, cmx, position, block_height)
 pub type VerifiedNote = (u64, String, [u8; 32], u32, u32);
 
-/// Anchor metadata: (anchor, height, mainnet, synced_at)
-pub type VerifiedAnchor = ([u8; 32], u32, bool, u64);
+/// Anchor metadata: (anchor, height, mainnet, synced_at, anchor_time)
+///
+/// `synced_at` is this device's clock when the notes were stored; `anchor_time`
+/// is the anchor block header's own Unix time (chain truth), 0 when the source
+/// bundle predates the field.
+pub type VerifiedAnchor = ([u8; 32], u32, bool, u64, u32);
 
 /// Store verified notes in the database (clear-and-replace model)
 ///
@@ -143,6 +147,7 @@ pub fn store_verified_notes(
     anchor: &[u8; 32],
     anchor_height: u32,
     mainnet: bool,
+    anchor_time: u32,
 ) -> Result<()> {
     let tree = database.open_tree(ZCASH_NOTES_TREE)?;
 
@@ -150,16 +155,17 @@ pub fn store_verified_notes(
     tree.clear()?;
 
     // Store anchor metadata under special key
-    // Format: anchor(32) + height(4) + mainnet(1) + synced_at(8)
+    // Format: anchor(32) + height(4) + mainnet(1) + synced_at(8) + anchor_time(4)
     let synced_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let mut meta = Vec::with_capacity(45);
+    let mut meta = Vec::with_capacity(49);
     meta.extend_from_slice(anchor);
     meta.extend_from_slice(&anchor_height.to_le_bytes());
     meta.push(if mainnet { 1 } else { 0 });
     meta.extend_from_slice(&synced_at.to_le_bytes());
+    meta.extend_from_slice(&anchor_time.to_le_bytes());
     tree.insert(b"__anchor__", meta.as_slice())?;
 
     // Store each note keyed by nullifier
@@ -229,7 +235,13 @@ pub fn get_verified_anchor(database: &sled::Db) -> Result<Option<VerifiedAnchor>
             } else {
                 0
             };
-            Ok(Some((anchor, height, mainnet, synced_at)))
+            // anchor_time (block header time) added later still
+            let anchor_time = if data.len() >= 49 {
+                u32::from_le_bytes(data[45..49].try_into().unwrap())
+            } else {
+                0
+            };
+            Ok(Some((anchor, height, mainnet, synced_at, anchor_time)))
         }
         None => Ok(None),
     }
