@@ -74,9 +74,17 @@ fun EnterSeedPhraseBox(
 	//workaround for //https://issuetracker.google.com/issues/160257648 and https://issuetracker.google.com/issues/235576056 - update to new TextField
 	//for now need to keep this intermediate state
 	val seedWord = remember { mutableStateOf(TextFieldValue(" ")) }
-	// Only update from ViewModel when rawUserInput actually changes (e.g. after word added)
-	// to avoid resetting IME state on every recomposition
-	LaunchedEffect(rawUserInput) {
+	// Re-sync the text field from the ViewModel on the discrete input events, but
+	// not on every recomposition (which would reset IME state mid-typing).
+	// Keying on `enteredWords.size` as well as `rawUserInput` is required for
+	// backspace to keep working: when the user backspaces past the current word,
+	// the ViewModel drops the last entered word and resets `rawUserInput` back to
+	// the " " sentinel - a no-op *value* change. Keying on `rawUserInput` alone,
+	// the effect would not re-fire, the field would stay empty, and an empty
+	// BasicTextField emits no further backspace events (deletes one, then freezes).
+	// The word-count change makes the effect re-fire and restore the " " sentinel,
+	// so each subsequent backspace can remove the next word.
+	LaunchedEffect(rawUserInput, enteredWords.size) {
 		seedWord.value = TextFieldValue(
 			text = rawUserInput,
 			//to always keep position after artificially added " "
