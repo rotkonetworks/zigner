@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.ScreenHeaderWithButton
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.ui.theme.*
 
 
@@ -69,6 +70,10 @@ private fun BananaSplitPasswordInternal(
 	wrongPassword: State<Boolean>,
 	modifier: Modifier = Modifier,
 ) {
+
+	// The reveal toggle below can show this password in plaintext - typing
+	// or viewing it is as sensitive as displaying a banana split share.
+	DisableScreenshots()
 
 	val pathFocusRequester = remember { FocusRequester() }
 	val passwordFocusRequester = remember { FocusRequester() }

@@ -40,6 +40,7 @@ import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SecondaryButtonWide
 import net.rotko.zigner.components.qrcode.EmptyQrCodeProvider
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.domain.getData
 import net.rotko.zigner.domain.intoImageBitmap
 import net.rotko.zigner.ui.helpers.PreviewData
@@ -64,6 +65,10 @@ fun BananaSplitExportScreen(
 	onClose: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// Each shard is an independent secret share of the seed - block
+	// screenshots and the recents thumbnail while shards are on screen.
+	DisableScreenshots()
+
 	Column(modifier.fillMaxHeight(1f)) {
 		ScreenHeaderClose(title = "", onClose = onClose, onMenu = onMenu)
 		Column(

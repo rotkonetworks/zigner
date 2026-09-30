@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.screens.keysetdetails.export.HotWalletExportService
 import net.rotko.zigner.ui.theme.SignerTypeface
 import net.rotko.zigner.ui.theme.textSecondary
@@ -98,6 +99,11 @@ fun HotWalletQrSection(
 		}
 
 		if (expanded) {
+			// The QR encodes a 12-word spending mnemonic for the derived hot
+			// wallet - block screenshots and the recents thumbnail while it
+			// is visible, same as any other seed/secret QR.
+			DisableScreenshots()
+
 			qrBitmap?.let { bitmap ->
 				Box(
 					modifier = Modifier

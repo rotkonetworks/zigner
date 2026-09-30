@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.BottomSheetHeader
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.ui.theme.SignerNewTheme
 import net.rotko.zigner.ui.theme.SignerTypeface
 
@@ -22,6 +23,10 @@ fun BananaSplitShowPassphraseMenu(
 	password: String,
 	onClose: Callback,
 ) {
+	// The password is what protects the banana split shares - block
+	// screenshots and the recents thumbnail while it is shown in plaintext.
+	DisableScreenshots()
+
 	Column() {
 		BottomSheetHeader(
 			title = stringResource(R.string.banana_split_menu_password_title),

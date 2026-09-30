@@ -24,6 +24,7 @@ import net.rotko.zigner.components.qrcode.AnimatedQrImages
 import net.rotko.zigner.components.qrcode.AnimatedQrKeysProvider
 import net.rotko.zigner.components.qrcode.EmptyAnimatedQrKeysProvider
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.DisableScreenshots
 import net.rotko.zigner.domain.getData
 import net.rotko.zigner.ui.helpers.PreviewData
 import net.rotko.zigner.ui.theme.SignerNewTheme
@@ -37,6 +38,10 @@ fun BackupExportScreen(
 	onClose: Callback,
 	modifier: Modifier = Modifier,
 ) {
+	// This QR animates the raw seed phrase itself, not a public signing
+	// artifact - block screenshots and the recents thumbnail.
+	DisableScreenshots()
+
 	val viewModel: BackupExportViewModel = viewModel()
 	val qrFrames = viewModel.qrFrames.collectAsStateWithLifecycle()
 	val isLoading = viewModel.isLoading.collectAsStateWithLifecycle()

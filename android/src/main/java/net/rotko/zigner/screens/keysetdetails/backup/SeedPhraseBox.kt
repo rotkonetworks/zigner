@@ -22,7 +22,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import net.rotko.zigner.components.security.SecureScreen
 import net.rotko.zigner.R
 import net.rotko.zigner.domain.KeepScreenOn
 import net.rotko.zigner.domain.DisableScreenshots
@@ -51,7 +50,7 @@ internal val PhraseWordStyle: TextStyle = TextStyle(
 fun SeedPhraseBox(seedPhrase: String) {
 	// Guard the shared component rather than each screen that uses it, so a
 	// screen added later inherits the protection instead of having to remember.
-	SecureScreen()
+	DisableScreenshots()
 
 	val innerRound = dimensionResource(id = R.dimen.innerFramesCornerRadius)
 	val innerShape =
@@ -69,7 +68,6 @@ fun SeedPhraseBox(seedPhrase: String) {
 		}
 	}
 
-	DisableScreenshots()
 	KeepScreenOn()
 }
 
