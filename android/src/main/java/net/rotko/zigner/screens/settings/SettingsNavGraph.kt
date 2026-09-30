@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.NavType
 import androidx.navigation.compose.composable
-import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import net.rotko.zigner.components.documents.PpScreen
 import net.rotko.zigner.components.documents.TosScreen
@@ -21,9 +19,6 @@ import net.rotko.zigner.screens.settings.frost.FrostSettingsScreen
 import net.rotko.zigner.screens.settings.general.SettingsAdvancedNavSubgraph
 import net.rotko.zigner.screens.settings.general.SettingsGeneralNavSubgraph
 import net.rotko.zigner.screens.settings.logs.logsNavigationSubgraph
-import net.rotko.zigner.screens.settings.networks.details.NetworkDetailsSubgraph
-import net.rotko.zigner.screens.settings.networks.list.networkListDestination
-import net.rotko.zigner.screens.settings.networks.signspecs.signSpecsDestination
 import net.rotko.zigner.screens.settings.releasekey.ReleaseKeyIntegratedScreen
 import net.rotko.zigner.screens.settings.verifiercert.verifierSettingsDestination
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
@@ -69,24 +64,7 @@ fun NavGraphBuilder.settingsFullSubgraph(
 		logsNavigationSubgraph(
 			navController = coreNavController,
 		)
-		networkListDestination(coreNavController)
 		verifierSettingsDestination(coreNavController)
-		composable(
-			route = SettingsNavSubgraph.NetworkDetails.route,
-			arguments = listOf(
-				navArgument(SettingsNavSubgraph.NetworkDetails.networkKey) {
-					type = NavType.StringType
-				}
-			),
-		) {
-			val networkKey =
-				it.arguments?.getString(SettingsNavSubgraph.NetworkDetails.networkKey)!!
-			NetworkDetailsSubgraph(
-				networkKey,
-				coreNavController,
-			)
-		}
-		signSpecsDestination(coreNavController)
 		composable(SettingsNavSubgraph.multisig) {
 			FrostSettingsScreen(
 				onBack = { coreNavController.popBackStack() },
@@ -122,34 +100,11 @@ internal object SettingsNavSubgraph {
 	const val backup = "settings_backup"
 	const val advanced = "settings_advanced"
 	const val logs = "settings_logs"
-	const val networkList = "settings_manage_networks"
 	const val generalVerifier = "settings_general_verifier"
 	const val zcashTestQr = "settings_zcash_test_qr"
 	const val multisig = "settings_multisig"
 	const val multisigBackup = "settings_multisig_backup"
 	const val multisigBackupAge = "settings_multisig_backup_age"
 	const val releaseKey = "settings_release_key"
-	object NetworkDetails {
-		internal const val networkKey = "network_key"
-		private const val baseRoute = "settings_network_details"
-		const val route = "$baseRoute/{$networkKey}"
-		fun destination(networkKey: String) = "$baseRoute/${networkKey}"
-	}
-
-	object SignNetworkSpecs {
-		internal const val networkKey = "network_key"
-		private const val baseRoute = "settings_network_sufficient_crypto"
-		const val route = "$baseRoute/{$networkKey}"
-		fun destination(networkKey: String) = "$baseRoute/${networkKey}"
-	}
-
-	object SignMetadataSpecs {
-		internal const val networkKey = "network_key"
-		internal const val metadataSpecVer = "spec_ver"
-		private const val baseRoute = "settings_metadata_sufficient_crypto"
-		const val route = "$baseRoute/{$networkKey}/{$metadataSpecVer}"
-		fun destination(networkKey: String, metadataSpecVer: String) =
-			"$baseRoute/${networkKey}/${metadataSpecVer}"
-	}
 }
 

@@ -19,7 +19,6 @@ import net.rotko.zigner.R
 import net.rotko.zigner.bottomsheets.password.EnterPassword
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.FakeNavigator
-import net.rotko.zigner.screens.scan.addnetwork.AddedNetworkSheetsSubgraph
 import net.rotko.zigner.screens.scan.backuprestore.BackupRestoreSubgraph
 import net.rotko.zigner.screens.scan.bananasplitrestore.BananaSplitSubgraph
 import net.rotko.zigner.screens.scan.camera.ScanScreen
@@ -39,7 +38,6 @@ import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedSignatureQrScreen
-import net.rotko.zigner.screens.scan.transaction.dynamicderivations.AddDynamicDerivationScreenFull
 import net.rotko.zigner.screens.scan.transaction.previewType
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
 import io.parity.signer.uniffi.Action
@@ -65,9 +63,6 @@ fun ScanNavSubgraph(
 	val signature = scanViewModel.signature.collectAsStateWithLifecycle()
 	val bananaSplitPassword =
 		scanViewModel.bananaSplitPassword.collectAsStateWithLifecycle()
-	val dynamicDerivations =
-		scanViewModel.dynamicDerivations.collectAsStateWithLifecycle()
-
 	val transactionError =
 		scanViewModel.transactionError.collectAsStateWithLifecycle()
 	val passwordModel = scanViewModel.passwordModel.collectAsStateWithLifecycle()
@@ -90,9 +85,6 @@ fun ScanNavSubgraph(
 		scanViewModel.releaseSignPrefix.collectAsStateWithLifecycle().value
 	val modulePackageInfo = scanViewModel.modulePackageInfo.collectAsStateWithLifecycle()
 	val modulePackageError = scanViewModel.modulePackageError.collectAsStateWithLifecycle()
-
-	val addedNetworkName: MutableState<String?> =
-		remember { mutableStateOf(null) }
 
 	val showingModals = transactionError.value != null ||
 		passwordModel.value != null || errorWrongPassword.value
@@ -127,7 +119,6 @@ fun ScanNavSubgraph(
 	//Full screens
 	val transactionsValue = transactions.value
 	val bananaQrData = bananaSplitPassword.value
-	val dynamicDerivationsData = dynamicDerivations.value
 	val urBackupData = urBackupFrames.value
 
 	val zcashPcztParts = scanViewModel.zcashPcztUrParts.collectAsStateWithLifecycle()
@@ -410,11 +401,6 @@ fun ScanNavSubgraph(
 				scanViewModel.bananaSplitPassword.value = null
 			},
 		)
-	} else if (dynamicDerivationsData != null) {
-		AddDynamicDerivationScreenFull(
-			model = dynamicDerivationsData,
-			onClose = scanViewModel::clearState,
-		)
 	} else if (unifiedSignatureResult.value != null) {
 		// Unified signature QR display
 		UnifiedSignatureQrScreen(
@@ -450,12 +436,6 @@ fun ScanNavSubgraph(
 			},
 			onBananaSplit = { payloads ->
 				scanViewModel.bananaSplitPassword.value = payloads
-			},
-			onDynamicDerivations = { payload ->
-				scanViewModel.performDynamicDerivationPayload(payload, context)
-			},
-			onDynamicDerivationsTransactions = { payload ->
-				scanViewModel.performDynamicDerivationTransaction(payload, context)
 			},
 			onPenumbraSignRequest = { payload ->
 				scanViewModel.performUnifiedSignRequest(payload, context)
@@ -507,18 +487,6 @@ fun ScanNavSubgraph(
 			onApprove = {
 				when (val previewType =
 					transactions.value?.transactions?.previewType) {
-					is TransactionPreviewType.AddNetwork -> {
-						Toast.makeText(
-							context,
-							context.getString(
-								R.string.toast_network_added,
-								previewType.network
-							),
-							Toast.LENGTH_LONG
-						).show()
-						addedNetworkName.value = previewType.network
-					}
-
 					is TransactionPreviewType.Metadata -> {
 						Toast.makeText(
 							context,
@@ -573,13 +541,6 @@ fun ScanNavSubgraph(
 				},
 			)
 		}
-	} ?: addedNetworkName.value?.let { addedNetwork ->
-		AddedNetworkSheetsSubgraph(
-			networkNameAdded = addedNetwork,
-			onClose = {
-				addedNetworkName.value = null
-			}
-		)
 	} ?: if (errorWrongPassword.value) {
 		BottomSheetWrapperRoot(onClosedAction = scanViewModel::clearState) {
 			WrongPasswordBottomSheet(

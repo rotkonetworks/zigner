@@ -13,8 +13,6 @@ import net.rotko.zigner.domain.toNetworkModel
 import net.rotko.zigner.domain.toVerifierDetailsModel
 import net.rotko.zigner.screens.keydetails.exportprivatekey.PrivateKeyExportModel
 import net.rotko.zigner.screens.keydetails.exportprivatekey.toPrivateKeyExportModel
-import net.rotko.zigner.screens.settings.networks.details.NetworkDetailsModel
-import net.rotko.zigner.screens.settings.networks.details.toNetworkDetailsModel
 import io.parity.signer.uniffi.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,34 +155,6 @@ class UniffiInteractor(val appContext: Context) {
 			}
 		}
 
-	suspend fun previewDynamicDerivations(
-		seeds: Map<String, String>,
-		payload: String
-	): UniffiResult<DdPreview> =
-		withContext(Dispatchers.IO) {
-			try {
-				val validationResult =
-					io.parity.signer.uniffi.previewDynamicDerivations(seeds, payload)
-				UniffiResult.Success(validationResult)
-			} catch (e: ErrorDisplayed) {
-				UniffiResult.Error(e)
-			}
-		}
-
-	suspend fun signDynamicDerivationsTransactions(
-		seeds: Map<String, String>,
-		payload: List<String>
-	): UniffiResult<MSignedTransaction> =
-		withContext(Dispatchers.IO) {
-			try {
-				val transactionResult =
-					io.parity.signer.uniffi.signDdTransaction(payload, seeds)
-				UniffiResult.Success(transactionResult)
-			} catch (e: ErrorDisplayed) {
-				UniffiResult.Error(e)
-			}
-		}
-
 	suspend fun createNewSeedPhrase(
 	): UniffiResult<String> =
 		withContext(Dispatchers.IO) {
@@ -255,52 +225,6 @@ class UniffiInteractor(val appContext: Context) {
 		withContext(Dispatchers.IO) {
 			try {
 				val transactionResult = io.parity.signer.uniffi.removeKeySet(keySetName)
-				UniffiResult.Success(transactionResult)
-			} catch (e: ErrorDisplayed) {
-				UniffiResult.Error(e)
-			}
-		}
-
-	suspend fun getManagedNetworkDetails(
-		networkKey: String
-	): UniffiResult<NetworkDetailsModel> =
-		withContext(Dispatchers.IO) {
-			try {
-				val transactionResult =
-					io.parity.signer.uniffi.getManagedNetworkDetails(networkKey)
-						.toNetworkDetailsModel()
-				UniffiResult.Success(transactionResult)
-			} catch (e: ErrorDisplayed) {
-				UniffiResult.Error(e)
-			}
-		}
-
-	suspend fun removeMetadataManagedNetwork(
-		networkKey: String,
-		metadataSpecsVersion: String
-	): UniffiResult<Unit> =
-		withContext(Dispatchers.IO) {
-			try {
-				val transactionResult =
-					io.parity.signer.uniffi.removeMetadataOnManagedNetwork(
-						networkKey,
-						metadataSpecsVersion
-					)
-				UniffiResult.Success(transactionResult)
-			} catch (e: ErrorDisplayed) {
-				UniffiResult.Error(e)
-			}
-		}
-
-	suspend fun removeManagedNetwork(
-		networkKey: String,
-	): UniffiResult<Unit> =
-		withContext(Dispatchers.IO) {
-			try {
-				val transactionResult =
-					io.parity.signer.uniffi.removeManagedNetwork(
-						networkKey,
-					)
 				UniffiResult.Success(transactionResult)
 			} catch (e: ErrorDisplayed) {
 				UniffiResult.Error(e)

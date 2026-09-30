@@ -8,8 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.R
-import net.rotko.zigner.components.NetworkCard
-import net.rotko.zigner.components.NetworkCardModel
 import net.rotko.zigner.components.base.MarkdownText
 import net.rotko.zigner.components.base.toRichTextStr
 import net.rotko.zigner.screens.scan.transaction.transactionElements.*
@@ -38,35 +36,32 @@ fun TransactionElementSelector(card: TransactionCard) {
 			.fillMaxWidth()
 	) {
 		when (val txCard = card.card) {
-			// Author cards with identicon and variable description
-			is Card.AuthorPlainCard -> TCAuthorPlain(author = txCard.f) // Not present on new designs
-			is Card.AuthorPublicKeyCard -> TCAuthorPublicKey(key = txCard.f)  // Not present on new designs
-
-			// Foldable Markdown values on tap
-			is Card.CallCard -> TCValueWithToogleDocs(payload = txCard.f.toTransactionCallModel())  // This is used to present `Method` and provides details on tap
-			is Card.EnumVariantNameCard -> TCValueWithToogleDocs(payload = txCard.f.toTransactionCallModel())
-			is Card.FieldNameCard -> TCValueWithMarkdownTrio(value = txCard.f.toTCFieldNameModel()) // Presents `dest` or `value` indentent values
-			is Card.FieldNumberCard -> TCValueWithMarkdownTrio(value = txCard.f.toTCFieldNameModel())
-
-			// Sections
-			is Card.NewSpecsCard -> TCAddNetwork(specs = txCard.f) // User when adding new network, redesigned
-			is Card.MetaCard -> TCMeta(meta = txCard.f.toMetadataModel()) // Used when scanning metadata update, redesigned
-			is Card.VerifierCard -> TCVerifier(txCard.f) // Used in metadata update, adding new network, redesigned
-			is Card.DerivationsCard -> TCImportDerivationsFull(model = txCard.toImportDerivationsModel())  //import derivations
-			is Card.TxSpecPlainCard -> TCUnknownNetwork(txCard.f) // Unknown network information for given transaction, not present on new designs
+			// Substrate-only card kinds. Their screens and card renderers are
+			// deleted (zigner signs zcash and penumbra only); this branch is
+			// unreachable in practice because the scanner refuses substrate
+			// payloads by default (ScanCapability.SUBSTRATE), but the `when`
+			// must stay exhaustive since the uniffi Card type is untouched.
+			is Card.AuthorPlainCard,
+			is Card.AuthorPublicKeyCard,
+			is Card.CallCard,
+			is Card.EnumVariantNameCard,
+			is Card.FieldNameCard,
+			is Card.FieldNumberCard,
+			is Card.NewSpecsCard,
+			is Card.MetaCard,
+			is Card.VerifierCard,
+			is Card.DerivationsCard,
+			is Card.TxSpecPlainCard,
+			is Card.NetworkInfoCard,
+			is Card.TypesInfoCard,
+			is Card.EraMortalCard,
+			is Card.IdCard -> Unit
 
 			// Error handling
 			is Card.ErrorCard -> TCError(error = txCard.f)
 			is Card.WarningCard -> TCWarning(txCard.f)
 
 			// Simple values with identicons / icons / markdown
-			is Card.NetworkInfoCard -> NetworkCard( // Not present in new designs
-				network = NetworkCardModel(
-					networkTitle = txCard.f.networkTitle,
-					networkLogo = txCard.f.networkLogo
-				)
-			)
-			is Card.TypesInfoCard -> TCTypesInfo(txCard.f) // Not present in new designs
 			is Card.TextCard -> MarkdownText(txCard.f.toRichTextStr()) // Markdown text field, not present on new designs
 
 			// Simple values - redesigned
@@ -93,8 +88,6 @@ fun TransactionElementSelector(card: TransactionCard) {
 			Card.EraImmortalCard -> TCNameValueElement(
 				name = stringResource(R.string.transaction_field_transaction_immortal),
 			)
-			is Card.EraMortalCard -> TCEraMortal(era = txCard.f)
-			is Card.IdCard -> TCID(txCard.f.base58) // ID card, new designs present it without identicon
 			is Card.IdentityFieldCard -> TCNameValueElement(
 				name = stringResource(R.string.transaction_field_identityfield),
 				value = txCard.f,

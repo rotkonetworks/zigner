@@ -30,7 +30,6 @@ import io.parity.signer.uniffi.Action
 import io.parity.signer.uniffi.ActionResult
 import io.parity.signer.uniffi.Card
 import io.parity.signer.uniffi.DdKeySet
-import io.parity.signer.uniffi.DdPreview
 import io.parity.signer.uniffi.DerivedKeyError
 import io.parity.signer.uniffi.MSignatureReady
 import io.parity.signer.uniffi.MTransaction
@@ -106,7 +105,6 @@ class ScanViewModel : ViewModel() {
 	var signature: MutableStateFlow<MSignatureReady?> = MutableStateFlow(null)
 	var bananaSplitPassword: MutableStateFlow<List<String>?> =
 		MutableStateFlow(null)
-	var dynamicDerivations: MutableStateFlow<DdPreview?> = MutableStateFlow(null)
 	var passwordModel: MutableStateFlow<EnterPasswordModel?> =
 		MutableStateFlow(null)
 	val transactionError: MutableStateFlow<LocalErrorSheetModel?> =
@@ -326,74 +324,6 @@ class ScanViewModel : ViewModel() {
 		}
 	}
 
-	suspend fun performDynamicDerivationPayload(
-		payload: String, context: Context
-	) {
-		when (val phrases = seedRepository.getAllSeeds()) {
-			is RepoResult.Failure -> {
-				Timber.e(
-					TAG,
-					"cannot get seeds to show import dynamic derivations ${phrases.error}"
-				)
-			}
-
-			is RepoResult.Success -> {
-				val previewDynDerivations =
-					uniffiInteractor.previewDynamicDerivations(phrases.result, payload)
-				System.gc()
-
-				when (previewDynDerivations) {
-					is UniffiResult.Error -> {
-						transactionError.value = LocalErrorSheetModel(
-							title = context.getString(R.string.dymanic_derivation_error_custom_title),
-							subtitle = previewDynDerivations.error.message ?: "",
-						)
-					}
-
-					is UniffiResult.Success -> {
-						dynamicDerivations.value = previewDynDerivations.result
-					}
-				}
-			}
-		}
-	}
-
-	suspend fun performDynamicDerivationTransaction(
-		payload: List<String>, context: Context
-	) {
-		when (val phrases = seedRepository.getAllSeeds()) {
-			is RepoResult.Failure -> {
-				Timber.e(
-					TAG,
-					"cannot get seeds to show import dynamic derivations ${phrases.error}"
-				)
-			}
-
-			is RepoResult.Success -> {
-				val dynDerivations =
-					uniffiInteractor.signDynamicDerivationsTransactions(
-						phrases.result, payload
-					)
-				System.gc()
-
-				when (dynDerivations) {
-					is UniffiResult.Error -> {
-						transactionError.value = LocalErrorSheetModel(
-							title = context.getString(R.string.scan_screen_error_derivation_no_keys_and_no_errors_title),
-							subtitle = dynDerivations.error.message ?: "",
-						)
-					}
-
-					is UniffiResult.Success -> {
-						signature.value = dynDerivations.result.signature
-						transactions.value =
-							TransactionsState(dynDerivations.result.transaction)
-					}
-				}
-			}
-		}
-	}
-
 	private fun updateTransactionsWithImportDerivations(
 		transactions: List<MTransaction>, updatedKeys: List<SeedKeysPreview>
 	): List<MTransaction> = transactions.map { transaction ->
@@ -462,7 +392,7 @@ class ScanViewModel : ViewModel() {
 
 
 	fun ifHasStateThenClear(): Boolean {
-		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || dynamicDerivations.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null || modulePackageBytes.value != null || releaseSignPrefix.value != null) {
+		return if (transactions.value != null || signature.value != null || passwordModel.value != null || transactionError.value != null || transactionIsInProgress.value || errorWrongPassword.value || bananaSplitPassword.value != null || penumbraSignRequest.value != null || penumbraSignatureQr.value != null || cosmosSignRequest.value != null || cosmosSignatureQr.value != null || urBackupFrames.value != null || zcashNoteSyncResult.value != null || zcashNoteSyncFrames.value != null || modulePcztPayload.value != null || modulePackageBytes.value != null || releaseSignPrefix.value != null) {
 			clearState()
 			true
 		} else {
@@ -475,7 +405,6 @@ class ScanViewModel : ViewModel() {
 		signature.value = null
 		passwordModel.value = null
 		bananaSplitPassword.value = null
-		dynamicDerivations.value = null
 		transactionError.value = null
 		transactionIsInProgress.value = false
 		errorWrongPassword.value = false

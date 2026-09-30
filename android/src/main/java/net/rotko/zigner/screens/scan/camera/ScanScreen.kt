@@ -25,6 +25,7 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 import net.rotko.zigner.R
+import net.rotko.zigner.domain.scan.ScanCapability
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.KeepScreenOn
 import net.rotko.zigner.screens.scan.camera.*
@@ -39,8 +40,6 @@ fun ScanScreen(
 	onClose: Callback,
 	performPayloads: suspend (String) -> Unit,
 	onBananaSplit: (List<String>) -> Unit,
-	onDynamicDerivations: suspend (String) -> Unit,
-	onDynamicDerivationsTransactions: suspend (List<String>) -> Unit,
 	onPenumbraSignRequest: (String) -> Unit = {},
 	onCosmosSignRequest: (String) -> Unit = {},
 	onZcashSimpleSign: (String) -> Unit = {},
@@ -69,9 +68,16 @@ fun ScanScreen(
 	val refused by viewModel.refusedCapability.collectAsStateWithLifecycle()
 	LaunchedEffect(refused) {
 		val cap = refused ?: return@LaunchedEffect
+		val message = if (cap == ScanCapability.SUBSTRATE || cap == ScanCapability.COSMOS) {
+			// Substrate and Cosmos have no screens left to route to - this is
+			// not "off, enable it", it is not a request zigner reads at all.
+			policyContext.getString(R.string.scan_unsupported_request)
+		} else {
+			"${cap.label} scanning is off. Enable it in settings if you meant to use it."
+		}
 		Toast.makeText(
 			policyContext,
-			"${cap.label} scanning is off. Enable it in settings if you meant to use it.",
+			message,
 			Toast.LENGTH_LONG,
 		).show()
 		viewModel.clearRefusal()
@@ -82,10 +88,6 @@ fun ScanScreen(
 
 	val currentPerformPayloads by rememberUpdatedState(performPayloads)
 	val currentOnBananaSplit by rememberUpdatedState(onBananaSplit)
-	val currentOnDynamicDerivations by rememberUpdatedState(onDynamicDerivations)
-	val currentOnDynamicDerivationsTransactions by rememberUpdatedState(
-		onDynamicDerivationsTransactions
-	)
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
 	val currentOnZcashSimpleSign by rememberUpdatedState(onZcashSimpleSign)
@@ -119,24 +121,6 @@ fun ScanScreen(
 				.filter { it.isNotEmpty() }
 				.collect { qrData ->
 					currentOnBananaSplit(qrData)
-				}
-		}
-
-		launch {
-			viewModel.dynamicDerivationPayload
-				.filterNotNull()
-				.filter { it.isNotEmpty() }
-				.collect { qrData ->
-					currentOnDynamicDerivations(qrData)
-				}
-		}
-
-		launch {
-			viewModel.dynamicDerivationTransactionPayload
-				.filterNotNull()
-				.filter { it.isNotEmpty() }
-				.collect { qrData ->
-					currentOnDynamicDerivationsTransactions(qrData)
 				}
 		}
 

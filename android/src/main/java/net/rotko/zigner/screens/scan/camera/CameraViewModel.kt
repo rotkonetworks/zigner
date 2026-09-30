@@ -179,16 +179,6 @@ class CameraViewModel() : ViewModel() {
 	private val _zidSignPayload = MutableStateFlow<JSONObject?>(null)
 	val zidSignPayload: StateFlow<JSONObject?> = _zidSignPayload.asStateFlow()
 
-	private val _dynamicDerivationPayload =
-		MutableStateFlow<String?>(null)
-	val dynamicDerivationPayload: StateFlow<String?> =
-		_dynamicDerivationPayload.asStateFlow()
-
-	private val _dynamicDerivationTransactionPayload =
-		MutableStateFlow<List<String>?>(null)
-	val dynamicDerivationTransactionPayload: StateFlow<List<String>?> =
-		_dynamicDerivationTransactionPayload.asStateFlow()
-
 	private val _total = MutableStateFlow<Int?>(null)
 	private val _captured = MutableStateFlow<Int?>(null)
 
@@ -472,16 +462,12 @@ class CameraViewModel() : ViewModel() {
 					}
 				}
 
-				is DecodeSequenceResult.DynamicDerivations -> {
-					if (!allow(ScanCapability.SUBSTRATE)) return
-					resetScanValues()
-					_dynamicDerivationPayload.value = payload.s
-				}
-
+				// No screen renders these any more (dynamicderivations deleted);
+				// the capability gate refuses them the same way an unknown
+				// payload is refused.
+				is DecodeSequenceResult.DynamicDerivations,
 				is DecodeSequenceResult.DynamicDerivationTransaction -> {
-					if (!allow(ScanCapability.SUBSTRATE)) return
-					resetScanValues()
-					_dynamicDerivationTransactionPayload.value = payload.s
+					allow(ScanCapability.SUBSTRATE)
 				}
 			}
 
@@ -762,8 +748,6 @@ class CameraViewModel() : ViewModel() {
 	fun resetPendingTransactions() {
 		_pendingTransactionPayloads.value = emptySet()
 		_bananaSplitPayload.value = null
-		_dynamicDerivationPayload.value = null
-		_dynamicDerivationTransactionPayload.value = null
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null
 		_zcashSimpleSignPayload.value = null
