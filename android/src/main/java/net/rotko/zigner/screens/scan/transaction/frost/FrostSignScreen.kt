@@ -46,7 +46,7 @@ private data class FrostVerdict(
 	val verified: Boolean,
 	/** ran the verifier and it FAILED — hard-block the signature */
 	val hardMismatch: Boolean,
-	/** could not verify (older host omitted the PCZT, or no UFVK on file) */
+	/** could not verify (no PCZT, no UFVK on file, verifier error) - signing is blocked */
 	val unverifiedReason: String?,
 	val outputs: List<FrostOutputRow>,
 )
@@ -187,7 +187,14 @@ fun FrostSignScreen(
 				SignerDivider()
 				Spacer(modifier = Modifier.height(8.dp))
 				Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-					if (!v.hardMismatch) {
+					// Only a request the device itself verified can be signed. This
+					// used to be `!hardMismatch`, which let every "could not verify"
+					// case through - no PCZT from the host, no UFVK on file, or the
+					// verifier throwing (e.g. a consensus branch the linked crates
+					// do not know, which after NU7 activation is every request until
+					// the FROST verifier is upgraded). The screen would then show
+					// only the coordinator's claim and still offer to sign.
+					if (v.verified) {
 						PrimaryButtonWide(
 							label = "Approve & Sign",
 							onClicked = {
@@ -276,7 +283,7 @@ private fun zec(zat: Long): String =
 private fun VerdictBanner(v: FrostVerdict) {
 	val (text, color) = when {
 		v.hardMismatch -> "MISMATCH — the transaction does not match the request. Do NOT sign." to MaterialTheme.colors.red500
-		v.unverifiedReason != null -> "Unverified — ${v.unverifiedReason}. Review carefully." to MaterialTheme.colors.textTertiary
+		v.unverifiedReason != null -> "Cannot verify this request on this device (${v.unverifiedReason}). Signing is blocked." to MaterialTheme.colors.red500
 		else -> "Verified on-device: outputs + sighash match the PCZT." to MaterialTheme.colors.textSecondary
 	}
 	Text(

@@ -23,7 +23,6 @@ use pczt::{
     roles::{creator::Creator, io_finalizer::IoFinalizer, redactor::Redactor},
     Pczt,
 };
-use rand_core::OsRng;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_primitives::transaction::{
     builder::{BuildConfig, Builder, BundlePadding, PcztParts},
@@ -40,6 +39,16 @@ use zip32::AccountId;
 
 /// BIP-39 mnemonic of the wallet that owns the note being spent/migrated.
 /// The device signs with this exact seed.
+
+/// Test RNG for the wallet-side roles (the NU7 stack's role APIs take an
+/// explicit `rand_core` 0.10 RNG). ChaCha20 seeded from the OS.
+pub fn test_rng() -> rand_chacha::ChaCha20Rng {
+    use rand_chacha::rand_core::SeedableRng;
+    let mut seed = [0u8; 32];
+    getrandom::getrandom(&mut seed).expect("os entropy");
+    rand_chacha::ChaCha20Rng::from_seed(seed)
+}
+
 pub const MNEMONIC: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
@@ -134,6 +143,7 @@ fn nu63_params() -> LocalNetwork {
         nu6_1: h(1),
         nu6_2: h(1),
         nu6_3: h(1),
+        nu7: None,
     }
 }
 
@@ -226,7 +236,7 @@ pub fn build_redacted_v5_send() -> V6Fixture {
     let sent = note_value - fee;
 
     let build_result = make_builder(sent)
-        .build_for_pczt(OsRng, &zip317::FeeRule::standard())
+        .build_for_pczt(test_rng(), &zip317::FeeRule::standard())
         .expect("build_for_pczt");
     assert_eq!(build_result.pczt_parts.version, TxVersion::V5);
 
@@ -260,7 +270,19 @@ pub fn build_redacted_v5_send() -> V6Fixture {
 
 /// Build + redact a real V6 orchard->ironwood migration PCZT.
 pub fn build_redacted_v6_migration() -> V6Fixture {
-    let params = nu63_params();
+    build_redacted_v6_migration_with(nu63_params())
+}
+
+/// The same turnstile migration with NU7 active, so the builder targets
+/// consensus branch `0x77190ad9`: a genuine NU7 PCZT, not a patched one.
+pub fn build_redacted_nu7_migration() -> V6Fixture {
+    build_redacted_v6_migration_with(LocalNetwork {
+        nu7: Some(BlockHeight::from_u32(1)),
+        ..nu63_params()
+    })
+}
+
+fn build_redacted_v6_migration_with(params: LocalNetwork) -> V6Fixture {
     let target_height = BlockHeight::from_u32(100);
 
     // The device seed owns the orchard note being migrated. LocalNetwork
@@ -337,7 +359,7 @@ pub fn build_redacted_v6_migration() -> V6Fixture {
     let migrated = note_value - fee;
 
     let build_result = make_builder(migrated)
-        .build_for_pczt(OsRng, &zip317::FeeRule::standard())
+        .build_for_pczt(test_rng(), &zip317::FeeRule::standard())
         .expect("build_for_pczt");
     assert_eq!(build_result.pczt_parts.version, TxVersion::V6);
 
@@ -543,7 +565,7 @@ pub fn build_redacted_delegation() -> DelegationFixture {
         builder
             .add_output(Some(ovk.clone()), hotkey_addr, NoteValue::ZERO, [0u8; 512])
             .expect("add governance output");
-        let (bundle, meta) = builder.build_for_pczt(OsRng).expect("build_for_pczt");
+        let (bundle, meta) = builder.build_for_pczt(test_rng()).expect("build_for_pczt");
         if meta.spend_action_index(0) == meta.output_action_index(0) {
             break bundle;
         }

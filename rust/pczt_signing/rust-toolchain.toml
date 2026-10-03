@@ -1,0 +1,17 @@
+# Pinned because module0.wasm is verified by rebuilding it and comparing
+# bytes (scripts/verify-baked-module.sh). That comparison is only meaningful
+# against a fixed compiler: rustc codegen changes between releases, so a
+# floating toolchain would turn a routine rustc bump into a failed
+# verification of an artifact nobody touched.
+#
+# The failure mode that matters is not the red CI - it is the fix someone
+# reaches for. "Rebuild and recommit the blob" makes it green again while
+# quietly destroying the property the check exists to establish. Pinning
+# means a toolchain change is a deliberate edit to this file, and the blob
+# is regenerated because the compiler moved, not because CI complained.
+#
+# Bumping: change the version, rebuild the asset, update EXPECTED_SHA256 in
+# rust/signer/tests/baked_module.rs, and consider BAKED_MODULE_VERSION.
+[toolchain]
+channel = "1.97.0"
+targets = ["wasm32-unknown-unknown"]

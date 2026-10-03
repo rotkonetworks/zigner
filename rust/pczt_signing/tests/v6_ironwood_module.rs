@@ -26,7 +26,9 @@
 
 mod common;
 
-use common::{build_redacted_v5_send, build_redacted_v6_migration, MNEMONIC};
+use common::{
+    build_redacted_nu7_migration, build_redacted_v5_send, build_redacted_v6_migration, MNEMONIC,
+};
 use module_host::ModuleRuntime;
 use pczt::Pczt;
 
@@ -628,4 +630,39 @@ fn module_compact_signatures_under_wasmi() {
             .all(|c| c.pool == envelope::POOL_ORCHARD),
         "V5 message carries orchard-only signatures"
     );
+}
+
+/// NU7 through the SHIPPED module under the device's wasmi runtime: a genuine
+/// branch-0x77190ad9 migration summarizes with the real fee and signs on
+/// testnet; on mainnet the module refuses until MAINNET_NU7_ACTIVATION is set.
+#[test]
+fn nu7_module_summarizes_and_signs_under_wasmi() {
+    if !module_wasm_available() {
+        return;
+    }
+    let fx = build_redacted_nu7_migration();
+    let mut rt = load_module(BUNDLED_MODULE_WASM);
+    let payload = single_request(&fx.redacted_pczt);
+
+    let blob = rt
+        .summarize_request(&payload)
+        .expect("nu7 module summarize_request under wasmi");
+    let summaries = parse_module_summaries(&blob);
+    assert_eq!(summaries.len(), 1);
+    assert!(summaries[0].ironwood_actions >= 1);
+    assert_eq!(summaries[0].fee, Some(fx.fee), "real fee, not unknown");
+
+    let resp = rt
+        .sign_request(&payload, MNEMONIC, 0, false)
+        .expect("nu7 module sign_request under wasmi (testnet)");
+    let messages = pczt_signing::envelope::parse_response(&resp).expect("response parses");
+    let signed = Pczt::parse(&messages[0].signed_pczt).expect("signed parses");
+    assert_eq!(*signed.global().consensus_branch_id(), 0x7719_0ad9);
+
+    if pczt_signing::consensus_gate::MAINNET_NU7_ACTIVATION.is_none() {
+        assert!(
+            rt.sign_request(&payload, MNEMONIC, 0, true).is_err(),
+            "mainnet NU7 must be refused by the shipped module until activation is set"
+        );
+    }
 }

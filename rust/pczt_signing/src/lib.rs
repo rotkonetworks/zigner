@@ -18,6 +18,7 @@
 //! is computed once per PCZT and reused for every action, and the spend
 //! authorizing key is zeroized after signing.
 
+pub mod consensus_gate;
 pub mod envelope;
 
 use envelope::{
@@ -155,8 +156,8 @@ pub struct DelegationSummary {
 /// the failing action named. That is the correct failure direction: the
 /// alternative fails silently, which is how the original bug survived.
 ///
-/// Still a no-op when the bundle cannot be reached at all (unparsable, unknown
-/// consensus branch) - those paths make signing fail on their own.
+/// A bundle that cannot be reached at all (unparsable, unknown consensus
+/// branch) is a refusal too - see the final match arm.
 ///
 /// The second half of this gate covers the FEE. See
 /// [`verify_value_balance`] - the displayed fee is derived from each bundle's
@@ -199,7 +200,15 @@ fn verify_displayed_summary(pczt: &Pczt) -> Result<(), Error> {
         Err(OrchardError::Custom(reason)) => Err(Error::Parse(format!(
             "{reason} - refusing to display or sign it"
         ))),
-        Err(_) => Ok(()),
+        // Anything else means the bundle could not be checked at all (parse
+        // failure, unrecognised consensus branch). This used to be `Ok(())`
+        // on the theory that signing fails on its own later - but the summary
+        // would already be on screen by then, showing outputs nobody proved.
+        // `consensus_gate::check_supported` rejects the known cases first;
+        // this arm is the backstop.
+        Err(e) => Err(Error::Parse(format!(
+            "transaction cannot be verified ({e:?}) - refusing to display or sign it"
+        ))),
     }
 }
 
@@ -402,6 +411,7 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     // This is a no-op for full PCZTs where these fields are already present.
     pczt.resolve_fields()
         .map_err(|e| Error::Parse(format!("resolve fields: {e:?}")))?;
+    consensus_gate::check_supported(&pczt)?;
     verify_displayed_summary(&pczt)?;
 
     let delegation = detect_delegation(&pczt);
@@ -595,6 +605,8 @@ fn sign_redacted_pczt_inner(
         .map_err(|e| Error::Parse(format!("resolve fields: {e:?}")))?;
     // Refuse to sign anything we would have refused to display. `sign_request`
     // does not re-run `summarize`, so this must be checked here too.
+    consensus_gate::check_supported(&pczt)?;
+    consensus_gate::check_activation(&pczt, mainnet)?;
     verify_displayed_summary(&pczt)?;
     reject_duplicate_rks(&pczt)?;
 
@@ -656,7 +668,6 @@ fn sign_redacted_pczt_inner(
     // do not hold error with a Wrong/Missing mismatch and are skipped -
     // "sign what is yours".
     use pczt::roles::low_level_signer::Signer as LowLevelSigner;
-    use rand_core::OsRng;
 
     /// Hedged (synthetic) nonce RNG for spend-auth signing.
     ///
@@ -682,11 +693,12 @@ fn sign_redacted_pczt_inner(
         label: &str,
         index: usize,
     ) -> rand_chacha::ChaCha20Rng {
-        use rand_core::{RngCore, SeedableRng};
+        use rand_chacha::rand_core::SeedableRng;
         let mut host = [0u8; 32];
         // Best effort: a failure here is survivable precisely because the
-        // seed does not depend on it for uniqueness.
-        let _ = OsRng.try_fill_bytes(&mut host);
+        // seed does not depend on it for uniqueness. In the wasm module this
+        // is the kernel's `host_getrandom` import (getrandom 0.2 custom hook).
+        let _ = getrandom::getrandom(&mut host);
         rand_chacha::ChaCha20Rng::from_seed(crate::hedged_seed(ask, sighash, label, index, &host))
     }
 
@@ -745,7 +757,7 @@ fn sign_redacted_pczt_inner(
             bundle,
             &orchard_fvk,
             &osak,
-            &ask,
+            ask,
             shielded_sighash,
             "orchard",
         )
@@ -760,7 +772,7 @@ fn sign_redacted_pczt_inner(
             bundle,
             &orchard_fvk,
             &osak,
-            &ask,
+            ask,
             shielded_sighash,
             "ironwood",
         )
@@ -1070,6 +1082,21 @@ mod wasm_entropy {
     }
 
     getrandom::register_custom_getrandom!(hostrandom);
+
+    /// getrandom 0.4 (pulled in by rand 0.10 through the zakura crates) with
+    /// `getrandom_backend="custom"`: the same kernel import, so the module
+    /// still has exactly one entropy source and no way to fake one.
+    #[no_mangle]
+    unsafe extern "Rust" fn __getrandom_v03_custom(
+        dest: *mut u8,
+        len: usize,
+    ) -> Result<(), getrandom04::Error> {
+        if host_getrandom(dest, len) == 0 {
+            Ok(())
+        } else {
+            Err(getrandom04::Error::UNSUPPORTED)
+        }
+    }
 }
 
 /// C ABI for the wasmi kernel. Convention: (ptr,len) in, packed

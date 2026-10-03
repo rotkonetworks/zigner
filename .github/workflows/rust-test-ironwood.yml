@@ -30,9 +30,19 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Install Rust stable toolchain
+      # Pinned, not `stable`. The module verification below compares bytes
+      # against the committed asset, and rustc codegen changes between
+      # releases - on a floating toolchain a routine rustc bump would fail
+      # the check with nothing in this repo having changed.
+      #
+      # The version is passed as an input rather than left to
+      # rust/pczt_signing/rust-toolchain.toml because this action sets the
+      # job's active toolchain itself; the file governs local builds. Keep
+      # the two in sync.
+      - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.97.0
           targets: wasm32-unknown-unknown
 
       - name: Rust Cache
@@ -45,6 +55,18 @@ jobs:
         run: |
           cd rust/pczt_signing
           cargo build --target wasm32-unknown-unknown --release --locked
+
+      # Checks that the bytes committed as assets/modules/module0.wasm really
+      # are a build of this source - otherwise the source in this tree and the
+      # binary on the phone are unrelated, and review of the former says
+      # nothing about the latter.
+      #
+      # This builds again inside the pinned container rather than reusing the
+      # artifact from the step above: a runner-local cargo build bakes in the
+      # runner's toolchain and registry paths, so it is not byte-comparable
+      # with anything built anywhere else.
+      - name: verify module0.wasm matches this source
+        run: ./scripts/verify-baked-module.sh --require-docker
 
       - name: cargo test (native, V5 + V6/ironwood E2E)
         run: |

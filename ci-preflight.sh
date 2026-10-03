@@ -39,8 +39,15 @@ if [[ $FAST -eq 0 ]]; then
   step "module wasm32 build" bash -c '
     rustup target add wasm32-unknown-unknown >/dev/null 2>&1
     cd rust/pczt_signing && cargo build --target wasm32-unknown-unknown --release --locked'
+
+  # Catch a stale committed asset here rather than in CI: the fix is to
+  # regenerate and recommit it, which is a local edit either way. Builds in
+  # the pinned container (the host build above is not byte-comparable), and
+  # skips with a message if docker is absent rather than failing.
+  step "module0.wasm matches source" ./scripts/verify-baked-module.sh
 else
   skip "module wasm32 build" "--fast"
+  skip "module0.wasm matches source" "--fast"
 fi
 
 # --- rust-test-android.yml: three feature combos via nextest ---

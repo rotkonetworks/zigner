@@ -10,6 +10,27 @@ permissions:
   packages: read
 
 jobs:
+  # module0.wasm is the PCZT signer the device loads to authorize spends, and
+  # it ships as a committed binary. rust-test-ironwood.yml verifies it against
+  # its source, but that workflow triggers on pull_request and pushes to
+  # master - a tag matches neither, so without this job a release could ship a
+  # blob unrelated to the published source with every other check green.
+  #
+  # Verifying master and not verifying artifacts would be the wrong way round:
+  # the artifact is the thing anyone can actually check us on.
+  verify-module:
+    name: Verify baked wasm module matches source
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Sources
+        uses: actions/checkout@v4
+
+      # No Rust toolchain setup: the build happens inside the pinned
+      # container, which is the entire point - a runner-local toolchain would
+      # produce a binary nobody else can reproduce.
+      - name: Rebuild module in pinned container and compare against asset
+        run: ./scripts/verify-baked-module.sh --require-docker
+
   run-tests:
     name: Run tests
     uses: ./.github/workflows/reusable-android-tests.yml
@@ -23,7 +44,9 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [run-tests, build-apk]
+    # verify-module gates publication: nothing reaches a GitHub release
+    # unless the shipped wasm provably came from the tagged source.
+    needs: [verify-module, run-tests, build-apk]
     steps:
       - name: Checkout Sources
         uses: actions/checkout@v4

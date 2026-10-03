@@ -14,10 +14,22 @@ use sha2::{Digest, Sha256};
 
 const MODULE: &[u8] = include_bytes!("../../../android/src/main/assets/modules/module0.wasm");
 
-/// sha256 of the asset this tree ships. The build is deterministic - a local
-/// rebuild reproduces it byte for byte - so this is a stable pin, not a
-/// snapshot of one machine's output.
-const EXPECTED_SHA256: &str = "8a35d4dbd063182f82e9f56e8e043312384c80babc329d97d09586b0a78a1516";
+/// sha256 of the asset this tree ships.
+///
+/// This pin is a snapshot of ONE ENVIRONMENT's output, not of the source. A
+/// host `cargo build` bakes the builder's rustup toolchain directory and
+/// cargo registry path into the artifact - via std's panic location strings,
+/// which `strip = true` does not remove - so two people building identical
+/// source get different bytes. Measured: the same source at two different
+/// crate paths produced identical output, while the same path under
+/// toolchain dirs `stable-…` and `1.97.0-…` did not.
+///
+/// `scripts/verify-baked-module.sh` builds in the pinned container from
+/// `docker/module-build.Dockerfile`, which holds those paths constant, and
+/// compares bytes. That is the check that ties this asset to its source;
+/// this test only notices the asset changing, so the
+/// `BAKED_MODULE_VERSION` decision below stays a deliberate one.
+const EXPECTED_SHA256: &str = "2a773344052763b15155dfcbe6e7d41e7157fe0cff8ae2b4ead0e5a06937bf08";
 
 #[test]
 fn baked_module_is_pinned_to_its_recorded_version() {

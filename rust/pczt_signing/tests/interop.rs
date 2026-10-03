@@ -15,7 +15,7 @@
 
 mod common;
 
-use common::{redact_pczt_for_signer, MNEMONIC};
+use common::{redact_pczt_for_signer, test_rng, MNEMONIC};
 use pczt::{
     roles::{
         creator::Creator, io_finalizer::IoFinalizer, prover::Prover,
@@ -23,7 +23,6 @@ use pczt::{
     },
     Pczt,
 };
-use rand_core::OsRng;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_primitives::transaction::{
     builder::{BuildConfig, Builder, BundlePadding},
@@ -101,7 +100,7 @@ fn wallet_produces_device_signs_wallet_extracts() {
         .expect("orchard change");
 
     let parts = builder
-        .build_for_pczt(OsRng, &zip317::FeeRule::standard())
+        .build_for_pczt(test_rng(), &zip317::FeeRule::standard())
         .expect("build_for_pczt")
         .pczt_parts;
 

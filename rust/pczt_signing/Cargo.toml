@@ -16,21 +16,27 @@ crate-type = ["cdylib", "rlib"]
 [workspace]
 
 [dependencies]
-pczt = { version = "0.9.3", default-features = false, features = ["orchard", "transparent", "signer"] }
-zcash_keys = { version = "0.16.1", default-features = false, features = ["orchard", "transparent-inputs"] }
-zcash_protocol = { version = "0.10.4", default-features = false }
-zcash_primitives = { version = "0.30", default-features = false, features = ["transparent-inputs"] }
-orchard = { version = "0.15", default-features = false }
+# NU7 (ZIP 259, branch 0x77190ad9) stack: the zakura crate family - the
+# same released crates zcli, zafu and vizor build PCZTs with, so the signer
+# verifies with the code that produced the transaction. zakura 2.2.0 carries
+# NU7 UNGATED (no `zcash_unstable` cfg) with the ZIP 259 contents only: no
+# ZIP 233 amount in txid/sighash. Crate names are kept via `package =` so the
+# source reads like upstream librustzcash.
+pczt = { package = "zakura-pczt", version = "=0.1.0-rc4", default-features = false, features = ["orchard", "transparent", "signer"] }
+zcash_keys = { package = "zakura-keys", version = "=2.2.0", default-features = false, features = ["orchard", "transparent-inputs"] }
+zcash_protocol = { package = "zakura-protocol", version = "=2.2.0", default-features = false }
+zcash_primitives = { package = "zakura-primitives", version = "=2.2.0", default-features = false, features = ["transparent-inputs"] }
+orchard = { package = "zakura-orchard", version = "=2.2.0", default-features = false }
+zcash_transparent = { package = "zakura-transparent", version = "=2.2.0", default-features = false, features = ["transparent-inputs"] }
 zip32 = { version = "0.2", default-features = false }
-zcash_transparent = { version = "0.10", package = "zcash_transparent", default-features = false, features = ["transparent-inputs"] }
 bip39 = "2"
 sha2 = { version = "0.10", default-features = false }
-# pczt's signer role uses rand_core::OsRng; the flag arrives via feature
-# unification in bigger graphs - standalone we enable it explicitly
-rand_core = { version = "0.6", features = ["getrandom"] }
-# Hedged nonce derivation: see hedged_rng. Host entropy must not be the only
-# thing standing between us and nonce reuse.
-rand_chacha = { version = "0.3", default-features = false }
+# Host entropy for the hedged nonce seed is read through getrandom 0.2 (the
+# custom hook the wasm sandbox's `host_getrandom` import is wired to - see the
+# wasm32 target dependency below). The signing APIs of the NU7 stack take a
+# `rand_core` 0.10 RNG, which is what rand_chacha 0.10 provides.
+getrandom = "0.2"
+rand_chacha = { version = "0.10", default-features = false }
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
@@ -40,10 +46,11 @@ hex = "0.4"
 # released `pczt` roles. (The previous `zafu-wasm` dev-dep is pinned to the
 # 5333c01b librustzcash rev and cannot unify with the 0.9.2 stack; the roles
 # it wrapped are the same upstream roles used directly here.)
-pczt = { version = "0.9.3", default-features = false, features = ["orchard", "transparent", "signer", "io-finalizer", "zcp-builder", "prover", "tx-extractor", "spend-finalizer"] }
-zcash_protocol = { version = "0.10.4", default-features = false, features = ["local-consensus"] }
-orchard = { version = "0.15", default-features = false, features = ["circuit"] }
-secp256k1 = "0.29"
+pczt = { package = "zakura-pczt", version = "=0.1.0-rc4", default-features = false, features = ["orchard", "transparent", "signer", "io-finalizer", "zcp-builder", "prover", "tx-extractor", "spend-finalizer"] }
+zcash_protocol = { package = "zakura-protocol", version = "=2.2.0", default-features = false, features = ["local-consensus"] }
+orchard = { package = "zakura-orchard", version = "=2.2.0", default-features = false, features = ["circuit"] }
+secp256k1 = "0.33"
+rand_core = "0.10"
 # The kernel-side wasmi runtime, so the V6 round-trip test can drive the
 # bundled module wasm through the EXACT runtime the Android device uses
 # (ModuleRuntime::summarize_request / sign_request). module_host has no zcash
@@ -55,9 +62,24 @@ opt-level = "z"
 lto = "fat"
 codegen-units = 1
 strip = true
+# NOTE: this artifact is NOT yet reproducible across machines. It embeds the
+# cargo registry path and the rustup toolchain directory via std's panic
+# location strings, which `strip` does not remove - two people building
+# identical source get different bytes.
+#
+# `trim-paths = "all"` is the fix but is not stabilized as of Cargo 1.97.0
+# (nightly only). Until it lands, the options are --remap-path-prefix in a
+# build wrapper or a pinned build container. See scripts/verify-baked-module.sh.
+#
+# This matters for the 2-of-3 module ceremony rather than being merely untidy:
+# three signers can only be signing something they each verified if they can
+# each rebuild it and get the same hash.
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # wasmi module builds: randomness is a host capability. RedPallas signing
 # is randomized, so the module imports entropy instead of pretending the
 # sandbox has any.
 getrandom = { version = "0.2", features = ["custom"] }
+# rand 0.10 (zakura) pulls getrandom 0.4; its custom backend is enabled by
+# rust/.cargo/config.toml and implemented in `wasm_entropy` - same host import.
+getrandom04 = { package = "getrandom", version = "0.4" }

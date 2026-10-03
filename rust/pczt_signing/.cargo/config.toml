@@ -1,0 +1,12 @@
+# The protocol module (this crate -> module0.wasm) gets randomness ONLY from
+# the kernel's `zigner_host.host_getrandom` import. rand 0.10 (via the zakura
+# crates) pulls getrandom 0.4, which has no wasm32-unknown-unknown backend by
+# default; the custom backend routes it to the same host import (see
+# `wasm_entropy` in src/lib.rs).
+#
+# Cargo reads this file from the WORKING DIRECTORY upward, so builds must run
+# from this crate's directory: CI does `cd rust/pczt_signing`, and
+# docker/module-build.Dockerfile sets its WORKDIR here. (rust/.cargo is
+# gitignored and must not carry anything the module build depends on.)
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", 'getrandom_backend="custom"']

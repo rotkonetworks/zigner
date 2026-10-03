@@ -38,6 +38,7 @@ pub mod frost_multisig;
 pub mod release_signing;
 pub use release_signing::ReleaseSigningRequest;
 pub mod ssh;
+mod zcash_consensus_gate;
 
 use crate::ffi_types::*;
 use db_handling::identities::{import_all_addrs, inject_derivations_has_pwd};
@@ -2160,9 +2161,14 @@ fn verify_displayed_summary(pczt: &pczt::Pczt) -> Result<(), ErrorDisplayed> {
         Err(OrchardError::Custom(reason)) => Err(ErrorDisplayed::Str {
             s: format!("PCZT {reason} — refusing to display or sign it."),
         }),
-        // Not verifiable here (structural parse, unrecognized consensus branch).
-        // Signing has its own guards; don't block review.
-        Err(_) => Ok(()),
+        // Not verifiable at all (structural parse, unrecognised consensus
+        // branch). This was `Ok(())` - "signing fails later anyway" - but the
+        // review screen would already be showing outputs nobody proved.
+        // zcash_consensus_gate rejects the known cases first; this is the
+        // backstop.
+        Err(e) => Err(ErrorDisplayed::Str {
+            s: format!("PCZT cannot be verified ({e:?}) — refusing to display or sign it."),
+        }),
     }
 }
 
@@ -2297,6 +2303,7 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
 
     // Screen-honesty gate: everything below feeds the review screen, so refuse
     // before building a summary that provably misstates what is being paid.
+    zcash_consensus_gate::check_supported(&pczt)?;
     verify_displayed_summary(&pczt)?;
 
     // Load verified notes for cross-reference. Used by the known_spends warning
@@ -2340,6 +2347,11 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
             )
         }
     };
+
+    // Activation by block height (mainnet only). The network comes from the
+    // synced anchor and defaults to mainnet with no notes, so an unsynced
+    // device applies the stricter rule.
+    zcash_consensus_gate::check_activation(&pczt, is_mainnet)?;
 
     // Extract spend details. Known nullifiers get their value from our
     // verified store; unknown ones report 0 here (the pczt crate's Spend
@@ -2832,7 +2844,8 @@ fn decode_and_verify_zcash_notes(
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
     // Monotonic height check: reject anchors older than what we already have
-    if let Ok(Some((_, stored_height, _, _, _))) = db_handling::zcash::get_verified_anchor(database) {
+    if let Ok(Some((_, stored_height, _, _, _))) = db_handling::zcash::get_verified_anchor(database)
+    {
         if bundle.anchor_height < stored_height {
             return Err(ErrorDisplayed::Str {
                 s: format!(
@@ -5960,5 +5973,63 @@ mod zcash_pczt_tests {
             sign_zcash_pczt(MNEMONIC, 0, tampered).is_err(),
             "the device must refuse to sign a PCZT it refused to display"
         );
+    }
+
+    // ── consensus gate (zcash_consensus_gate) ──────────────────────────────
+    // Patch the global branch id in place. postcard LEB128-encodes the u32 and
+    // every id used here is >= 2^28 (5 bytes), so offsets stay intact.
+    fn leb128(mut v: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        loop {
+            let b = (v & 0x7f) as u8;
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                return out;
+            }
+            out.push(b | 0x80);
+        }
+    }
+
+    fn with_branch(pczt: &[u8], from: u32, to: u32) -> Vec<u8> {
+        let (needle, repl) = (leb128(from), leb128(to));
+        let at = pczt
+            .windows(needle.len())
+            .position(|w| w == needle.as_slice())
+            .expect("branch id present");
+        let mut out = pczt.to_vec();
+        out[at..at + repl.len()].copy_from_slice(&repl);
+        assert_eq!(
+            *Pczt::parse(&out).unwrap().global().consensus_branch_id(),
+            to
+        );
+        out
+    }
+
+    #[test]
+    fn unknown_branch_is_refused_before_display() {
+        use super::zcash_consensus_gate::BRANCH_NU6_3;
+        let (pczt, _, _, _) = build_v6_migration();
+        let bad = with_branch(&pczt, BRANCH_NU6_3, 0xdead_beef);
+        let e = format!("{:?}", inspect_zcash_pczt(bad).expect_err("refused"));
+        assert!(
+            e.contains("Unsupported consensus branch 0xdeadbeef"),
+            "{}",
+            e
+        );
+    }
+
+    #[test]
+    fn nu7_is_refused_while_the_build_cannot_verify_it() {
+        use super::zcash_consensus_gate::{BRANCH_NU6_3, BRANCH_NU7};
+        use std::convert::TryFrom;
+        if zcash_protocol::consensus::BranchId::try_from(BRANCH_NU7).is_ok() {
+            eprintln!("SKIP: this build verifies NU7");
+            return;
+        }
+        let (pczt, _, _, _) = build_v6_migration();
+        let nu7 = with_branch(&pczt, BRANCH_NU6_3, BRANCH_NU7);
+        let e = format!("{:?}", inspect_zcash_pczt(nu7).expect_err("refused"));
+        assert!(e.contains("cannot verify NU7"), "{}", e);
     }
 }
