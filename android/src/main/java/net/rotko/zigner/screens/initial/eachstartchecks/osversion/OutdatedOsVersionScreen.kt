@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import net.rotko.zigner.R
 import net.rotko.zigner.components.base.PrimaryButtonWide
 import net.rotko.zigner.domain.Callback
+import net.rotko.zigner.domain.security.SecurityPatch
 import net.rotko.zigner.ui.theme.SignerNewTheme
 import net.rotko.zigner.ui.theme.SignerTypeface
 import net.rotko.zigner.ui.theme.pink500
@@ -33,7 +34,7 @@ import net.rotko.zigner.ui.theme.textTertiary
 
 @Composable
 fun OutdatedOsVersionScreen(
-	exposedVulnarabilities: List<KnownOSIssue>,
+	status: SecurityPatch.Status.Stale,
 	onProceed: Callback
 ) {
 	Column(
@@ -58,7 +59,7 @@ fun OutdatedOsVersionScreen(
 			Text(
 				modifier = Modifier
 					.fillMaxWidth(1f),
-				text = stringResource(R.string.initial_screen_outdated_os_title),
+				text = stringResource(R.string.initial_screen_outdated_os_title, status.monthsBehind),
 				color = MaterialTheme.colors.primary,
 				style = SignerTypeface.TitleL,
 				textAlign = TextAlign.Center,
@@ -69,18 +70,25 @@ fun OutdatedOsVersionScreen(
 					.fillMaxWidth(1f),
 				text = stringResource(
 					R.string.initial_screen_outdated_os_description,
-					exposedVulnarabilities.joinToString(", ") { it.toString() }
+					status.raw,
 				),
 				color = MaterialTheme.colors.textTertiary,
 				style = SignerTypeface.BodyL,
 				textAlign = TextAlign.Center,
 			)
-			Spacer(modifier = Modifier.padding(top = 24.dp))
-
+			Spacer(modifier = Modifier.padding(top = 16.dp))
+			Text(
+				modifier = Modifier
+					.fillMaxWidth(1f),
+				text = stringResource(R.string.initial_screen_outdated_os_clock_note),
+				color = MaterialTheme.colors.textTertiary,
+				style = SignerTypeface.CaptionM,
+				textAlign = TextAlign.Center,
+			)
 			Spacer(modifier = Modifier.padding(top = 8.dp))
 			PrimaryButtonWide(
 				modifier = Modifier.padding(vertical = 24.dp),
-				label = stringResource(R.string.onboarding_skip),
+				label = stringResource(R.string.initial_screen_outdated_os_proceed),
 				onClicked = onProceed,
 			)
 		}
@@ -102,7 +110,11 @@ private fun WrongOsVersionNotificationScreenPreview() {
 	Box(modifier = Modifier.fillMaxSize()) {
 		SignerNewTheme() {
 			OutdatedOsVersionScreen(
-				listOf(KnownOSIssue.CVE_2022_20465),
+				SecurityPatch.Status.Stale(
+					raw = "2025-11-05",
+					patch = SecurityPatch.PatchMonth(2025, 11),
+					monthsBehind = 11,
+				),
 				onProceed = {},
 			)
 		}

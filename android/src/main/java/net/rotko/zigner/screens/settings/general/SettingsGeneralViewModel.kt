@@ -11,6 +11,7 @@ import net.rotko.zigner.domain.AuthResult
 import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.backend.OperationResult
+import net.rotko.zigner.domain.security.KeyStorageLevel
 import net.rotko.zigner.domain.security.MemoryProtection
 import net.rotko.zigner.domain.usecases.ResetUseCase
 import net.rotko.zigner.screens.error.ErrorStateDestinationState
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 
 class SettingsGeneralViewModel: ViewModel() {
@@ -28,30 +30,16 @@ class SettingsGeneralViewModel: ViewModel() {
 	private val activity: FragmentActivity
 		get() = ServiceLocator.activityScope!!.activity
 
-	val isStrongBoxProtected: Boolean = ServiceLocator.seedStorage.isStrongBoxProtected
-
 	/**
-	 * Get human-readable security summary for settings display.
-	 * Shows what hardware features are available, not warnings.
+	 * Security summary for settings: only what was read back from the
+	 * keystore and the kernel, never what was requested or assumed.
+	 * See KeyStorageLevel and MemoryProtection.
 	 */
 	fun getSecuritySummary(context: Context): String {
-		val parts = mutableListOf<String>()
-
-		// Key storage
-		if (isStrongBoxProtected) {
-			parts.add("StrongBox")
-		} else {
-			parts.add("TEE")
-		}
-
-		// MTE
-		val mteStatus = MemoryProtection.getMteStatus()
-		if (mteStatus.mode != MemoryProtection.MteMode.OFF &&
-			mteStatus.mode != MemoryProtection.MteMode.UNKNOWN) {
-			parts.add("MTE")
-		}
-
-		return parts.joinToString(" + ")
+		return listOf(
+			KeyStorageLevel.describe(KeyStorageLevel.of()),
+			MemoryProtection.describe(MemoryProtection.getMteStatus()),
+		).joinToString(" · ").also { Timber.d("security summary: $it") }
 	}
 
 	fun getAppVersion(context: Context): String {

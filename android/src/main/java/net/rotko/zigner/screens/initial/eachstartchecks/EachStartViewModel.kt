@@ -5,7 +5,8 @@ import androidx.lifecycle.ViewModel
 import net.rotko.zigner.dependencygraph.ServiceLocator
 import net.rotko.zigner.domain.Authentication
 import net.rotko.zigner.domain.NetworkState
-import net.rotko.zigner.domain.RootUtils
+import net.rotko.zigner.domain.security.DeviceIntegrity
+import net.rotko.zigner.domain.security.SecurityPatch
 import kotlinx.coroutines.flow.StateFlow
 
 
@@ -18,9 +19,10 @@ class EachStartViewModel : ViewModel() {
 
 	fun isAuthPossible(context: Context): Boolean = Authentication.canAuthenticate(context)
 
-	fun isDeviceRooted(): Boolean {
-		return RootUtils.isDeviceRooted()
-	}
+	fun deviceIntegrity(): DeviceIntegrity.Report = DeviceIntegrity.current()
+
+	/** Non-null when the patch-age warning should be shown. */
+	fun stalePatch(): SecurityPatch.Status.Stale? = SecurityPatch.current() as? SecurityPatch.Status.Stale
 
 	val networkState: StateFlow<NetworkState> = networkExposedStateKeeper.airGapModeState
 

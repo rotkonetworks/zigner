@@ -34,8 +34,6 @@ class SeedStorage {
 	private val _lastKnownSeedNames = MutableStateFlow(arrayOf<String>())
 	val lastKnownSeedNames: StateFlow<Array<String>> =
 		_lastKnownSeedNames.asStateFlow()
-	val isStrongBoxProtected: Boolean
-		get() = masterKey.isStrongBoxBacked
 
 
 	private lateinit var masterKey: MasterKey

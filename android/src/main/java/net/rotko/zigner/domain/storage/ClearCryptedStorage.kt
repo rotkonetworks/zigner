@@ -30,8 +30,14 @@ class ClearCryptedStorage {
 
 		Timber.d(TAG, "strongbox available: $hasStrongbox")
 
-		// Init crypto for seeds:
-		// https://developer.android.com/training/articles/keystore
+		// NOTE: this builds the DEFAULT MasterKey alias, the same one SeedStorage
+		// uses, and MasterKeys.getOrCreate reuses an existing key and ignores
+		// the spec passed here. SeedStorage.init runs first (ResetUseCase), so
+		// this key requires user authentication despite
+		// setUserAuthenticationRequired(false) below - the class doc's "doesn't
+		// require authentication" does not hold. Reversing the init order on a
+		// fresh install would make the SEED key not require authentication.
+		// Separating them needs a distinct alias plus a data migration.
 		val masterKey = if (hasStrongbox) {
 			MasterKey.Builder(appContext)
 				.setKeyScheme(MasterKey.KeyScheme.AES256_GCM)

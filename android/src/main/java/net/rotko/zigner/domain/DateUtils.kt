@@ -19,20 +19,6 @@ object DateUtils {
 			null
 		}
 	}
-
-	fun parseAndroidPatchDate(version: String): Calendar? {
-		//last 2 numbers is not day but actually 2 types of patches. But we will check only months
-		//and year is YYYY not yyyy yet since we don't check day, it should be fine. YYYY have minsdk 24
-		val sdf = SimpleDateFormat("yyyy-MM-DD", Locale.ENGLISH)
-		val calendar = Calendar.getInstance()
-		return try {
-			calendar.time = sdf.parse(version) ?: throw ParseException("NUll date in return", -1)
-			calendar
-		} catch (e: ParseException) {
-			submitErrorState("Wrong android patch version format?? $e")
-			null
-		}
-	}
 }
 
 fun Calendar.toLogDateString(): String {

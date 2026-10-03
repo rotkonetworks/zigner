@@ -13,8 +13,18 @@
 	</queries>
 
 
+	<!--
+		memtagMode="sync": on hardware with MTE enabled (Tensor G3+ on
+		GrapheneOS, or stock with the developer option on), a heap memory-safety
+		bug in any native code in this process - the Rust signer, JNA, ML Kit -
+		faults at the offending instruction instead of being exploitable. For a
+		process that holds decrypted seeds while signing, a crash is the right
+		outcome. Ignored on devices without MTE and before Android 12.
+		MemoryProtection reads back whether it actually took effect.
+	-->
 	<application
 		android:allowBackup="false"
+		android:memtagMode="sync"
 		android:name="net.rotko.zigner.PolkadotVaultApp"
 		android:icon="@mipmap/ic_launcher"
 		android:label="@string/app_name"

@@ -294,7 +294,7 @@ private fun PreviewSettingsScreen() {
 			onExposedClicked = {},
 			onLightThemeToggle = {},
 			isLightThemeEnabled = false,
-			securitySummary = "StrongBox + MTE",
+			securitySummary = "StrongBox · MTE on (synchronous)",
 			appVersion = "0.6.1",
 			networkState = state,
 		)

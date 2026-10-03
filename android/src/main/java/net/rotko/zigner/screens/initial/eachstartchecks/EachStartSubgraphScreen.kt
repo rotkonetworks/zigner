@@ -25,7 +25,8 @@ import net.rotko.zigner.domain.Callback
 import net.rotko.zigner.domain.NetworkState
 import net.rotko.zigner.domain.isDbCreatedAndOnboardingPassed
 import net.rotko.zigner.screens.initial.eachstartchecks.airgap.AirgapScreen
-import net.rotko.zigner.screens.initial.eachstartchecks.rootcheck.RootExposedScreen
+import net.rotko.zigner.screens.initial.eachstartchecks.osversion.OutdatedOsVersionScreen
+import net.rotko.zigner.screens.initial.eachstartchecks.rootcheck.DeviceIntegrityScreen
 import net.rotko.zigner.screens.initial.eachstartchecks.screenlock.SetScreenLockScreen
 import net.rotko.zigner.screens.settings.general.ConfirmOnlineModeBottomSheet
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
@@ -43,16 +44,35 @@ fun NavGraphBuilder.enableEachStartAppFlow(globalNavController: NavHostControlle
 			}
 		}
 
+		val integrity = remember { viewModel.deviceIntegrity() }
+
+		// The checks after the integrity notice; null means none apply.
+		fun stepAfterIntegrity(): EachStartSubgraphScreenSteps? =
+			if (!viewModel.isAuthPossible(context)) {
+				EachStartSubgraphScreenSteps.SET_SCREEN_LOCK_BLOCKER
+			} else if (viewModel.networkState.value == NetworkState.Active || !context.isDbCreatedAndOnboardingPassed()) {
+				EachStartSubgraphScreenSteps.AIR_GAP
+			} else {
+				null
+			}
+
+		// Checked every start, not only at install: patch age grows monthly,
+		// so a phone current at install can be a year behind later.
+		val stalePatch = remember { viewModel.stalePatch() }
+
+		fun stepAfterPatch(): EachStartSubgraphScreenSteps? =
+			if (integrity.needsAttention) {
+				EachStartSubgraphScreenSteps.DEVICE_INTEGRITY
+			} else {
+				stepAfterIntegrity()
+			}
+
 		val state = remember {
 			mutableStateOf(
-				if (viewModel.isDeviceRooted()) {
-					EachStartSubgraphScreenSteps.ROOT_EXPOSED
-				} else if (!viewModel.isAuthPossible(context)) {
-					EachStartSubgraphScreenSteps.SET_SCREEN_LOCK_BLOCKER
-				} else if (viewModel.networkState.value == NetworkState.Active || !context.isDbCreatedAndOnboardingPassed()){
-					EachStartSubgraphScreenSteps.AIR_GAP
+				if (stalePatch != null) {
+					EachStartSubgraphScreenSteps.STALE_PATCH
 				} else {
-					goToNextFlow()
+					stepAfterPatch() ?: goToNextFlow()
 				}
 			)
 		}
@@ -63,8 +83,21 @@ fun NavGraphBuilder.enableEachStartAppFlow(globalNavController: NavHostControlle
 				.statusBarsPadding()
 		) {
 			when (state.value) {
-				EachStartSubgraphScreenSteps.ROOT_EXPOSED -> {
-					RootExposedScreen()
+				EachStartSubgraphScreenSteps.STALE_PATCH -> {
+					OutdatedOsVersionScreen(
+						status = stalePatch!!,
+						onProceed = {
+							state.value = stepAfterPatch() ?: goToNextFlow()
+						},
+					)
+				}
+				EachStartSubgraphScreenSteps.DEVICE_INTEGRITY -> {
+					DeviceIntegrityScreen(
+						report = integrity,
+						onProceed = {
+							state.value = stepAfterIntegrity() ?: goToNextFlow()
+						},
+					)
 				}
 				EachStartSubgraphScreenSteps.SET_SCREEN_LOCK_BLOCKER -> {
 					//first show enable screen lock if needed
@@ -121,4 +154,4 @@ fun NavGraphBuilder.enableEachStartAppFlow(globalNavController: NavHostControlle
 	}
 }
 
-private enum class EachStartSubgraphScreenSteps { ROOT_EXPOSED, AIR_GAP, SET_SCREEN_LOCK_BLOCKER }
+private enum class EachStartSubgraphScreenSteps { STALE_PATCH, DEVICE_INTEGRITY, AIR_GAP, SET_SCREEN_LOCK_BLOCKER }

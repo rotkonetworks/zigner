@@ -103,7 +103,9 @@ class ResetUseCase {
 		onStatusUpdate: ((String) -> Unit)? = null
 	): OperationResult<Unit, ErrorStateDestinationState> {
 		if (!seedStorage.isInitialized()) {
-			onStatusUpdate?.invoke("Initializing secure keystore (TEE)...")
+			// Order is load-bearing: both storages share one MasterKey alias and
+			// the first to create it fixes its auth requirement. See ClearCryptedStorage.
+			onStatusUpdate?.invoke("Initializing secure keystore...")
 			val result = seedStorage.init(appContext)
 			if (result is OperationResult.Err) {
 				return result
