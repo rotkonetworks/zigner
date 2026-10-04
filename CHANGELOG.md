@@ -2,6 +2,94 @@
 
 All notable changes to zigner are documented in this file.
 
+## 0.12.0 - unreleased
+
+Minor. NU7-ready signing on the zakura stack, a reproducible protocol
+module, and device-security screens that only state what they measured.
+`BAKED_MODULE_VERSION` 2 → 3.
+
+### Zcash
+
+- **NU7 (ZIP 259, branch `0x77190ad9`)** on the protocol-module path
+  (`ur:zigner-module`), built on the zakura crate family (`zakura-pczt`
+  0.1.0-rc4, `zakura-*` 2.2.0) - the same stack zcli, zafu and vizor build
+  with. Testnets accept NU7 now; **mainnet NU7 stays refused until its
+  activation height is set** (scheduled 2026-10-20) - activation is by block
+  height, never by date.
+- **Fail-closed PCZT review.** Both signer paths refuse, before anything is
+  displayed, any PCZT they cannot verify: unknown consensus branch, tx
+  format other than v5/v6, V6 on a pre-NU6.3 branch, any Sapling component.
+  An unrecognised branch used to render outputs and amounts nobody had
+  checked.
+- The native `ur:zcash-pczt` path now refuses **transparent outputs**: its
+  review screen cannot show them, so a payment to a t-address was hidden
+  behind a "change + fee" display. It also refuses NU7 ("update Zigner").
+- **FROST:** Approve & Sign is offered only when the device verified the
+  request's sighash itself. A missing PCZT, a missing viewing key or a
+  verifier error now blocks signing instead of showing the coordinator's
+  claim with the button enabled.
+- Verified balances state "as of block N", and the anchor can be shown as
+  that block's own header date - chain time, not this device's clock.
+
+### Scope
+
+- **Polkadot/Substrate removed from the Android app.** Zigner is a Zcash
+  and Penumbra signer; the Substrate key, network and metadata screens are
+  gone (181 files, ~6.3k lines), along with 47 unused strings and 13 unused
+  images. The Substrate parsers in the shared Rust core remain for now (the
+  iOS app still uses them).
+
+### Security & honesty
+
+- **Screenshots are blocked on every screen that shows a secret**, through
+  one reference-counted mechanism; two competing ones could leave a freshly
+  generated recovery phrase unprotected. Includes the hot-wallet mnemonic QR.
+- Factory reset now says exactly what is erased and what recovery depends
+  on, instead of "Reset the Vault app".
+
+- The root check (`su` paths - invisible to Magisk, so a pass meant
+  nothing) is replaced by a device-integrity notice: verified-boot state,
+  bootloader lock, test-keys and concrete root findings, labelled as
+  self-reported by the OS. A locked GrapheneOS phone (yellow boot) is not
+  flagged. The notice informs; it no longer locks you out.
+- The single-CVE OS check is replaced by **security-patch age**, checked on
+  every start. Fixes a patch-date parser that read "2022-11-05" as January.
+- **MTE (memory tagging) enabled** (`memtagMode="sync"`) on supporting
+  hardware. MTE status is now read from the kernel; it previously read a
+  `/proc` field that does not exist and assumed "on" on error.
+- Settings reports where the seed key actually lives (StrongBox / TEE /
+  software), read back from the keystore - not what was requested.
+
+### Build
+
+- `module0.wasm` is now **reproducible**: built in a digest-pinned
+  container with pinned rustc and clang, and CI plus tag releases refuse an
+  asset that is not a build of the published source
+  (`scripts/verify-baked-module.sh`).
+
+### Fixes
+
+- Seed-phrase backspace no longer freezes after one delete during recovery.
+- The 512px store icon was still Parity's logo (and so was the F-Droid repo
+  icon); replaced with the Zafu Zigner mark.
+
+## 0.11.3 - 2026-08-19
+
+### Fixes
+
+- Zcash (`m/32'/133'/0'`) and Penumbra (`m/44'/6532'/0'`) derivation paths
+  were rejected as invalid - they were checked against the Substrate path
+  grammar. This also fixes "can't have both Penumbra and Zcash on one key
+  set".
+
+### Changes
+
+- Banana Split export pages one shard QR at a time (Shard i of N) instead of
+  animating every shard into one stream - each shard is a separate secret.
+- Signing asks for the PIN once, not twice.
+- Removed "Export to New Device" (a metadata-only QR that confused users);
+  Banana Split is the backup and transfer path.
+
 ## 0.11.2 - 2026-08-17
 
 Patch. Makes the release-key QR scannable on poor cameras.
