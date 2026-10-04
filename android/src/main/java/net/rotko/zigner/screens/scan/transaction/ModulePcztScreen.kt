@@ -197,6 +197,7 @@ fun ModulePcztScreen(
 										// (same bound as the signed-PCZT UR path).
 										moduleResponseToUr(
 											response.map { it.toUByte() },
+											ProtocolModule.activeVersion(context),
 											200u,
 										)
 									}

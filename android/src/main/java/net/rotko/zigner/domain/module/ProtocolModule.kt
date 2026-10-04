@@ -2,6 +2,7 @@ package net.rotko.zigner.domain.module
 
 import android.content.Context
 import io.parity.signer.uniffi.ModulePcztSummary
+import io.parity.signer.uniffi.bakedModuleVersion
 import io.parity.signer.uniffi.moduleSignRequest
 import io.parity.signer.uniffi.moduleSummarizeRequest
 
@@ -17,12 +18,24 @@ object ProtocolModule {
 	private const val MODULE0_ASSET = "modules/module0.wasm"
 
 	@Volatile
-	private var cached: ByteArray? = null
+	private var cached: ModuleSlotStore.LoadedModule? = null
 
-	fun loadActive(context: Context): ByteArray =
+	private fun loaded(context: Context): ModuleSlotStore.LoadedModule =
 		cached ?: (ModuleSlotStore.loadActiveVerified(context)
-			?: context.assets.open(MODULE0_ASSET).use { it.readBytes() })
+			?: ModuleSlotStore.LoadedModule(
+				context.assets.open(MODULE0_ASSET).use { it.readBytes() },
+				bakedModuleVersion(),
+			))
 			.also { cached = it }
+
+	fun loadActive(context: Context): ByteArray = loaded(context).wasm
+
+	/**
+	 * Version of the module [loadActive] returns: the verified slot's manifest
+	 * version, or BAKED_MODULE_VERSION for the asset. Reported to wallets in
+	 * every sign response (see module_response_to_ur).
+	 */
+	fun activeVersion(context: Context): UInt = loaded(context).version
 
 	/** Drop the cache after slot activation/revert. */
 	fun invalidate() {

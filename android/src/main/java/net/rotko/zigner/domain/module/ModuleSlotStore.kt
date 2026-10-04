@@ -189,7 +189,10 @@ object ModuleSlotStore {
 		return if (state.active != null) maxOf(state.activeVersion, baked) else baked
 	}
 
-	fun loadActiveVerified(context: Context): ByteArray? {
+	/** A verified module and the version its signed manifest declares. */
+	class LoadedModule(val wasm: ByteArray, val version: UInt)
+
+	fun loadActiveVerified(context: Context): LoadedModule? {
 		val state = readState(context)
 		val active = state.active ?: return null
 		// The APK wins when it is newer. filesDir survives APK updates, so a
@@ -222,7 +225,7 @@ object ModuleSlotStore {
 			revertToAsset(context, state)
 			return null
 		}
-		return info.wasm.toByteArray()
+		return LoadedModule(info.wasm.toByteArray(), info.moduleVersion)
 	}
 
 	private fun revertToAsset(context: Context, state: State) {
