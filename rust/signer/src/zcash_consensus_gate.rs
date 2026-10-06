@@ -4,8 +4,8 @@
 //! workspaces, so the rules are restated here rather than shared - keep them
 //! in step. See that module for the reasoning; in short: refuse, before any
 //! summary reaches the screen, every PCZT this build cannot verify and fully
-//! display, and keep NU7 off on mainnet until its activation BLOCK HEIGHT is
-//! compiled in.
+//! display. Activation needs no height table: the branch id in the PCZT is
+//! chosen by the online wallet and enforced by the network (see that module).
 //!
 //! One rule is stricter here: this path has no display for transparent
 //! outputs, so it refuses them. A transparent output's value is covered by the
@@ -22,10 +22,6 @@ pub const BRANCH_NU6_1: u32 = 0x4dec_4df0;
 pub const BRANCH_NU6_2: u32 = 0x5437_f330;
 pub const BRANCH_NU6_3: u32 = 0x37a5_165b;
 pub const BRANCH_NU7: u32 = 0x7719_0ad9;
-
-/// Mainnet NU7 activation height; `None` until set (scheduled 2026-10-20).
-/// Must match `pczt_signing::consensus_gate::MAINNET_NU7_ACTIVATION`.
-pub const MAINNET_NU7_ACTIVATION: Option<u32> = None;
 
 const V5_TX_VERSION: u32 = 5;
 const V5_VERSION_GROUP_ID: u32 = 0x26A7_270A;
@@ -93,45 +89,4 @@ pub fn check_supported(pczt: &Pczt) -> Result<(), ErrorDisplayed> {
     }
 
     Ok(())
-}
-
-pub fn check_activation(pczt: &Pczt, mainnet: bool) -> Result<(), ErrorDisplayed> {
-    if !mainnet {
-        return Ok(());
-    }
-    let g = pczt.global();
-    if *g.consensus_branch_id() == BRANCH_NU7 {
-        let Some(activation) = MAINNET_NU7_ACTIVATION else {
-            return Err(refuse(
-                "NU7 is not active on mainnet in this Zigner build - refusing to sign",
-            ));
-        };
-        let expiry = *g.expiry_height();
-        if expiry != 0 && expiry < activation {
-            return Err(refuse(format!(
-                "NU7 transaction expires at height {expiry}, before NU7 activates at \
-                 {activation} - it can never be mined; refusing to sign"
-            )));
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    /// The module path (`rust/pczt_signing`, a separate workspace) carries the
-    /// same activation constant. Filling in only one of them on activation
-    /// day would make the two signers disagree about NU7 on mainnet.
-    #[test]
-    fn mainnet_nu7_activation_matches_the_module_path() {
-        let module = include_str!("../../pczt_signing/src/consensus_gate.rs");
-        let line = |src: &str| {
-            src.lines()
-                .find(|l| l.starts_with("pub const MAINNET_NU7_ACTIVATION"))
-                .map(str::trim)
-                .map(String::from)
-                .expect("constant present")
-        };
-        assert_eq!(line(module), line(include_str!("zcash_consensus_gate.rs")));
-    }
 }

@@ -10,15 +10,17 @@
 //! up - rendered recipients and amounts nobody had checked. Refusing loudly is
 //! the only correct direction for a cold signer.
 //!
-//! Network upgrades activate by BLOCK HEIGHT, never by date: the device clock
-//! on an offline phone cannot be trusted (see the Android SecurityPatch notes).
-//! For mainnet, a branch is only accepted once its activation height is known
-//! to this build; filling in [`MAINNET_NU7_ACTIVATION`] is the switch that
-//! turns NU7 on. Testnets are deliberately NOT height-checked: there are
-//! several (public Testnet, Valar's NU7 staging chains) with different
-//! activation tables, and their coins carry no value - their own consensus
-//! rules reject a wrong branch.
-
+//! Activation needs no height table here. The device is offline and never
+//! learns the chain height, and there is no OTA path to deliver one. It does
+//! not need it: every PCZT carries its consensus branch id, the online wallet
+//! picks that branch from the current chain height, and the network rejects a
+//! transaction whose branch is wrong for the block it would be mined in. So
+//! signing an NU7 transaction before activation, or an NU6.3 one after it,
+//! yields a transaction that can never be mined - it cannot move funds. What
+//! this device must guarantee is narrower: that it can VERIFY the branch it is
+//! shown, and that the screen tells the truth about it. NU7 therefore works on
+//! every network from its activation block, with no Zigner release needed.
+//!
 use pczt::Pczt;
 use zcash_protocol::constants::{V6_TX_VERSION, V6_VERSION_GROUP_ID};
 
@@ -37,10 +39,6 @@ pub const BRANCH_NU6_2: u32 = 0x5437_f330;
 pub const BRANCH_NU6_3: u32 = 0x37a5_165b;
 /// NU7 (ZIP 259). Zebra `network_upgrade.rs` and librustzcash main agree.
 pub const BRANCH_NU7: u32 = 0x7719_0ad9;
-
-/// Mainnet NU7 activation height. `None` until the height is set (scheduled
-/// for 2026-10-20); while `None`, mainnet NU7 PCZTs are refused at signing.
-pub const MAINNET_NU7_ACTIVATION: Option<u32> = None;
 
 const V5_TX_VERSION: u32 = 5;
 const V5_VERSION_GROUP_ID: u32 = 0x26A7_270A;
@@ -102,30 +100,5 @@ pub fn check_supported(pczt: &Pczt) -> Result<(), Error> {
         ));
     }
 
-    Ok(())
-}
-
-/// Network-specific activation rules, applied at signing where the network
-/// is known. See the module doc for why testnets are not height-checked.
-pub fn check_activation(pczt: &Pczt, mainnet: bool) -> Result<(), Error> {
-    if !mainnet {
-        return Ok(());
-    }
-    let g = pczt.global();
-    if *g.consensus_branch_id() == BRANCH_NU7 {
-        let Some(activation) = MAINNET_NU7_ACTIVATION else {
-            return Err(Error::Parse(
-                "NU7 is not active on mainnet in this Zigner build - refusing to sign".into(),
-            ));
-        };
-        let expiry = *g.expiry_height();
-        // expiry 0 = no expiry; the network enforces the branch then.
-        if expiry != 0 && expiry < activation {
-            return Err(Error::Parse(format!(
-                "NU7 transaction expires at height {expiry}, before NU7 activates at \
-                 {activation} - it can never be mined; refusing to sign"
-            )));
-        }
-    }
     Ok(())
 }

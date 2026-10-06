@@ -2348,11 +2348,6 @@ fn inspect_zcash_pczt(pczt_bytes: Vec<u8>) -> Result<ZcashPcztInspection, ErrorD
         }
     };
 
-    // Activation by block height (mainnet only). The network comes from the
-    // synced anchor and defaults to mainnet with no notes, so an unsynced
-    // device applies the stricter rule.
-    zcash_consensus_gate::check_activation(&pczt, is_mainnet)?;
-
     // Extract spend details. Known nullifiers get their value from our
     // verified store; unknown ones report 0 here (the pczt crate's Spend
     // doesn't expose per-spend value). The UI tells dummies from real

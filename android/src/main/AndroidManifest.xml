@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:tools="http://schemas.android.com/tools">
 
 	<uses-feature android:name="android.hardware.camera.any" />
 	<uses-permission android:name="android.permission.CAMERA" />
 	<uses-permission android:name="android.permission.FLASHLIGHT"/>
 	<uses-permission android:name="android.permission.BLUETOOTH" />
 	<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+	<!--
+		Network access, stripped from the MERGED manifest. Zigner's own code
+		requests none of this; ML Kit (barcode-scanning) pulls it in through
+		Google's datatransport (Firebase logging), which queues usage events and
+		uploads them whenever a network is up. A cold signer must not be able to
+		reach the network at all. The bundled barcode model needs none of it.
+		Stopgap until ML Kit is replaced with zxing-cpp (issue #25); a future
+		ML Kit release can add components, so re-check the merged manifest
+		(aapt2 dump permissions) when bumping it.
+	-->
+	<uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
 	<queries>
 		<package android:name="android.settings.SECURITY_SETTINGS" />
@@ -42,5 +56,21 @@
 			</intent-filter>
 		</activity>
 		<property android:name="REQUIRE_SECURE_ENV" android:value="1" />
+
+		<!-- datatransport upload pipeline + GMS resolution UI (see the note at
+			the permissions above). MlKitComponentDiscoveryService and
+			MlKitInitProvider stay: the scanner itself needs them to load. -->
+		<service
+			android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+			tools:node="remove" />
+		<service
+			android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+			tools:node="remove" />
+		<receiver
+			android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+			tools:node="remove" />
+		<activity
+			android:name="com.google.android.gms.common.api.GoogleApiActivity"
+			tools:node="remove" />
 	</application>
 </manifest>

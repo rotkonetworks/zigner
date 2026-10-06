@@ -606,7 +606,6 @@ fn sign_redacted_pczt_inner(
     // Refuse to sign anything we would have refused to display. `sign_request`
     // does not re-run `summarize`, so this must be checked here too.
     consensus_gate::check_supported(&pczt)?;
-    consensus_gate::check_activation(&pczt, mainnet)?;
     verify_displayed_summary(&pczt)?;
     reject_duplicate_rks(&pczt)?;
 
