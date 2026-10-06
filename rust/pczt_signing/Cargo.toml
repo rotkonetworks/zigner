@@ -29,6 +29,8 @@ zcash_primitives = { package = "zakura-primitives", version = "=2.2.0", default-
 orchard = { package = "zakura-orchard", version = "=2.2.0", default-features = false }
 zcash_transparent = { package = "zakura-transparent", version = "=2.2.0", default-features = false, features = ["transparent-inputs"] }
 zip32 = { version = "0.2", default-features = false }
+# the secp the zakura-transparent 2.2 keys are typed in
+secp256k1 = { version = "0.29", default-features = false, features = ["alloc"] }
 bip39 = "2"
 sha2 = { version = "0.10", default-features = false }
 # Host entropy for the hedged nonce seed is read through getrandom 0.2 (the
@@ -49,7 +51,6 @@ hex = "0.4"
 pczt = { package = "zakura-pczt", version = "=0.1.0-rc4", default-features = false, features = ["orchard", "transparent", "signer", "io-finalizer", "zcp-builder", "prover", "tx-extractor", "spend-finalizer"] }
 zcash_protocol = { package = "zakura-protocol", version = "=2.2.0", default-features = false, features = ["local-consensus"] }
 orchard = { package = "zakura-orchard", version = "=2.2.0", default-features = false, features = ["circuit"] }
-secp256k1 = "0.33"
 rand_core = "0.10"
 # The kernel-side wasmi runtime, so the V6 round-trip test can drive the
 # bundled module wasm through the EXACT runtime the Android device uses

@@ -404,17 +404,25 @@ private fun ModulePcztSummaryCard(
 }
 
 // Lines arrive as "label=zatoshi" (label is "orchard:<raw-addr-hex>",
-// "t-script:<hex>" or "shielded"). Show the ZEC value prominently and the
-// label monospaced underneath for cross-checking against the coordinator.
+// "t-script:<hex>", "change:<hex>", "thorchain:<words>|<memo>",
+// "memo:<text>", "op-return:<hex>" or "shielded"). Show the ZEC value
+// prominently and the label monospaced underneath for cross-checking against
+// the coordinator. A memo carries no value: its words are what matter.
 @Composable
 private fun ModuleOutputLine(line: String) {
 	val eq = line.lastIndexOf('=')
 	val label = if (eq > 0) line.substring(0, eq) else line
 	val zats = if (eq > 0) line.substring(eq + 1).toLongOrNull() else null
+	val memo = memoOf(label)
+	if (memo != null) {
+		ModuleMemoLine(memo, zats)
+		return
+	}
 	// Ironwood destination lines ("ironwood:<hex>=<zat>") are the turnstile
 	// migration target - tag them so the user sees the pool they are moving
 	// to, not just an address+amount.
 	val isIronwood = label.startsWith("ironwood:")
+	val isChange = label.startsWith("change:")
 	Column(
 		modifier = Modifier
 			.fillMaxWidth()
@@ -427,6 +435,13 @@ private fun ModuleOutputLine(line: String) {
 				text = "-> Ironwood pool",
 				style = SignerTypeface.LabelM,
 				color = MaterialTheme.colors.pink500,
+			)
+		}
+		if (isChange) {
+			Text(
+				text = "Change, back to the address these coins came from",
+				style = SignerTypeface.LabelM,
+				color = MaterialTheme.colors.textTertiary,
 			)
 		}
 		Text(
@@ -444,5 +459,63 @@ private fun ModuleOutputLine(line: String) {
 				color = MaterialTheme.colors.textSecondary,
 			)
 		}
+	}
+}
+
+private class OutputMemo(val title: String, val words: String?, val raw: String)
+
+private fun memoOf(label: String): OutputMemo? = when {
+	label.startsWith("thorchain:") -> {
+		val body = label.removePrefix("thorchain:")
+		val bar = body.indexOf('|')
+		if (bar < 0) OutputMemo("Memo", null, body)
+		else OutputMemo("THORChain instruction", body.substring(0, bar), body.substring(bar + 1))
+	}
+	label.startsWith("memo:") -> OutputMemo("Memo", null, label.removePrefix("memo:"))
+	label.startsWith("op-return:") -> OutputMemo("Data, not readable as text", null, label.removePrefix("op-return:"))
+	else -> null
+}
+
+// The instruction a THORChain deposit carries decides where the money ends
+// up, so its words come first and the raw memo stays underneath to compare
+// with the wallet's screen.
+@Composable
+private fun ModuleMemoLine(memo: OutputMemo, zats: Long?) {
+	Column(
+		modifier = Modifier
+			.fillMaxWidth()
+			.clip(RoundedCornerShape(6.dp))
+			.background(MaterialTheme.colors.fill6)
+			.padding(8.dp),
+	) {
+		Text(
+			text = memo.title,
+			style = SignerTypeface.LabelM,
+			color = MaterialTheme.colors.pink500,
+		)
+		// value on a data output can never be spent again: say so loudly
+		if (zats == null || zats != 0L) {
+			Text(
+				text = zats?.let { "%.8f ZEC burned with this data".format(it / 100_000_000.0) }
+					?: "amount unreadable",
+				style = SignerTypeface.LabelM,
+				color = MaterialTheme.colors.red500,
+			)
+		}
+		if (memo.words != null) {
+			Text(
+				text = memo.words,
+				style = SignerTypeface.BodyM,
+				color = MaterialTheme.colors.primary,
+			)
+		}
+		Text(
+			text = memo.raw,
+			style = SignerTypeface.CaptionM.copy(
+				fontFamily = FontFamily.Monospace,
+				fontSize = 11.sp,
+			),
+			color = MaterialTheme.colors.textSecondary,
+		)
 	}
 }

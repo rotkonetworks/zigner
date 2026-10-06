@@ -26,6 +26,18 @@ module, and device-security screens that only state what they measured.
 - The native `ur:zcash-pczt` path now refuses **transparent outputs**: its
   review screen cannot show them, so a payment to a t-address was hidden
   behind a "change + fee" display. It also refuses NU7 ("update Zigner").
+- **THORChain deposits on the module path.** A transparent output's
+  OP_RETURN is shown as its memo, and a THORChain swap, add or withdraw is
+  spelled out in words beside the raw memo. Change back to the sending
+  address is labelled as such (it is also where a THORChain refund lands).
+  A data output that carries value is shown as burned.
+- The **fee of a transaction with transparent inputs** is shown instead of
+  "unknown": it comes from the inputs' own values, which the ZIP 244 sighash
+  this device signs commits to.
+- **Transparent keys are found by script**, across the external and internal
+  branches up to index 5,000, so a swap address past the first 20 signs. An
+  input no key of this account owns is now refused instead of returned
+  unsigned.
 - **FROST:** Approve & Sign is offered only when the device verified the
   request's sighash itself. A missing PCZT, a missing viewing key or a
   verifier error now blocks signing instead of showing the coordinator's
