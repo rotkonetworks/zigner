@@ -185,6 +185,12 @@ pub const KERNEL_VERSION: u32 = 1;
 /// manifest, so it carries no version of its own.
 pub const BAKED_MODULE_VERSION: u32 = 3;
 
+/// Version of the kernel <-> module host interface (the `zigner_host`
+/// imports and the exported module ABI). Reported to wallets alongside the
+/// module versions so they can tell which signing capabilities the device
+/// has. Bump when the host imports change (e.g. kernel-side signing).
+pub const HOST_ABI_VERSION: u32 = 1;
+
 /// The 2-of-3 release verifying keys, baked at build time per the update
 /// architecture. PLACEHOLDER (all-zero) until the offline key ceremony -
 /// `release_keys()` returns None for placeholders, so the kernel FAILS

@@ -659,7 +659,7 @@ namespace signer {
     // Frame a module sign-response envelope as UR strings for animated QR
     // display (ur:zigner-module). max_fragment_len: 0 = single QR.
     [Throws=ErrorDisplayed]
-    sequence<string> module_response_to_ur([ByRef] sequence<u8> response, u32 max_fragment_len);
+    sequence<string> module_response_to_ur([ByRef] sequence<u8> response, u32 active_module_version, u32 max_fragment_len);
 
     // Fountain-decode ur:zigner-module REQUEST frames to the raw prelude
     // envelope bytes ([0x53][crypto][tx_type] || payload). No CBOR unwrap:

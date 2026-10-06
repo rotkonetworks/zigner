@@ -5026,16 +5026,61 @@ fn decode_ur_module_request(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDispl
         })
 }
 
+/// CBOR unsigned integer (major type 0), shortest form.
+fn cbor_uint(out: &mut Vec<u8>, v: u32) {
+    match v {
+        0..=0x17 => out.push(v as u8),
+        0x18..=0xff => out.extend_from_slice(&[0x18, v as u8]),
+        0x100..=0xffff => {
+            out.push(0x19);
+            out.extend_from_slice(&(v as u16).to_be_bytes());
+        }
+        _ => {
+            out.push(0x1a);
+            out.extend_from_slice(&v.to_be_bytes());
+        }
+    }
+}
+
+/// `{1: response, 2: {1: baked, 2: active, 3: host_abi}}`.
+///
+/// Key 2 is what the KERNEL knows about itself - the module cannot attest its
+/// own version, so these values come from the APK, never from module output.
+/// Wallets use them the way they use Keystone's firmware version: to tell the
+/// user to update the device before a request it cannot handle, rather than
+/// after they approved it. Wallets that predate key 2 reject map(2), so this
+/// format requires a wallet release that accepts it (zafu
+/// `unwrapSignerEnvelope`).
+fn encode_module_response_cbor(response: &[u8], active_module_version: u32) -> Vec<u8> {
+    let mut cbor = encode_pczt_to_cbor(response);
+    debug_assert_eq!(cbor[0], 0xa1);
+    cbor[0] = 0xa2; // map(2)
+    cbor_uint(&mut cbor, 2);
+    cbor.push(0xa3); // map(3)
+    cbor_uint(&mut cbor, 1);
+    cbor_uint(&mut cbor, module_host::BAKED_MODULE_VERSION);
+    cbor_uint(&mut cbor, 2);
+    cbor_uint(&mut cbor, active_module_version);
+    cbor_uint(&mut cbor, 3);
+    cbor_uint(&mut cbor, module_host::HOST_ABI_VERSION);
+    cbor
+}
+
 /// Frame a module sign-response envelope (prelude || digests || signed
-/// PCZTs) as UR strings for animated QR display. Same CBOR `{1: bytes}`
-/// wrap and fountain encoder as the signed-PCZT path, but under a distinct
-/// UR type so wallets never mistake the envelope for a bare PCZT.
+/// PCZTs) as UR strings for animated QR display, with the kernel's version
+/// facts (see [`encode_module_response_cbor`]). Same fountain encoder as the
+/// signed-PCZT path, but under a distinct UR type so wallets never mistake the
+/// envelope for a bare PCZT.
+///
+/// `active_module_version` is the version of the module that produced
+/// `response` (installed slot or baked asset), as the caller loaded it.
 pub fn module_response_to_ur(
     response: &[u8],
+    active_module_version: u32,
     max_fragment_len: u32,
 ) -> Result<Vec<String>, ErrorDisplayed> {
     const UR_TYPE: &str = "zigner-module";
-    let cbor_data = encode_pczt_to_cbor(response);
+    let cbor_data = encode_module_response_cbor(response, active_module_version);
 
     if max_fragment_len == 0 || cbor_data.len() <= max_fragment_len as usize {
         return Ok(vec![ur::ur::encode(&cbor_data, &ur::Type::Custom(UR_TYPE))]);
@@ -5059,7 +5104,19 @@ pub fn module_response_to_ur(
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
+
+    /// Byte layout pinned so zafu's `unwrapSignerEnvelope` test vectors stay
+    /// valid: {1: bytes, 2: {1: baked, 2: active, 3: abi}}.
+    #[test]
+    fn module_response_cbor_carries_kernel_info() {
+        let out = encode_module_response_cbor(&[9, 9], 256);
+        let mut expect = vec![0xa2, 0x01, 0x42, 9, 9, 0x02, 0xa3, 0x01];
+        cbor_uint(&mut expect, module_host::BAKED_MODULE_VERSION);
+        expect.extend_from_slice(&[0x02, 0x19, 0x01, 0x00, 0x03]);
+        cbor_uint(&mut expect, module_host::HOST_ABI_VERSION);
+        assert_eq!(out, expect);
+    }
 }
 
 /// PCZT money-path tests for the SHIPPED signer entry points
