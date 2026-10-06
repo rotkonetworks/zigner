@@ -10,7 +10,8 @@
 mod common;
 
 use common::{
-    build_redacted_nu7_migration, build_redacted_v5_send, build_redacted_v6_migration, MNEMONIC,
+    build_redacted_nu7_migration, build_redacted_nu7_migration_mainnet_keys,
+    build_redacted_v5_send, build_redacted_v6_migration, MNEMONIC,
 };
 use pczt_signing::consensus_gate::{self, BRANCH_NU6_3, BRANCH_NU7};
 
@@ -91,39 +92,6 @@ fn v6_on_a_pre_nu6_3_branch_is_refused() {
     assert!(e.contains("V6 transaction on pre-NU6.3 branch"), "{e}");
 }
 
-// Activation by block height, mainnet only: NU7 stays off until
-// MAINNET_NU7_ACTIVATION is set. Testnets (public + staging, with different
-// activation tables) are left to their own consensus.
-#[test]
-fn mainnet_nu7_waits_for_its_activation_height() {
-    let fx = build_redacted_v6_migration();
-    let nu7 = pczt::Pczt::parse(&with_branch(&fx.redacted_pczt, BRANCH_NU6_3, BRANCH_NU7)).unwrap();
-    let nu6_3 = pczt::Pczt::parse(&fx.redacted_pczt).unwrap();
-
-    assert!(consensus_gate::check_activation(&nu6_3, true).is_ok());
-    assert!(
-        consensus_gate::check_activation(&nu7, false).is_ok(),
-        "testnet not height-gated"
-    );
-    match consensus_gate::MAINNET_NU7_ACTIVATION {
-        None => {
-            let e = format!(
-                "{:?}",
-                consensus_gate::check_activation(&nu7, true).unwrap_err()
-            );
-            assert!(e.contains("not active on mainnet"), "{e}");
-        }
-        Some(h) => {
-            let expiry = *nu7.global().expiry_height();
-            let expect_ok = expiry == 0 || expiry >= h;
-            assert_eq!(
-                consensus_gate::check_activation(&nu7, true).is_ok(),
-                expect_ok
-            );
-        }
-    }
-}
-
 // The V5 control fixture still passes the gate: older verifiable branches are
 // the network's call, not ours.
 #[test]
@@ -153,17 +121,15 @@ fn genuine_nu7_pczt_summarizes_and_signs_on_testnet() {
         .expect("NU7 signs on testnet");
 }
 
-// Mainnet keeps NU7 off until MAINNET_NU7_ACTIVATION is compiled in.
+// No height gate: the branch id in the PCZT is the activation signal (chosen
+// by the online wallet, enforced by the network), so an offline device signs
+// NU7 on mainnet from the activation block with no update. This must stay true.
 #[test]
-fn genuine_nu7_pczt_is_refused_on_mainnet_until_activation() {
-    if consensus_gate::MAINNET_NU7_ACTIVATION.is_some() {
-        return;
-    }
-    let fx = build_redacted_nu7_migration();
-    let e = format!(
-        "{:?}",
-        pczt_signing::sign_redacted_pczt(&fx.redacted_pczt, MNEMONIC, 0, true)
-            .expect_err("refused on mainnet")
-    );
-    assert!(e.contains("not active on mainnet"), "{e}");
+fn genuine_nu7_pczt_signs_on_mainnet() {
+    let fx = build_redacted_nu7_migration_mainnet_keys();
+    pczt_signing::summarize(&fx.redacted_pczt).expect("mainnet NU7 summarizes");
+    let signed = pczt_signing::sign_redacted_pczt(&fx.redacted_pczt, MNEMONIC, 0, true)
+        .expect("mainnet NU7 signs - no activation-height gate");
+    let parsed = pczt::Pczt::parse(&signed).unwrap();
+    assert_eq!(*parsed.global().consensus_branch_id(), BRANCH_NU7);
 }

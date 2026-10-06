@@ -158,6 +158,30 @@ android.applicationVariants.all { variant ->
 	tasks.matching { it.name == "compile${variant.name.capitalize()}Kotlin" }.configureEach {
 		it.dependsOn(t)
 	}
+	// Air-gap guard: fail the build if the MERGED manifest can reach the
+	// network. Zigner requests no network access itself, but dependencies can
+	// add it (ML Kit pulls INTERNET + Google datatransport upload components;
+	// AndroidManifest.xml strips them with tools:node="remove", issue #25).
+	// This check is what stops a dependency bump from silently re-adding them.
+	tasks.matching { it.name == "process${variant.name.capitalize()}MainManifest" }.configureEach { task ->
+		task.doLast {
+			def forbidden = [
+				'"android.permission.INTERNET"',
+				'"android.permission.ACCESS_NETWORK_STATE"',
+				'"com.google.android.datatransport',
+				'"com.google.android.gms.common.api.GoogleApiActivity"',
+			]
+			task.outputs.files.asFileTree.matching { include '**/AndroidManifest.xml' }.each { f ->
+				def hits = forbidden.findAll { f.text.contains(it) }
+				if (!hits.isEmpty()) {
+					throw new GradleException(
+						"Merged manifest ${f} grants network access or telemetry: ${hits}. " +
+						"A cold signer must not reach the network - strip it in " +
+						"src/main/AndroidManifest.xml with tools:node=\"remove\" (see issue #25).")
+				}
+			}
+		}
+	}
 	def sourceSet = variant.sourceSets.find { it.name == variant.name }
 	sourceSet.java.srcDir new File(uniffiPath)
 	// XXX: I've been trying to make this work but I can't, so the compiled bindings will show as "regular sources" in Android Studio.

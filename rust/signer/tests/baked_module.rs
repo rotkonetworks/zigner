@@ -29,7 +29,7 @@ const MODULE: &[u8] = include_bytes!("../../../android/src/main/assets/modules/m
 /// compares bytes. That is the check that ties this asset to its source;
 /// this test only notices the asset changing, so the
 /// `BAKED_MODULE_VERSION` decision below stays a deliberate one.
-const EXPECTED_SHA256: &str = "2a773344052763b15155dfcbe6e7d41e7157fe0cff8ae2b4ead0e5a06937bf08";
+const EXPECTED_SHA256: &str = "f992e6d5229fec06a3e89815b3aa4822ec1e10e9ab6253c4c1fb035dc63f8e99";
 
 #[test]
 fn baked_module_is_pinned_to_its_recorded_version() {

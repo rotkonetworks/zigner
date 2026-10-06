@@ -634,7 +634,7 @@ fn module_compact_signatures_under_wasmi() {
 
 /// NU7 through the SHIPPED module under the device's wasmi runtime: a genuine
 /// branch-0x77190ad9 migration summarizes with the real fee and signs on
-/// testnet; on mainnet the module refuses until MAINNET_NU7_ACTIVATION is set.
+/// testnet, and signs on mainnet too: activation comes from the PCZT branch.
 #[test]
 fn nu7_module_summarizes_and_signs_under_wasmi() {
     if !module_wasm_available() {
@@ -659,10 +659,13 @@ fn nu7_module_summarizes_and_signs_under_wasmi() {
     let signed = Pczt::parse(&messages[0].signed_pczt).expect("signed parses");
     assert_eq!(*signed.global().consensus_branch_id(), 0x7719_0ad9);
 
-    if pczt_signing::consensus_gate::MAINNET_NU7_ACTIVATION.is_none() {
-        assert!(
-            rt.sign_request(&payload, MNEMONIC, 0, true).is_err(),
-            "mainnet NU7 must be refused by the shipped module until activation is set"
-        );
-    }
+    // Mainnet: no height gate inside the shipped module either.
+    let fx_main = common::build_redacted_nu7_migration_mainnet_keys();
+    let payload_main = single_request(&fx_main.redacted_pczt);
+    let resp_main = rt
+        .sign_request(&payload_main, MNEMONIC, 0, true)
+        .expect("shipped module signs mainnet NU7 - no activation-height gate");
+    assert!(!pczt_signing::envelope::parse_response(&resp_main)
+        .expect("mainnet response parses")
+        .is_empty());
 }

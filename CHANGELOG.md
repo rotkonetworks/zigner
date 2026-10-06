@@ -13,9 +13,11 @@ module, and device-security screens that only state what they measured.
 - **NU7 (ZIP 259, branch `0x77190ad9`)** on the protocol-module path
   (`ur:zigner-module`), built on the zakura crate family (`zakura-pczt`
   0.1.0-rc4, `zakura-*` 2.2.0) - the same stack zcli, zafu and vizor build
-  with. Testnets accept NU7 now; **mainnet NU7 stays refused until its
-  activation height is set** (scheduled 2026-10-20) - activation is by block
-  height, never by date.
+  with. **NU7 activates on its own, on every network, with no further Zigner
+  release**: the consensus branch id inside each PCZT is the signal - the
+  online wallet picks it from the chain height and the network rejects a
+  wrong-branch transaction - so this offline device needs no height table and
+  no update for activation day.
 - **Fail-closed PCZT review.** Both signer paths refuse, before anything is
   displayed, any PCZT they cannot verify: unknown consensus branch, tx
   format other than v5/v6, V6 on a pre-NU6.3 branch, any Sapling component.

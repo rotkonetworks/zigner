@@ -30,7 +30,7 @@ use zcash_primitives::transaction::{
     TxVersion,
 };
 use zcash_protocol::{
-    consensus::{BlockHeight, TestNetwork},
+    consensus::{BlockHeight, MainNetwork, TestNetwork},
     local_consensus::LocalNetwork,
     memo::MemoBytes,
     value::Zatoshis,
@@ -270,19 +270,29 @@ pub fn build_redacted_v5_send() -> V6Fixture {
 
 /// Build + redact a real V6 orchard->ironwood migration PCZT.
 pub fn build_redacted_v6_migration() -> V6Fixture {
-    build_redacted_v6_migration_with(nu63_params())
+    build_redacted_v6_migration_with(nu63_params(), false)
 }
 
 /// The same turnstile migration with NU7 active, so the builder targets
 /// consensus branch `0x77190ad9`: a genuine NU7 PCZT, not a patched one.
 pub fn build_redacted_nu7_migration() -> V6Fixture {
-    build_redacted_v6_migration_with(LocalNetwork {
-        nu7: Some(BlockHeight::from_u32(1)),
-        ..nu63_params()
-    })
+    build_redacted_v6_migration_with(nu7_params(), false)
 }
 
-fn build_redacted_v6_migration_with(params: LocalNetwork) -> V6Fixture {
+/// The NU7 migration with the note owned by the seed's MAINNET keys (coin
+/// type 133), so `sign(mainnet = true)` has something of its own to sign.
+pub fn build_redacted_nu7_migration_mainnet_keys() -> V6Fixture {
+    build_redacted_v6_migration_with(nu7_params(), true)
+}
+
+fn nu7_params() -> LocalNetwork {
+    LocalNetwork {
+        nu7: Some(BlockHeight::from_u32(1)),
+        ..nu63_params()
+    }
+}
+
+fn build_redacted_v6_migration_with(params: LocalNetwork, mainnet_keys: bool) -> V6Fixture {
     let target_height = BlockHeight::from_u32(100);
 
     // The device seed owns the orchard note being migrated. LocalNetwork
@@ -290,7 +300,12 @@ fn build_redacted_v6_migration_with(params: LocalNetwork) -> V6Fixture {
     // TestNetwork (also coin type 1), so keys line up.
     let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, MNEMONIC).unwrap();
     let seed = mnemonic.to_seed("");
-    let usk = UnifiedSpendingKey::from_seed(&TestNetwork, &seed, AccountId::ZERO).unwrap();
+    let usk = if mainnet_keys {
+        UnifiedSpendingKey::from_seed(&MainNetwork, &seed, AccountId::ZERO)
+    } else {
+        UnifiedSpendingKey::from_seed(&TestNetwork, &seed, AccountId::ZERO)
+    }
+    .unwrap();
     let fvk = orchard::keys::FullViewingKey::from(usk.orchard());
 
     // A spendable orchard note (legacy pool, V2 note plaintext) anchored by a
