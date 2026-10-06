@@ -20,6 +20,7 @@
 
 pub mod consensus_gate;
 pub mod envelope;
+pub mod thorchain;
 
 use envelope::{
     encode_response, parse_request, parse_request_full, EnvelopeError, ResponseMessage, SignRequest,
@@ -423,12 +424,27 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
     // orchard outputs in a redacted PCZT keep value fields the signer role
     // can read for its own balance check but recipient addresses only when
     // the wallet left them present. Anything unreadable renders "shielded".
+    // A null-data output is read as its memo (a THORChain instruction in
+    // words when it is one), and an output paying back to a script one of the
+    // inputs came from is change: on a THORChain deposit that same address is
+    // where a refund lands.
+    let input_scripts: Vec<&Vec<u8>> = pczt
+        .transparent()
+        .inputs()
+        .iter()
+        .map(|i| i.script_pubkey())
+        .collect();
     let mut outputs = Vec::new();
     for out in pczt.transparent().outputs() {
-        outputs.push((
-            format!("t-script:{}", hex(out.script_pubkey())),
-            *out.value(),
-        ));
+        let script = out.script_pubkey();
+        let label = if let Some(data) = thorchain::null_data(script) {
+            thorchain::label(data)
+        } else if input_scripts.contains(&script) {
+            format!("change:{}", hex(script))
+        } else {
+            format!("t-script:{}", hex(script))
+        };
+        outputs.push((label, *out.value()));
     }
     for action in pczt.orchard().actions() {
         let out = action.output();
@@ -520,31 +536,41 @@ pub fn summarize(pczt_bytes: &[u8]) -> Result<PcztSummary, Error> {
 ///   move these without solving a discrete log. For a shielded-only
 ///   transaction - the release-critical flow - this is the entire fee, so the
 ///   displayed fee is trustworthy there.
-/// * transparent: NOT bound here. `fee_paid` derives the transparent term
-///   from the PCZT's own input/output `value` fields via the prevout closure.
-///   Input amounts are covered by the per-input transparent sighash we sign,
-///   but this crate does not cross-check them before display.
+/// * transparent: BOUND by our own signature. `fee_paid` derives the
+///   transparent term from the PCZT's input/output `value` fields; output
+///   values are in the transaction itself, and the ZIP 244 sighash this device
+///   recomputes and signs commits to every input amount, so a misstated input
+///   value yields a transaction the network rejects rather than a hidden fee.
 /// * sapling: NOT bound here. The sapling bundle carries its own `bsk` and the
 ///   same relation would prove it, but this crate has no sapling display path
 ///   and no sapling fixture, so nothing checks it.
 ///
-/// So: a PCZT with transparent or sapling components can still display a fee
-/// that is partly producer-supplied. An inflated fee is fund loss, not a
+/// So: a PCZT with sapling components can still display a fee that is partly
+/// producer-supplied. An inflated fee is fund loss, not a
 /// cosmetic error, so extending the same binding to those bundles is the next
 /// step if either becomes a supported flow.
 fn compute_fee_zat(pczt_bytes: &[u8]) -> Option<u64> {
     let mut pczt = Pczt::parse(pczt_bytes).ok()?;
     // Resolve compact fields for a redacted PCZT.
     pczt.resolve_fields().ok()?;
+    // Each transparent input carries its own prevout value. The ZIP 244
+    // transparent sighash commits to the amounts (and scripts) of EVERY
+    // input, and this device recomputes that sighash itself, so a wallet that
+    // understates or inflates a value gets a signature the network rejects:
+    // the input values cannot move the fee without breaking the transaction.
+    let prevouts: std::collections::BTreeMap<([u8; 32], u32), u64> = pczt
+        .transparent()
+        .inputs()
+        .iter()
+        .map(|i| ((*i.prevout_txid(), *i.prevout_index()), *i.value()))
+        .collect();
     let effects = pczt.into_effects().ok()?;
-    // Transparent inputs carry their own value in the PCZT (transparent.value
-    // is public), but fee_paid takes a prevout lookup by outpoint. We have no
-    // prevout db on the device; for the turnstile migration there are no
-    // transparent inputs so the closure is never called. If a future request
-    // does carry transparent inputs, returning None here makes fee_paid bail
-    // and we display "unknown" rather than an understated fee.
     let fee: Result<Option<zcash_protocol::value::Zatoshis>, zcash_protocol::value::BalanceError> =
-        effects.fee_paid(|_outpoint| Ok(None));
+        effects.fee_paid(|outpoint| {
+            Ok(prevouts
+                .get(&(*outpoint.hash(), outpoint.n()))
+                .and_then(|v| zcash_protocol::value::Zatoshis::from_u64(*v).ok()))
+        });
     fee.ok().flatten().map(u64::from)
 }
 
@@ -587,6 +613,60 @@ pub fn sign_redacted_pczt(
 /// Sign every orchard action and transparent input this seed controls.
 /// Returns `(serialized_signed_pczt, finished_pczt)`; the finished `Pczt`
 /// is what the compact response extracts spend-auth signatures from.
+/// How far down each transparent branch the signer looks for an input's key.
+/// Public derivations are cheap, and the walk stops at the last key needed,
+/// so this bounds only the cost of refusing a foreign input.
+pub const TRANSPARENT_KEY_SEARCH_LIMIT: u32 = 5_000;
+
+/// The secret key for each input script, in input order, from this account's
+/// external (0) and internal (1) branches. Errors on the first input whose
+/// script no key within [`TRANSPARENT_KEY_SEARCH_LIMIT`] produces.
+fn find_transparent_keys(
+    account: &zcash_transparent::keys::AccountPrivKey,
+    scripts: &[Vec<u8>],
+) -> Result<Vec<secp256k1::SecretKey>, Error> {
+    let account_pub = account.to_account_pubkey();
+    let mut found: Vec<Option<(TransparentKeyScope, NonHardenedChildIndex)>> =
+        vec![None; scripts.len()];
+    'walk: for child in 0..TRANSPARENT_KEY_SEARCH_LIMIT {
+        let child_index = NonHardenedChildIndex::from_index(child)
+            .ok_or_else(|| Error::KeyDerivation("child index".into()))?;
+        for branch in 0..=1u32 {
+            let scope = TransparentKeyScope::custom(branch)
+                .ok_or_else(|| Error::KeyDerivation("scope".into()))?;
+            let Ok(pubkey) = account_pub.derive_address_pubkey(scope, child_index) else {
+                continue;
+            };
+            let script: zcash_transparent::address::Script =
+                zcash_transparent::address::TransparentAddress::from_pubkey(&pubkey)
+                    .script()
+                    .into();
+            for (slot, wanted) in found.iter_mut().zip(scripts) {
+                if slot.is_none() && script.0 .0[..] == wanted[..] {
+                    *slot = Some((scope, child_index));
+                }
+            }
+            if found.iter().all(Option::is_some) {
+                break 'walk;
+            }
+        }
+    }
+    found
+        .into_iter()
+        .enumerate()
+        .map(|(index, at)| {
+            let (scope, child) = at.ok_or_else(|| {
+                Error::Sign(format!(
+                    "transparent input {index} is not paid to this account's keys"
+                ))
+            })?;
+            account
+                .derive_secret_key(scope, child)
+                .map_err(|e| Error::KeyDerivation(format!("{e:?}")))
+        })
+        .collect()
+}
+
 /// `(signed PCZT bytes, parsed signed PCZT, slots that were ALREADY signed on
 /// arrival)`. The third element is what makes a compact response report only
 /// this device's own contribution - see [`new_contributions`].
@@ -778,39 +858,32 @@ fn sign_redacted_pczt_inner(
     })?;
 
     let pczt = low.finish();
+    let input_scripts: Vec<Vec<u8>> = pczt
+        .transparent()
+        .inputs()
+        .iter()
+        .map(|i| i.script_pubkey().clone())
+        .collect();
 
     // Transparent inputs are signed with the high-level Signer (they need no
     // fvk). Re-parse via the role over the now spend-auth-signed shielded
     // bundles.
     let mut signer = Signer::new(pczt).map_err(|e| Error::Sign(format!("{e:?}")))?;
 
-    // Transparent inputs: this pczt rev keeps bip32_derivation pub(crate),
-    // so instead of reading paths we candidate-scan our account's keys on
-    // the standard m/44'/133'/account'/{0,1}/{0..20} tree. Input::sign
-    // verifies the pubkey against script_pubkey before mutating, so a
-    // wrong-key attempt is a clean no-op error - "sign what is yours",
-    // bounded at 40 attempts per input.
+    // Transparent inputs: this pczt rev keeps bip32_derivation pub(crate), so
+    // we find each input's key by its P2PKH script instead. zafu gives every
+    // swap its own fresh t-address, so the index is unbounded in principle:
+    // walk the external and internal branches deriving PUBLIC keys only,
+    // match them against the inputs' scripts, and stop as soon as every input
+    // has its key. Input::sign still checks the pubkey against script_pubkey.
+    // An input this seed does not own is refused, never passed through
+    // unsigned: the wallet would only find out at finalization.
     if n_transparent > 0 {
-        const GAP_LIMIT: u32 = 20;
-        let account_key = usk.transparent();
-        let mut candidates = Vec::new();
-        for change in 0..=1u32 {
-            let scope = TransparentKeyScope::custom(change)
-                .ok_or_else(|| Error::KeyDerivation("scope".into()))?;
-            for child in 0..GAP_LIMIT {
-                let child_index = NonHardenedChildIndex::from_index(child)
-                    .ok_or_else(|| Error::KeyDerivation("child index".into()))?;
-                if let Ok(sk) = account_key.derive_secret_key(scope, child_index) {
-                    candidates.push(sk);
-                }
-            }
-        }
-        for index in 0..n_transparent {
-            for sk in &candidates {
-                if signer.sign_transparent(index, sk).is_ok() {
-                    break;
-                }
-            }
+        let keys = find_transparent_keys(usk.transparent(), &input_scripts)?;
+        for (index, sk) in keys.iter().enumerate() {
+            signer
+                .sign_transparent(index, sk)
+                .map_err(|e| Error::Sign(format!("transparent input {index}: {e:?}")))?;
         }
     }
 
@@ -1057,7 +1130,7 @@ pub fn apply_signature_contribution(
     Ok(signer.finish())
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
