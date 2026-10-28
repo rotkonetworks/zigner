@@ -338,6 +338,7 @@ pub fn first_network(database: &sled::Db) -> Result<Option<OrderedNetworkSpecs>>
 /// For QR code the address information is put in format
 /// `substrate:{address as base58}:0x{network genesis hash}`
 /// `ethereum:{address as hex}:0x{network genesis hash}`
+/// `cosmos:`, `zcash:` and `penumbra:` wrap the chain's own address string.
 /// transformed into bytes, to be compatible with `polkadot-js` interface.
 /// Note that no [`Encryption`] algorithm
 /// information is contained in the QR code. If there are multiple `Encryption`
@@ -387,6 +388,8 @@ pub fn export_key(
                 "cosmos"
             } else if network_specs.encryption == Encryption::Zcash {
                 "zcash"
+            } else if network_specs.encryption == Encryption::Penumbra {
+                "penumbra"
             } else {
                 "substrate"
             };
