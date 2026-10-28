@@ -214,7 +214,7 @@ pub(crate) fn derive_domain_keypair(
 /// intermediate material with spending keys.
 ///
 /// Same mnemonic, completely separate derivation path.
-fn derive_zid_root(seed_phrase: &str) -> Result<[u8; 64], String> {
+pub(crate) fn derive_zid_root(seed_phrase: &str) -> Result<[u8; 64], String> {
     use hkdf::Hkdf;
     use sha2::{Digest, Sha256};
 

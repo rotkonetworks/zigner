@@ -7450,6 +7450,7 @@ dependencies = [
  "uniffi",
  "uniffi_build",
  "ur",
+ "x25519-dalek",
  "zakura-address",
  "zakura-orchard",
  "zakura-pczt",

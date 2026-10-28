@@ -38,9 +38,11 @@ pub mod frost_multisig;
 pub mod release_signing;
 pub use release_signing::ReleaseSigningRequest;
 pub mod ssh;
+pub mod ssh2fa;
 pub mod kdbx;
 pub mod passwords;
 pub mod totp;
+pub mod webfill;
 mod zcash_consensus_gate;
 
 use crate::ffi_types::*;
@@ -3719,6 +3721,35 @@ fn totp_export_backup_qr(seed_name: &str, max_fragment_len: u32) -> Result<Vec<Q
     bytes_to_ur_qr(&backup.bytes, "zigner-totp-vault", max_fragment_len)
 }
 
+pub struct Ssh2faRequest {
+    pub origin: String,
+    pub user: String,
+    pub principals: Vec<String>,
+    pub ttl: u64,
+    pub keys: Vec<String>,
+    pub issued: u64,
+}
+
+fn ssh2fa_parse_request(request: &str) -> Result<Ssh2faRequest, ErrorDisplayed> {
+    let r = ssh2fa::CertRequest::parse(request).map_err(totp_err)?;
+    Ok(Ssh2faRequest { origin: r.origin, user: r.user, principals: r.principals, ttl: r.ttl, keys: r.keys, issued: r.issued })
+}
+
+fn ssh2fa_approve(seed_phrase: &str, request: &str) -> Result<String, ErrorDisplayed> {
+    ssh2fa::approve(seed_phrase, request).map_err(totp_err)
+}
+
+fn ssh2fa_approve_qr(seed_phrase: &str, request: &str) -> Result<QrData, ErrorDisplayed> {
+    let line = ssh2fa_approve(seed_phrase, request)?;
+    qrcode_static::png_qr_from_string(&line, qrcode_static::DataType::Regular)
+        .map(|data| QrData::Regular { data })
+        .map_err(|e| totp_err(format!("QR encoding error: {e}")))
+}
+
+fn ssh2fa_approver_pubkey(seed_phrase: &str, origin: &str) -> Result<String, ErrorDisplayed> {
+    ssh2fa::approver_pubkey(seed_phrase, origin).map_err(totp_err)
+}
+
 pub struct PassPolicy {
     pub words: bool,
     pub length: u32,
@@ -3821,6 +3852,62 @@ fn pass_remove(seed_name: &str, seed_phrase: &str, index: u32) -> Result<(), Err
     vault.remove_profile(index as usize).map_err(totp_err)?;
     totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
     Ok(())
+}
+
+pub struct PassRequest {
+    pub site: String,
+    pub login: String,
+    pub profiles: Vec<PassProfile>,
+    pub totp: Vec<TotpAccount>,
+}
+
+fn pass_request_open(seed_name: &str, seed_phrase: &str, request: &str) -> Result<PassRequest, ErrorDisplayed> {
+    let r = webfill::Request::parse(request).map_err(totp_err)?;
+    let vault = totp::store::open(&get_db()?, seed_name, seed_phrase).map_err(totp_err)?;
+    Ok(PassRequest {
+        profiles: r.matching_profiles(vault.profiles()).into_iter().map(|(i, p)| pass_view(i, p)).collect(),
+        totp: r.matching_totp(vault.accounts()).into_iter().map(|(i, a)| totp_view(i, a)).collect(),
+        site: r.site,
+        login: r.login,
+    })
+}
+
+fn pass_request_answer_qr(
+    seed_name: &str,
+    seed_phrase: &str,
+    request: &str,
+    profile_index: i32,
+    totp_index: i32,
+) -> Result<QrData, ErrorDisplayed> {
+    let db = get_db()?;
+    let r = webfill::Request::parse(request).map_err(totp_err)?;
+    let vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    let pick = |i: i32, len: usize| -> Result<Option<usize>, ErrorDisplayed> {
+        match <usize as std::convert::TryFrom<i32>>::try_from(i) {
+            Err(_) => Ok(None),
+            Ok(i) if i < len => Ok(Some(i)),
+            Ok(_) => Err(totp_err("no such entry".into())),
+        }
+    };
+    let profile = pick(profile_index, vault.profiles().len())?.map(|i| &vault.profiles()[i]);
+    let account = pick(totp_index, vault.accounts().len())?.map(|i| &vault.accounts()[i]);
+    if profile.is_none() && account.is_none() {
+        return Err(totp_err("pick a password or a TOTP code to send".into()));
+    }
+    let now = match account {
+        Some(_) => {
+            let mut clock = totp::store::clock(&db).map_err(totp_err)?;
+            let now = clock.now(device_time()?).map_err(|e| totp_err(e.to_string()))?;
+            totp::store::save_clock(&db, &clock).map_err(totp_err)?;
+            now
+        }
+        None => 0,
+    };
+    let answer = webfill::answer(seed_phrase, &r, profile, account, now).map_err(totp_err)?;
+    let line = webfill::respond(request, &answer).map_err(totp_err)?;
+    qrcode_static::png_qr_from_string(&line, qrcode_static::DataType::Regular)
+        .map(|data| QrData::Regular { data })
+        .map_err(|e| totp_err(format!("QR encoding error: {e}")))
 }
 
 fn vault_export_kdbx(seed_name: &str, seed_phrase: &str, kdbx_password: &str) -> Result<Vec<u8>, ErrorDisplayed> {

@@ -43,6 +43,8 @@ sha1 = "0.10"
 argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
 chacha20 = "0.9"
 flate2 = "1.0"
+# Zafu password requests: answers are sealed to Zafu's one-time X25519 key.
+x25519-dalek = { version = "2", features = ["static_secrets"] }
 # FROST multisig backup: PBKDF2-SHA512 + AES-GCM-256 (matches zafu @repo/encryption).
 pbkdf2 = "0.12"
 aes-gcm = "0.10"

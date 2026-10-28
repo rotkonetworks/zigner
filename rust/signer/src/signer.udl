@@ -1039,6 +1039,25 @@ namespace signer {
     sequence<QrData> totp_export_backup_qr([ByRef] string seed_name, u32 max_fragment_len);
 
     // ========================================================================
+    // ssh2fa certificate approvals (see ssh2fa.rs)
+    // ========================================================================
+
+    // Parse a scanned `ssh2fa-cert-request-v1` QR for the confirm screen.
+    [Throws=ErrorDisplayed]
+    Ssh2faRequest ssh2fa_parse_request([ByRef] string request);
+
+    // After the user approves: the approval line, and the same as a QR.
+    [Throws=ErrorDisplayed]
+    string ssh2fa_approve([ByRef] string seed_phrase, [ByRef] string request);
+
+    [Throws=ErrorDisplayed]
+    QrData ssh2fa_approve_qr([ByRef] string seed_phrase, [ByRef] string request);
+
+    // The key to register on a server: `ssh2fa approver add <user> <this>`.
+    [Throws=ErrorDisplayed]
+    string ssh2fa_approver_pubkey([ByRef] string seed_phrase, [ByRef] string origin);
+
+    // ========================================================================
     // Seed-derived site passwords (see passwords.rs)
     // ========================================================================
 
@@ -1066,6 +1085,16 @@ namespace signer {
 
     [Throws=ErrorDisplayed]
     void pass_remove([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
+
+    // A scanned Zafu password request: which site asks (taken by Zafu from
+    // the browser, not the page), and the saved passwords and TOTP accounts
+    // that match it. The user picks; nothing is sent yet.
+    [Throws=ErrorDisplayed]
+    PassRequest pass_request_open([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string request);
+
+    // The answer QR, readable only by the Zafu that asked. -1: none.
+    [Throws=ErrorDisplayed]
+    QrData pass_request_answer_qr([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string request, i32 profile_index, i32 totp_index);
 
     // ========================================================================
     // KeePass export
@@ -1712,6 +1741,15 @@ dictionary ZcashTransactionSummary {
 };
 
 // Auth sign result
+dictionary Ssh2faRequest {
+    string origin;
+    string user;
+    sequence<string> principals;
+    u64 ttl;
+    sequence<string> keys;
+    u64 issued;
+};
+
 dictionary TotpAccount {
     u32 index;
     string issuer;
@@ -1768,6 +1806,13 @@ dictionary PassProfile {
     string login;
     u32 counter;
     PassPolicy policy;
+};
+
+dictionary PassRequest {
+    string site;
+    string login;
+    sequence<PassProfile> profiles;
+    sequence<TotpAccount> totp;
 };
 
 dictionary TotpClockCheck {
