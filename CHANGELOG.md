@@ -26,14 +26,14 @@ Minor. **Penumbra users: read the first entry.**
   address from an affected Zigner.
 - **12-word seeds** work for Penumbra: export and signing used a BIP39 parser
   that accepts only 24 words.
-- Penumbra keys come from penumbra-sdk alone; Zigner's own decaf377, poseidon,
-  f4jumble and AES derivation code is deleted.
+- Penumbra keys come from penumbra-sdk alone; Zigner's own derivation code is
+  deleted, with its `decaf377`, `poseidon377`, `f4jumble` and `aes` deps.
 
 ### Dependencies
 
 - Removed Substrate's wasm executor and the `unwasm` command of
   `generate_message` (host tool), which pulled zstd 0.11 into the build.
-- tokio 1.53.3, zstd-sys 2.1.2, zstd 0.14.3 for new RustSec advisories.
+- `tokio` 1.53.3, `zstd-sys` 2.1.2 and `zstd` 0.14.3 for new RustSec advisories.
 
 ## 0.12.0 - 2026-10-20
 
