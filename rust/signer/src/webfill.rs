@@ -5,10 +5,16 @@
 // QR only that key can open. A camera that sees Zigner's screen learns
 // nothing; the user still reads which site is asking before anything is sent.
 //
+// Zafu and Zigner derive passwords the same way (passwords.rs is zafu's
+// scheme 2), so the request carries Zafu's saved login and Zigner derives
+// from it directly; nothing has to be set up per site on the phone.
+//
 // request (text):
 //   zigner-pass-request-v1
-//   site: github.com
+//   site: github.com        (zafu's normalizeOrigin of the tab's host)
 //   login: alice            (may be empty)
+//   length: 32
+//   rotation: 0
 //   key: <64 hex, Zafu's X25519 public key>
 //   nonce: <32 hex>
 //
@@ -42,6 +48,8 @@ pub const RESPONSE_V1: &str = "zigner-pass-response-v1";
 pub struct Request {
     pub site: String,
     pub login: String,
+    pub length: u32,
+    pub rotation: u32,
     pub key: [u8; 32],
     pub nonce: [u8; 16],
 }
@@ -56,9 +64,11 @@ fn hex_array<const N: usize>(s: &str) -> Option<[u8; N]> {
 impl Request {
     pub fn render(&self) -> String {
         format!(
-            "{REQUEST_V1}\nsite: {}\nlogin: {}\nkey: {}\nnonce: {}",
+            "{REQUEST_V1}\nsite: {}\nlogin: {}\nlength: {}\nrotation: {}\nkey: {}\nnonce: {}",
             self.site,
             self.login,
+            self.length,
+            self.rotation,
             hex::encode(self.key),
             hex::encode(self.nonce)
         )
@@ -74,6 +84,8 @@ impl Request {
         }
         let site = field("site: ")?.to_owned();
         let login = field("login: ")?.to_owned();
+        let length = field("length: ")?.parse().map_err(|_| bad("length"))?;
+        let rotation = field("rotation: ")?.parse().map_err(|_| bad("rotation"))?;
         let key = hex_array(field("key: ")?).ok_or_else(|| bad("key"))?;
         let nonce = hex_array(field("nonce: ")?).ok_or_else(|| bad("nonce"))?;
         if lines.next().is_some() {
@@ -85,22 +97,17 @@ impl Request {
         if login.len() > 256 || login.chars().any(char::is_control) || login.trim() != login {
             return Err(bad("login"));
         }
-        let r = Self { site, login, key, nonce };
+        let r = Self { site, login, length, rotation, key, nonce };
+        r.profile().map_err(|e| bad(&e))?;
         if r.render() != text {
             return Err(bad("not canonical"));
         }
         Ok(r)
     }
 
-    /// Profiles for this site, the requested login first if given.
-    pub fn matching_profiles<'a>(&self, profiles: &'a [Profile]) -> Vec<(usize, &'a Profile)> {
-        let mut m: Vec<_> = profiles
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.site == self.site && (self.login.is_empty() || p.login == self.login))
-            .collect();
-        m.sort_by_key(|(_, p)| p.login != self.login);
-        m
+    /// The password this request asks for.
+    pub fn profile(&self) -> Result<Profile, String> {
+        Profile::new(&self.site, &self.login, self.rotation, self.length)
     }
 
     /// TOTP accounts whose issuer names this site: "GitHub" for github.com,
@@ -184,24 +191,13 @@ pub fn open(request_text: &str, zafu_secret: &[u8; 32], response: &str) -> Resul
     serde_json::from_slice(&pt).map_err(|e| e.to_string())
 }
 
-/// Builds the answer for the profile and TOTP account the user picked.
-pub fn answer(
-    seed_phrase: &str,
-    request: &Request,
-    profile: Option<&Profile>,
-    totp: Option<&Account>,
-    now: u64,
-) -> Result<Answer, String> {
-    if let Some(p) = profile {
-        if p.site != request.site {
-            return Err("that password is for another site".into());
-        }
+/// The answer the user approved: the password, the TOTP code, or both.
+pub fn answer(seed_phrase: &str, request: &Request, password: bool, totp: Option<&Account>, now: u64) -> Result<Answer, String> {
+    if !password && totp.is_none() {
+        return Err("nothing to send".into());
     }
-    Ok(Answer {
-        login: profile.map_or_else(|| request.login.clone(), |p| p.login.clone()),
-        password: profile.map(|p| p.password(seed_phrase).map(|pw| pw.to_string())).transpose()?,
-        totp: totp.map(|a| a.code_at(now)),
-    })
+    let pw = if password { Some(request.profile()?.password(seed_phrase)?.to_string()) } else { None };
+    Ok(Answer { login: request.login.clone(), password: pw, totp: totp.map(|a| a.code_at(now)) })
 }
 
 #[cfg(test)]
@@ -213,7 +209,7 @@ mod tests {
     fn request(site: &str, login: &str) -> (String, [u8; 32]) {
         let secret = [5u8; 32];
         let public = x25519_dalek::PublicKey::from(&x25519_dalek::StaticSecret::from(secret));
-        let r = Request { site: site.into(), login: login.into(), key: *public.as_bytes(), nonce: [9; 16] };
+        let r = Request { site: site.into(), login: login.into(), length: 32, rotation: 0, key: *public.as_bytes(), nonce: [9; 16] };
         (r.render(), secret)
     }
 
@@ -221,20 +217,13 @@ mod tests {
     fn roundtrip_and_binding() {
         let (text, secret) = request("github.com", "alice");
         let r = Request::parse(&text).unwrap();
-        let profiles = [
-            Profile::new("gitlab.com", "alice", 0, 32).unwrap(),
-            Profile::new("github.com", "bob", 0, 32).unwrap(),
-            Profile::new("github.com", "alice", 0, 32).unwrap(),
-        ];
-        let m = r.matching_profiles(&profiles);
-        assert_eq!(m.iter().map(|(i, _)| *i).collect::<Vec<_>>(), [2]);
         let accounts = [
             Account::from_uri("otpauth://totp/GitHub:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=GitHub").unwrap(),
             Account::from_uri("otpauth://totp/Gitlab:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ").unwrap(),
         ];
         assert_eq!(r.matching_totp(&accounts).iter().map(|(i, _)| *i).collect::<Vec<_>>(), [0]);
 
-        let a = answer(SEED, &r, Some(m[0].1), Some(&accounts[0]), 59).unwrap();
+        let a = answer(SEED, &r, true, Some(&accounts[0]), 59).unwrap();
         let line = respond(&text, &a).unwrap();
         let got = open(&text, &secret, &line).unwrap();
         assert_eq!(got.login, "alice");
@@ -245,8 +234,7 @@ mod tests {
         let (other, _) = request("evil.example", "alice");
         assert!(open(&other, &secret, &line).is_err());
         assert!(open(&text, &[6u8; 32], &line).is_err());
-        // And a password is never answered for a site it isn't for.
-        assert!(answer(SEED, &r, Some(&profiles[0]), None, 0).is_err());
+        assert!(answer(SEED, &r, false, None, 0).is_err());
     }
 
     #[test]
@@ -261,6 +249,9 @@ mod tests {
             format!("{text}\n"),
             text.replace("-v1", "-v2"),
             text.replace("key: ", "key: 00"),
+            text.replace("length: 32", "length: 64"),
+            text.replace("rotation: 0", "rotation: -1"),
+            text.replace("rotation: 0", "rotation: 00"),
         ] {
             if bad != text {
                 assert!(Request::parse(&bad).is_err(), "{:?}", bad);
@@ -275,6 +266,7 @@ mod tests {
     fn print_vector() {
         let (text, _) = request("github.com", "alice");
         let a = Answer { login: "alice".into(), password: Some("G<)WH@t!d3S!<_&~+V~p{_SA!wh3H{3s".into()), totp: Some("287082".into()) };
+        println!("SECRET={}", hex::encode([5u8; 32]));
         println!("REQUEST={}", serde_json::to_string(&text).unwrap());
         println!("RESPONSE={}", respond(&text, &a).unwrap());
     }

@@ -3812,7 +3812,9 @@ fn pass_remove(seed_name: &str, seed_phrase: &str, index: u32) -> Result<(), Err
 pub struct PassRequest {
     pub site: String,
     pub login: String,
-    pub profiles: Vec<PassProfile>,
+    pub length: u32,
+    pub rotation: u32,
+    /// TOTP accounts whose issuer names this site.
     pub totp: Vec<TotpAccount>,
 }
 
@@ -3820,35 +3822,30 @@ fn pass_request_open(seed_name: &str, seed_phrase: &str, request: &str) -> Resul
     let r = webfill::Request::parse(request).map_err(totp_err)?;
     let vault = totp::store::open(&get_db()?, seed_name, seed_phrase).map_err(totp_err)?;
     Ok(PassRequest {
-        profiles: r.matching_profiles(vault.profiles()).into_iter().map(|(i, p)| pass_view(i, p)).collect(),
         totp: r.matching_totp(vault.accounts()).into_iter().map(|(i, a)| totp_view(i, a)).collect(),
         site: r.site,
         login: r.login,
+        length: r.length,
+        rotation: r.rotation,
     })
 }
 
+/// The answer QR, readable only by the Zafu that asked. With `password`, the
+/// site also goes into the vault (so backups and KeePass exports list it).
 fn pass_request_answer_qr(
     seed_name: &str,
     seed_phrase: &str,
     request: &str,
-    profile_index: i32,
+    password: bool,
     totp_index: i32,
 ) -> Result<QrData, ErrorDisplayed> {
     let db = get_db()?;
     let r = webfill::Request::parse(request).map_err(totp_err)?;
-    let vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
-    let pick = |i: i32, len: usize| -> Result<Option<usize>, ErrorDisplayed> {
-        match <usize as std::convert::TryFrom<i32>>::try_from(i) {
-            Err(_) => Ok(None),
-            Ok(i) if i < len => Ok(Some(i)),
-            Ok(_) => Err(totp_err("no such entry".into())),
-        }
+    let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    let account = match <usize as std::convert::TryFrom<i32>>::try_from(totp_index) {
+        Err(_) => None,
+        Ok(i) => Some(vault.accounts().get(i).ok_or_else(|| totp_err("no such TOTP account".into()))?.clone()),
     };
-    let profile = pick(profile_index, vault.profiles().len())?.map(|i| &vault.profiles()[i]);
-    let account = pick(totp_index, vault.accounts().len())?.map(|i| &vault.accounts()[i]);
-    if profile.is_none() && account.is_none() {
-        return Err(totp_err("pick a password or a TOTP code to send".into()));
-    }
     let now = match account {
         Some(_) => {
             let mut clock = totp::store::clock(&db).map_err(totp_err)?;
@@ -3858,7 +3855,20 @@ fn pass_request_answer_qr(
         }
         None => 0,
     };
-    let answer = webfill::answer(seed_phrase, &r, profile, account, now).map_err(totp_err)?;
+    let answer = webfill::answer(seed_phrase, &r, password, account.as_ref(), now).map_err(totp_err)?;
+    if password {
+        let profile = r.profile().map_err(totp_err)?;
+        let existing = vault.profiles().iter().position(|p| p.same_site(&profile));
+        let changed = match existing {
+            None => vault.add_profile(profile).map(|_| true),
+            Some(i) if vault.profiles()[i] != profile => vault.update_profile(i, profile).map(|_| true),
+            Some(_) => Ok(false),
+        }
+        .map_err(totp_err)?;
+        if changed {
+            totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
+        }
+    }
     let line = webfill::respond(request, &answer).map_err(totp_err)?;
     qrcode_static::png_qr_from_string(&line, qrcode_static::DataType::Regular)
         .map(|data| QrData::Regular { data })

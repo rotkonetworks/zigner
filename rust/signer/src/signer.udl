@@ -1088,14 +1088,15 @@ namespace signer {
     void pass_remove([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
 
     // A scanned Zafu password request: which site asks (taken by Zafu from
-    // the browser, not the page), and the saved passwords and TOTP accounts
-    // that match it. The user picks; nothing is sent yet.
+    // the browser, not the page) and the TOTP accounts that match it. The
+    // user confirms; nothing is sent yet.
     [Throws=ErrorDisplayed]
     PassRequest pass_request_open([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string request);
 
-    // The answer QR, readable only by the Zafu that asked. -1: none.
+    // The answer QR, readable only by the Zafu that asked: the site's
+    // password if `password`, and the code of `totp_index` (-1: none).
     [Throws=ErrorDisplayed]
-    QrData pass_request_answer_qr([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string request, i32 profile_index, i32 totp_index);
+    QrData pass_request_answer_qr([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string request, boolean password, i32 totp_index);
 
     // ========================================================================
     // KeePass export
@@ -1799,7 +1800,8 @@ dictionary PassProfile {
 dictionary PassRequest {
     string site;
     string login;
-    sequence<PassProfile> profiles;
+    u32 length;
+    u32 rotation;
     sequence<TotpAccount> totp;
 };
 
