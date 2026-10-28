@@ -50,11 +50,14 @@ fn get_display_address(
     network_name: Option<&str>,
 ) -> String {
     // For Penumbra, try to get the stored bech32m address
+    // Never fall back to another encoding: a key added before zigner#35 shows
+    // no address until it is derived again with the seed.
     if encryption == Encryption::Penumbra {
-        let ak_hex = hex::encode(multisigner_to_public(multisigner));
-        if let Ok(Some(address)) = crate::penumbra::get_penumbra_address(database, &ak_hex) {
-            return address;
-        }
+        let key_id_hex = hex::encode(multisigner_to_public(multisigner));
+        return crate::penumbra::get_penumbra_address(database, &key_id_hex)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
     }
     // For Zcash, try to get the stored unified address (u1...)
     #[cfg(feature = "zcash")]
@@ -379,6 +382,8 @@ pub fn export_key(
     );
 
     let public_key = multisigner_to_public(multisigner);
+    // a Penumbra key with no address yet gets no address QR
+    let no_address = network_specs.encryption == Encryption::Penumbra && base58.is_empty();
     let identicon = make_identicon_from_multisigner(multisigner, address_details.identicon_style());
     let qr = {
         if address_details.network_id.as_ref() == Some(network_specs_key) {
@@ -395,14 +400,18 @@ pub fn export_key(
             };
 
             QrData::Regular {
-                data: format!(
-                    "{}:{}:0x{}",
-                    prefix,
-                    base58,
-                    hex::encode(network_specs.genesis_hash)
-                )
-                .as_bytes()
-                .to_vec(),
+                data: if no_address {
+                    Vec::new()
+                } else {
+                    format!(
+                        "{}:{}:0x{}",
+                        prefix,
+                        base58,
+                        hex::encode(network_specs.genesis_hash)
+                    )
+                    .as_bytes()
+                    .to_vec()
+                },
             }
         } else {
             return Err(Error::NetworkSpecsKeyForAddressNotFound {
