@@ -2,6 +2,17 @@
 
 All notable changes to zigner are documented in this file.
 
+## 0.12.1 - 2026-10-29
+
+Patch.
+
+### Penumbra
+
+- **Exported Penumbra keys are tagged `penumbra:`.** The export-key QR fell
+  back to `substrate:` for any chain without its own tag, so a Penumbra
+  address came out as `substrate:penumbra1…:0x<genesis>` and a wallet
+  scanning it could not use it as a recipient. Zafu 29.5.1 reads both forms.
+
 ## 0.12.0 - 2026-10-20
 
 Minor. NU7-ready signing on the zakura stack, a reproducible protocol
