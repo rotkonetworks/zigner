@@ -3750,75 +3750,30 @@ fn ssh2fa_approver_pubkey(seed_phrase: &str, origin: &str) -> Result<String, Err
     ssh2fa::approver_pubkey(seed_phrase, origin).map_err(totp_err)
 }
 
-pub struct PassPolicy {
-    pub words: bool,
-    pub length: u32,
-    pub lower: bool,
-    pub upper: bool,
-    pub digits: bool,
-    pub symbols: String,
-    pub word_count: u32,
-    pub separator: String,
-    pub decorate: bool,
-}
-
 pub struct PassProfile {
     pub index: u32,
     pub site: String,
     pub login: String,
-    pub counter: u32,
-    pub policy: PassPolicy,
-}
-
-impl From<PassPolicy> for passwords::Policy {
-    fn from(p: PassPolicy) -> Self {
-        if p.words {
-            Self::Words { count: p.word_count, separator: p.separator, decorate: p.decorate }
-        } else {
-            Self::Chars { length: p.length, lower: p.lower, upper: p.upper, digits: p.digits, symbols: p.symbols }
-        }
-    }
+    pub rotation: u32,
+    pub length: u32,
 }
 
 fn pass_view(index: usize, p: &passwords::Profile) -> PassProfile {
-    // The other mode's fields carry defaults, so a UI toggle starts sensibly.
-    let mut policy = PassPolicy {
-        words: false,
-        length: 20,
-        lower: true,
-        upper: true,
-        digits: true,
-        symbols: passwords::DEFAULT_SYMBOLS.into(),
-        word_count: 5,
-        separator: "-".into(),
-        decorate: true,
-    };
-    match &p.policy {
-        passwords::Policy::Chars { length, lower, upper, digits, symbols } => {
-            (policy.length, policy.lower, policy.upper, policy.digits) = (*length, *lower, *upper, *digits);
-            policy.symbols = symbols.clone();
-        }
-        passwords::Policy::Words { count, separator, decorate } => {
-            policy.words = true;
-            (policy.word_count, policy.decorate) = (*count, *decorate);
-            policy.separator = separator.clone();
-        }
-    }
-    PassProfile { index: index as u32, site: p.site.clone(), login: p.login.clone(), counter: p.counter, policy }
+    PassProfile { index: index as u32, site: p.site.clone(), login: p.login.clone(), rotation: p.rotation, length: p.length }
 }
 
 fn pass_normalize_site(site: &str) -> String {
     passwords::normalize_site(site)
 }
 
-fn pass_preview(seed_phrase: &str, site: &str, login: &str, counter: u32, policy: PassPolicy) -> Result<String, ErrorDisplayed> {
-    let p = passwords::Profile::new(site, login, counter, policy.into()).map_err(totp_err)?;
+fn pass_preview(seed_phrase: &str, site: &str, login: &str, rotation: u32, length: u32) -> Result<String, ErrorDisplayed> {
+    let p = passwords::Profile::new(site, login, rotation, length).map_err(totp_err)?;
     Ok(p.password(seed_phrase).map_err(totp_err)?.to_string())
 }
 
-fn pass_add(seed_name: &str, seed_phrase: &str, site: &str, login: &str, policy: PassPolicy) -> Result<PassProfile, ErrorDisplayed> {
+fn pass_add(seed_name: &str, seed_phrase: &str, site: &str, login: &str, length: u32) -> Result<PassProfile, ErrorDisplayed> {
     let db = get_db()?;
-    let p = passwords::Profile::new(site, login, 1, policy.into()).map_err(totp_err)?;
+    let p = passwords::Profile::new(site, login, 0, length).map_err(totp_err)?;
     let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
     let index = vault.add_profile(p).map_err(totp_err)?;
     totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
@@ -3840,7 +3795,7 @@ fn pass_rotate(seed_name: &str, seed_phrase: &str, index: u32) -> Result<PassPro
     let db = get_db()?;
     let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
     let mut p = vault.profiles().get(index as usize).cloned().ok_or_else(|| totp_err("no such site".into()))?;
-    p.counter = p.counter.checked_add(1).ok_or_else(|| totp_err("counter overflow".into()))?;
+    p.rotation = p.rotation.checked_add(1).ok_or_else(|| totp_err("rotation overflow".into()))?;
     vault.update_profile(index as usize, p).map_err(totp_err)?;
     totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
     Ok(pass_view(index as usize, &vault.profiles()[index as usize]))

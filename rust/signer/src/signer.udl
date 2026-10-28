@@ -1058,19 +1058,20 @@ namespace signer {
     string ssh2fa_approver_pubkey([ByRef] string seed_phrase, [ByRef] string origin);
 
     // ========================================================================
-    // Seed-derived site passwords (see passwords.rs)
+    // Seed-derived site passwords: zafu's scheme 2 (see passwords.rs), so a
+    // hot zafu with the same seed derives the same passwords
     // ========================================================================
 
-    // `https://www.GitHub.com/login` -> `github.com`. Show it before saving:
+    // `https://www.github.com/login` -> `github.com`. Show it before saving:
     // a different spelling is a different password.
     string pass_normalize_site([ByRef] string site);
 
-    // The password a profile would give, before saving it.
+    // The password a profile would give, before saving it. length: 16, 24, 32 or 40.
     [Throws=ErrorDisplayed]
-    string pass_preview([ByRef] string seed_phrase, [ByRef] string site, [ByRef] string login, u32 counter, PassPolicy policy);
+    string pass_preview([ByRef] string seed_phrase, [ByRef] string site, [ByRef] string login, u32 rotation, u32 length);
 
     [Throws=ErrorDisplayed]
-    PassProfile pass_add([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string site, [ByRef] string login, PassPolicy policy);
+    PassProfile pass_add([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string site, [ByRef] string login, u32 length);
 
     // Profiles only, never passwords.
     [Throws=ErrorDisplayed]
@@ -1079,7 +1080,7 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string pass_reveal([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
 
-    // New password for a site (counter + 1), after a breach or a forced change.
+    // New password for a site (rotation + 1), after a breach or a forced change.
     [Throws=ErrorDisplayed]
     PassProfile pass_rotate([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
 
@@ -1787,25 +1788,12 @@ dictionary TotpBackup {
     string text;
 };
 
-// Flat for FFI: `words` picks the mode; the other mode's fields are ignored.
-dictionary PassPolicy {
-    boolean words;
-    u32 length;
-    boolean lower;
-    boolean upper;
-    boolean digits;
-    string symbols;
-    u32 word_count;
-    string separator;
-    boolean decorate;
-};
-
 dictionary PassProfile {
     u32 index;
     string site;
     string login;
-    u32 counter;
-    PassPolicy policy;
+    u32 rotation;
+    u32 length;
 };
 
 dictionary PassRequest {

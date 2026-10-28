@@ -207,7 +207,6 @@ pub fn answer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::passwords::Policy;
 
     const SEED: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
@@ -223,9 +222,9 @@ mod tests {
         let (text, secret) = request("github.com", "alice");
         let r = Request::parse(&text).unwrap();
         let profiles = [
-            Profile::new("gitlab.com", "alice", 1, Policy::default()).unwrap(),
-            Profile::new("github.com", "bob", 1, Policy::default()).unwrap(),
-            Profile::new("github.com", "alice", 1, Policy::default()).unwrap(),
+            Profile::new("gitlab.com", "alice", 0, 32).unwrap(),
+            Profile::new("github.com", "bob", 0, 32).unwrap(),
+            Profile::new("github.com", "alice", 0, 32).unwrap(),
         ];
         let m = r.matching_profiles(&profiles);
         assert_eq!(m.iter().map(|(i, _)| *i).collect::<Vec<_>>(), [2]);
@@ -239,7 +238,7 @@ mod tests {
         let line = respond(&text, &a).unwrap();
         let got = open(&text, &secret, &line).unwrap();
         assert_eq!(got.login, "alice");
-        assert_eq!(got.password.as_deref(), Some("Brain-Yard-Idle-Ethics-Aunt1"));
+        assert_eq!(got.password.as_deref(), Some("G<)WH@t!d3S!<_&~+V~p{_SA!wh3H{3s"));
         assert_eq!(got.totp.as_deref(), Some("287082"));
 
         // Bound to the request: another site's request, or another key, cannot open it.
@@ -275,7 +274,7 @@ mod tests {
     #[ignore]
     fn print_vector() {
         let (text, _) = request("github.com", "alice");
-        let a = Answer { login: "alice".into(), password: Some("Brain-Yard-Idle-Ethics-Aunt1".into()), totp: Some("287082".into()) };
+        let a = Answer { login: "alice".into(), password: Some("G<)WH@t!d3S!<_&~+V~p{_SA!wh3H{3s".into()), totp: Some("287082".into()) };
         println!("REQUEST={}", serde_json::to_string(&text).unwrap());
         println!("RESPONSE={}", respond(&text, &a).unwrap());
     }

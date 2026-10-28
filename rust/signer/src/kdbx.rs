@@ -90,7 +90,7 @@ pub fn entries_from_vault(vault: &crate::totp::Vault, seed_phrase: &str) -> Resu
             username: p.login.clone(),
             url: format!("https://{}", p.site),
             password: Some(p.password(seed_phrase)?),
-            notes: format!("Derived by Zigner (passwords v1, counter {}). The seed regenerates it.", p.counter),
+            notes: format!("Derived by Zigner (zafu password scheme 2, rotation {}). The seed regenerates it.", p.rotation),
             ..Default::default()
         });
     }
@@ -368,11 +368,11 @@ mod tests {
 
     #[test]
     fn vault_export_through_keepassxc() {
-        use crate::passwords::{Policy, Profile};
+        use crate::passwords::Profile;
         const SEED: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let mut v = crate::totp::Vault::new();
         v.add(crate::totp::Account::from_uri("otpauth://totp/ssh2fa:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=ssh2fa").unwrap()).unwrap();
-        v.add_profile(Profile::new("github.com", "alice", 1, Policy::default()).unwrap()).unwrap();
+        v.add_profile(Profile::new("github.com", "alice", 0, 32).unwrap()).unwrap();
         let path = tmp("vault");
         // The real cost parameters, so KeePassXC is checked against what ships.
         std::fs::write(&path, write("Zigner main", &entries_from_vault(&v, SEED).unwrap(), "correct horse", Kdf::default()).unwrap()).unwrap();
@@ -380,9 +380,9 @@ mod tests {
             eprintln!("keepassxc-cli not installed; skipping");
             return;
         }
-        // The frozen v1 vector, read back out of KeePassXC.
+        // Zafu's v2 vector, read back out of KeePassXC.
         let (ok, pw) = run_show(&path, "github.com", &["-a", "Password"]);
-        assert!(ok && pw.trim() == "Brain-Yard-Idle-Ethics-Aunt1", "{}", pw);
+        assert!(ok && pw.trim() == "G<)WH@t!d3S!<_&~+V~p{_SA!wh3H{3s", "{}", pw);
         let (ok, user) = run_show(&path, "github.com", &["-a", "UserName", "-a", "URL"]);
         assert!(ok && user.contains("alice") && user.contains("https://github.com"), "{}", user);
         let (ok, code) = run_show(&path, "ssh2fa (TOTP)", &["--totp"]);

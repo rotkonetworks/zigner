@@ -373,7 +373,7 @@ impl Vault {
         Ok(self.plain.profiles.len() - 1)
     }
 
-    /// Replaces a profile, e.g. to bump its counter after a password change.
+    /// Replaces a profile, e.g. to bump its rotation after a password change.
     pub fn update_profile(&mut self, index: usize, profile: Profile) -> Result<(), String> {
         profile.validate()?;
         if self.plain.profiles.iter().enumerate().any(|(i, p)| i != index && p.same_site(&profile)) {
@@ -391,7 +391,7 @@ impl Vault {
     }
 
     /// Adds every entry of `other` not already here. Returns how many. For a
-    /// site in both, the higher counter wins: it is the newer password.
+    /// site in both, the higher rotation wins: it is the newer password.
     pub fn merge(&mut self, other: Vault) -> Result<usize, String> {
         let mut added = 0;
         for a in other.plain.accounts.iter() {
@@ -402,7 +402,7 @@ impl Vault {
         }
         for p in other.plain.profiles.iter() {
             match self.plain.profiles.iter_mut().find(|q| q.same_site(p)) {
-                Some(q) if q.counter < p.counter => *q = p.clone(),
+                Some(q) if q.rotation < p.rotation => *q = p.clone(),
                 Some(_) => {}
                 None => {
                     self.add_profile(p.clone())?;
@@ -939,21 +939,20 @@ mod tests {
 
     #[test]
     fn vault_holds_profiles() {
-        use crate::passwords::Policy;
         let mut v = Vault::new();
         v.add(account("one")).unwrap();
-        v.add_profile(Profile::new("github.com", "alice", 1, Policy::default()).unwrap()).unwrap();
-        assert!(v.add_profile(Profile::new("GitHub.com", "alice", 3, Policy::default()).unwrap()).is_err());
+        v.add_profile(Profile::new("github.com", "alice", 0, 32).unwrap()).unwrap();
+        assert!(v.add_profile(Profile::new("GitHub.com", "alice", 2, 32).unwrap()).is_err());
         let blob = v.seal(SEED).unwrap();
         assert_eq!(read_header(&blob).unwrap().count, 2);
         let mut w = Vault::open(SEED, &blob).unwrap();
-        // Restoring an older backup must not roll a bumped counter back.
-        w.update_profile(0, Profile::new("github.com", "alice", 2, Policy::default()).unwrap()).unwrap();
+        // Restoring an older backup must not roll a bumped rotation back.
+        w.update_profile(0, Profile::new("github.com", "alice", 1, 32).unwrap()).unwrap();
         w.merge(Vault::open(SEED, &blob).unwrap()).unwrap();
-        assert_eq!(w.profiles()[0].counter, 2);
+        assert_eq!(w.profiles()[0].rotation, 1);
         let mut old = Vault::open(SEED, &blob).unwrap();
         old.merge(w).unwrap();
-        assert_eq!(old.profiles()[0].counter, 2);
+        assert_eq!(old.profiles()[0].rotation, 1);
     }
 
     #[test]
