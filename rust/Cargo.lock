@@ -1833,16 +1833,12 @@ dependencies = [
  "libsecp256k1",
  "parity-scale-codec",
  "pretty_assertions",
- "sc-executor-common",
- "sc-executor-wasmi",
  "serde",
  "serde_json",
  "sled",
  "sp-core",
- "sp-io",
  "sp-runtime",
  "sp-version",
- "sp-wasm-interface",
  "thiserror 1.0.69",
 ]
 
@@ -4491,7 +4487,7 @@ dependencies = [
  "hex",
  "module_host",
  "sha2 0.10.8",
- "zstd 0.14.3",
+ "zstd",
 ]
 
 [[package]]
@@ -4505,7 +4501,7 @@ dependencies = [
  "sha2 0.10.8",
  "wasmi 0.38.0",
  "wat",
- "zstd 0.14.3",
+ "zstd",
 ]
 
 [[package]]
@@ -6834,48 +6830,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-allocator"
-version = "4.1.0-dev"
-source = "git+https://github.com/paritytech/substrate?rev=49734dd1d72a00b9d3b87ba397661a63e0e17af3#49734dd1d72a00b9d3b87ba397661a63e0e17af3"
-dependencies = [
- "log",
- "sp-core",
- "sp-wasm-interface",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "sc-executor-common"
-version = "0.10.0-dev"
-source = "git+https://github.com/paritytech/substrate?rev=49734dd1d72a00b9d3b87ba397661a63e0e17af3#49734dd1d72a00b9d3b87ba397661a63e0e17af3"
-dependencies = [
- "environmental",
- "parity-scale-codec",
- "sc-allocator",
- "sp-maybe-compressed-blob",
- "sp-sandbox",
- "sp-wasm-interface",
- "thiserror 1.0.69",
- "wasm-instrument",
- "wasmi 0.13.2",
-]
-
-[[package]]
-name = "sc-executor-wasmi"
-version = "0.10.0-dev"
-source = "git+https://github.com/paritytech/substrate?rev=49734dd1d72a00b9d3b87ba397661a63e0e17af3#49734dd1d72a00b9d3b87ba397661a63e0e17af3"
-dependencies = [
- "log",
- "parity-scale-codec",
- "sc-allocator",
- "sc-executor-common",
- "sp-runtime-interface",
- "sp-sandbox",
- "sp-wasm-interface",
- "wasmi 0.13.2",
-]
-
-[[package]]
 name = "scale-bits"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7805,15 +7759,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sp-maybe-compressed-blob"
-version = "4.1.0-dev"
-source = "git+https://github.com/paritytech/substrate?rev=49734dd1d72a00b9d3b87ba397661a63e0e17af3#49734dd1d72a00b9d3b87ba397661a63e0e17af3"
-dependencies = [
- "thiserror 1.0.69",
- "zstd 0.11.2+zstd.1.5.2",
-]
-
-[[package]]
 name = "sp-panic-handler"
 version = "4.0.0"
 source = "git+https://github.com/paritytech/substrate?rev=49734dd1d72a00b9d3b87ba397661a63e0e17af3#49734dd1d72a00b9d3b87ba397661a63e0e17af3"
@@ -7874,20 +7819,6 @@ dependencies = [
  "proc-macro2 1.0.93",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "sp-sandbox"
-version = "0.10.0-dev"
-source = "git+https://github.com/paritytech/substrate?rev=49734dd1d72a00b9d3b87ba397661a63e0e17af3#49734dd1d72a00b9d3b87ba397661a63e0e17af3"
-dependencies = [
- "log",
- "parity-scale-codec",
- "sp-core",
- "sp-io",
- "sp-std 4.0.0",
- "sp-wasm-interface",
- "wasmi 0.13.2",
 ]
 
 [[package]]
@@ -9325,15 +9256,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-instrument"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa1dafb3e60065305741e83db35c6c2584bb3725b692b5b66148a38d72ace6cd"
-dependencies = [
- "parity-wasm",
-]
-
-[[package]]
 name = "wasmi"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10491,30 +10413,11 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.11.2+zstd.1.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20cc960326ece64f010d2d2107537f26dc589a6573a316bd5b1dba685fa5fde4"
-dependencies = [
- "zstd-safe 5.0.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zstd"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
- "zstd-safe 8.2.0",
-]
-
-[[package]]
-name = "zstd-safe"
-version = "5.0.2+zstd.1.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d2a5585e04f9eea4b2a3d1eca508c4dee9592a89ef6f450c11719da0726f4db"
-dependencies = [
- "libc",
- "zstd-sys",
+ "zstd-safe",
 ]
 
 [[package]]

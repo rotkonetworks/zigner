@@ -61,13 +61,6 @@ ignore = [
     # basic-toml unmaintained (no vulnerability) - read at compile time by the
     # i18n-embed-fl proc macro behind age; nothing on the device parses TOML.
     "RUSTSEC-2026-0374",
-    # zstd-safe 5 legacy-frame decompression advisory - pulled in by
-    # substrate's sp-maybe-compressed-blob (sc-executor-common pin). Its only
-    # caller is MetaValues::from_wasm_file, reached only from generate_message
-    # on a developer machine reading a runtime it built; the device never
-    # decompresses with zstd-sys (module_host uses pure-Rust ruzstd). Our own
-    # packer and tests are on zstd 0.14.3.
-    "RUSTSEC-2026-0403",
     # crypto-bigint 0.5 timing variability - via k256 0.13 (bip32 0.5, used by
     # penumbra-sdk-keys and the cosmos path). The fix is in 0.7, which needs the
     # k256 0.14 stack those crates cannot take yet. Signing runs on an offline
