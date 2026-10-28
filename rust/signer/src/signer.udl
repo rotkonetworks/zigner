@@ -991,6 +991,97 @@ namespace signer {
     sequence<u8> derive_hot_wallet_qr([ByRef] string seed_phrase);
 
     // ========================================================================
+    // Offline TOTP authenticator (see totp.rs)
+    // ========================================================================
+
+    // Add an account from a scanned otpauth:// QR. Seals the vault again,
+    // so the backup badge comes on.
+    [Throws=ErrorDisplayed]
+    TotpAccount totp_add([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string otpauth_uri);
+
+    // Current and next code for every account. Fails with a clock message
+    // when the device time cannot be trusted.
+    [Throws=ErrorDisplayed]
+    TotpCodes totp_codes([ByRef] string seed_name, [ByRef] string seed_phrase);
+
+    [Throws=ErrorDisplayed]
+    void totp_remove([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
+
+    // Needs no seed: drives the "not backed up" badge.
+    [Throws=ErrorDisplayed]
+    TotpBackupStatus totp_backup_status([ByRef] string seed_name);
+
+    // The sealed vault, for a QR (bytes) or for printing (text). Safe to
+    // show: useless without the seed.
+    [Throws=ErrorDisplayed]
+    TotpBackup totp_export_backup([ByRef] string seed_name);
+
+    // Call once the user has saved the export of `generation`.
+    [Throws=ErrorDisplayed]
+    void totp_confirm_backup([ByRef] string seed_name, u64 generation);
+
+    // Restore a backup (QR bytes or text) made under the same seed.
+    // Returns how many accounts were added.
+    [Throws=ErrorDisplayed]
+    u32 totp_restore_backup([ByRef] string seed_name, [ByRef] string seed_phrase, sequence<u8> backup);
+
+    // Compare a scanned `zigner-time-v1:<unix>` QR with the device clock.
+    // Show both times; call totp_set_clock_offset only if the user agrees.
+    [Throws=ErrorDisplayed]
+    TotpClockCheck totp_check_time_qr([ByRef] string time_qr);
+
+    [Throws=ErrorDisplayed]
+    void totp_set_clock_offset(i64 offset_seconds);
+
+    // The vault backup as animated UR QR frames (ur:zigner-totp-vault).
+    // max_fragment_len: 0 = single QR.
+    [Throws=ErrorDisplayed]
+    sequence<QrData> totp_export_backup_qr([ByRef] string seed_name, u32 max_fragment_len);
+
+    // ========================================================================
+    // Seed-derived site passwords (see passwords.rs)
+    // ========================================================================
+
+    // `https://www.GitHub.com/login` -> `github.com`. Show it before saving:
+    // a different spelling is a different password.
+    string pass_normalize_site([ByRef] string site);
+
+    // The password a profile would give, before saving it.
+    [Throws=ErrorDisplayed]
+    string pass_preview([ByRef] string seed_phrase, [ByRef] string site, [ByRef] string login, u32 counter, PassPolicy policy);
+
+    [Throws=ErrorDisplayed]
+    PassProfile pass_add([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string site, [ByRef] string login, PassPolicy policy);
+
+    // Profiles only, never passwords.
+    [Throws=ErrorDisplayed]
+    sequence<PassProfile> pass_list([ByRef] string seed_name, [ByRef] string seed_phrase);
+
+    [Throws=ErrorDisplayed]
+    string pass_reveal([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
+
+    // New password for a site (counter + 1), after a breach or a forced change.
+    [Throws=ErrorDisplayed]
+    PassProfile pass_rotate([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
+
+    [Throws=ErrorDisplayed]
+    void pass_remove([ByRef] string seed_name, [ByRef] string seed_phrase, u32 index);
+
+    // ========================================================================
+    // KeePass export
+    // ========================================================================
+
+    // Every TOTP account and site password as a KDBX 4 file (Argon2id,
+    // ChaCha20) under `kdbx_password`. KeePassXC opens it without Zigner;
+    // anyone with the file and password has all of it.
+    [Throws=ErrorDisplayed]
+    sequence<u8> vault_export_kdbx([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string kdbx_password);
+
+    // The same file as animated UR QR frames (ur:zigner-kdbx).
+    [Throws=ErrorDisplayed]
+    sequence<QrData> vault_export_kdbx_qr([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string kdbx_password, u32 max_fragment_len);
+
+    // ========================================================================
     // Contacts (address book)
     // ========================================================================
 
@@ -1621,6 +1712,70 @@ dictionary ZcashTransactionSummary {
 };
 
 // Auth sign result
+dictionary TotpAccount {
+    u32 index;
+    string issuer;
+    string label;
+    string algorithm;
+    u32 digits;
+    u64 period;
+};
+
+dictionary TotpCode {
+    TotpAccount account;
+    string code;
+    string next_code;
+    u64 seconds_left;
+};
+
+dictionary TotpCodes {
+    u64 now;
+    i64 clock_offset;
+    sequence<TotpCode> codes;
+};
+
+dictionary TotpBackupStatus {
+    boolean has_vault;
+    u32 entries;
+    u64 generation;
+    u64 backed_up_generation;
+    boolean needs_backup;
+};
+
+dictionary TotpBackup {
+    u64 generation;
+    u32 entries;
+    sequence<u8> bytes;
+    string text;
+};
+
+// Flat for FFI: `words` picks the mode; the other mode's fields are ignored.
+dictionary PassPolicy {
+    boolean words;
+    u32 length;
+    boolean lower;
+    boolean upper;
+    boolean digits;
+    string symbols;
+    u32 word_count;
+    string separator;
+    boolean decorate;
+};
+
+dictionary PassProfile {
+    u32 index;
+    string site;
+    string login;
+    u32 counter;
+    PassPolicy policy;
+};
+
+dictionary TotpClockCheck {
+    u64 device_time;
+    u64 reference_time;
+    i64 offset;
+};
+
 dictionary AuthSignResult {
     string pubkey_hex;
     string signature_hex;

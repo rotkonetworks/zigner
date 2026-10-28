@@ -280,6 +280,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "ark-bls12-377"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7397,7 +7409,9 @@ dependencies = [
  "age",
  "android_logger",
  "anyhow",
+ "argon2",
  "base64 0.22.1",
+ "chacha20 0.9.1",
  "chacha20poly1305 0.10.1",
  "constants",
  "db_handling",
@@ -7405,6 +7419,7 @@ dependencies = [
  "ed25519-dalek",
  "env_logger",
  "ffi-support",
+ "flate2",
  "frost-spend",
  "generate_message",
  "hex",
@@ -7423,6 +7438,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.10.8",
  "sled",
  "sp-core",

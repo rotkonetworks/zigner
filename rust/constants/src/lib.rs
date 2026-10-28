@@ -126,6 +126,12 @@ pub const ANCHOR_VERIFIERS_TREE: &[u8] = b"anchor_verifiers";
 /// Key: address string bytes, Value: JSON-encoded contact metadata
 pub const CONTACTS_TREE: &[u8] = b"contacts";
 
+/// Tree name for the offline TOTP authenticator. Keys: `vault:<seed name>`
+/// (the vault sealed under that seed), `backed-up:<seed name>` (u64 BE, the
+/// last generation the user confirmed as backed up) and `clock` (offset i64
+/// BE || latest seen u64 BE).
+pub const TOTP_TREE: &[u8] = b"totp";
+
 /// Rotko Networks ed25519 public key for Zcash anchor verification.
 /// The signer trusts this key to attest that anchors come from the real chain.
 /// Same trust model as Parity's verifier key in Polkadot Vault.

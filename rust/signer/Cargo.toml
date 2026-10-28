@@ -37,6 +37,12 @@ zcash_note_encryption = "0.4"
 # Auth identity derivation (HMAC-SHA512 KDF) and backup encryption
 hmac = "0.12"
 hkdf = "0.12"
+# TOTP accounts from websites are mostly HMAC-SHA1 (RFC 6238 default).
+sha1 = "0.10"
+# KeePass (KDBX 4) export: Argon2id KDF, ChaCha20 outer and inner streams, gzip.
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+chacha20 = "0.9"
+flate2 = "1.0"
 # FROST multisig backup: PBKDF2-SHA512 + AES-GCM-256 (matches zafu @repo/encryption).
 pbkdf2 = "0.12"
 aes-gcm = "0.10"

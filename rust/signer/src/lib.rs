@@ -38,6 +38,9 @@ pub mod frost_multisig;
 pub mod release_signing;
 pub use release_signing::ReleaseSigningRequest;
 pub mod ssh;
+pub mod kdbx;
+pub mod passwords;
+pub mod totp;
 mod zcash_consensus_gate;
 
 use crate::ffi_types::*;
@@ -3523,6 +3526,313 @@ fn minimal_byteword(byte: u8) -> &'static str {
 }
 
 // ── contacts (address book) ──
+
+// ============================================================================
+// Offline TOTP authenticator
+// ============================================================================
+
+pub struct TotpAccount {
+    pub index: u32,
+    pub issuer: String,
+    pub label: String,
+    pub algorithm: String,
+    pub digits: u32,
+    pub period: u64,
+}
+
+pub struct TotpCode {
+    pub account: TotpAccount,
+    pub code: String,
+    pub next_code: String,
+    pub seconds_left: u64,
+}
+
+pub struct TotpCodes {
+    pub now: u64,
+    pub clock_offset: i64,
+    pub codes: Vec<TotpCode>,
+}
+
+pub struct TotpBackupStatus {
+    pub has_vault: bool,
+    pub entries: u32,
+    pub generation: u64,
+    pub backed_up_generation: u64,
+    pub needs_backup: bool,
+}
+
+pub struct TotpBackup {
+    pub generation: u64,
+    pub entries: u32,
+    pub bytes: Vec<u8>,
+    pub text: String,
+}
+
+pub struct TotpClockCheck {
+    pub device_time: u64,
+    pub reference_time: u64,
+    pub offset: i64,
+}
+
+fn totp_err(s: String) -> ErrorDisplayed {
+    ErrorDisplayed::Str { s }
+}
+
+fn device_time() -> Result<u64, ErrorDisplayed> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|_| totp_err("the device clock is before 1970".into()))
+}
+
+fn totp_view(index: usize, a: &totp::Account) -> TotpAccount {
+    TotpAccount {
+        index: index as u32,
+        issuer: a.issuer.clone(),
+        label: a.label.clone(),
+        algorithm: a.algorithm.name().to_string(),
+        digits: a.digits,
+        period: a.period,
+    }
+}
+
+fn totp_add(seed_name: &str, seed_phrase: &str, otpauth_uri: &str) -> Result<TotpAccount, ErrorDisplayed> {
+    let db = get_db()?;
+    let account = totp::Account::from_uri(otpauth_uri).map_err(totp_err)?;
+    let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    let index = vault.add(account).map_err(totp_err)?;
+    totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
+    Ok(totp_view(index, &vault.accounts()[index]))
+}
+
+fn totp_codes(seed_name: &str, seed_phrase: &str) -> Result<TotpCodes, ErrorDisplayed> {
+    let db = get_db()?;
+    let vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    let mut clock = totp::store::clock(&db).map_err(totp_err)?;
+    let before = clock;
+    let now = clock.now(device_time()?).map_err(|e| totp_err(e.to_string()))?;
+    if clock != before {
+        totp::store::save_clock(&db, &clock).map_err(totp_err)?;
+    }
+    let codes = vault
+        .accounts()
+        .iter()
+        .enumerate()
+        .map(|(i, a)| TotpCode {
+            account: totp_view(i, a),
+            code: a.code_at(now),
+            next_code: a.code_at(now + a.period),
+            seconds_left: a.seconds_left(now),
+        })
+        .collect();
+    Ok(TotpCodes { now, clock_offset: clock.offset, codes })
+}
+
+fn totp_remove(seed_name: &str, seed_phrase: &str, index: u32) -> Result<(), ErrorDisplayed> {
+    let db = get_db()?;
+    let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    vault.remove(index as usize).map_err(totp_err)?;
+    totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
+    Ok(())
+}
+
+fn totp_backup_status(seed_name: &str) -> Result<TotpBackupStatus, ErrorDisplayed> {
+    let st = totp::store::status(&get_db()?, seed_name).map_err(totp_err)?;
+    Ok(TotpBackupStatus {
+        has_vault: st.has_vault,
+        entries: st.accounts,
+        generation: st.generation,
+        backed_up_generation: st.backed_up_generation,
+        needs_backup: st.needs_backup(),
+    })
+}
+
+fn totp_export_backup(seed_name: &str) -> Result<TotpBackup, ErrorDisplayed> {
+    let bytes = totp::store::blob(&get_db()?, seed_name)
+        .map_err(totp_err)?
+        .ok_or_else(|| totp_err("there are no TOTP accounts to back up".into()))?;
+    let h = totp::read_header(&bytes).map_err(totp_err)?;
+    let text = totp::backup_to_text(&bytes);
+    Ok(TotpBackup { generation: h.generation, entries: h.count, bytes, text })
+}
+
+fn totp_confirm_backup(seed_name: &str, generation: u64) -> Result<(), ErrorDisplayed> {
+    totp::store::confirm_backup(&get_db()?, seed_name, generation).map_err(totp_err)
+}
+
+fn totp_restore_backup(seed_name: &str, seed_phrase: &str, backup: Vec<u8>) -> Result<u32, ErrorDisplayed> {
+    totp::store::restore(&get_db()?, seed_name, seed_phrase, &backup).map_err(totp_err)
+}
+
+fn totp_check_time_qr(time_qr: &str) -> Result<TotpClockCheck, ErrorDisplayed> {
+    let reference_time = totp::parse_time_qr(time_qr).map_err(totp_err)?;
+    let device_time = device_time()?;
+    let offset = totp::Clock::proposed_offset(device_time, reference_time).map_err(totp_err)?;
+    Ok(TotpClockCheck { device_time, reference_time, offset })
+}
+
+fn totp_set_clock_offset(offset_seconds: i64) -> Result<(), ErrorDisplayed> {
+    let db = get_db()?;
+    let mut clock = totp::store::clock(&db).map_err(totp_err)?;
+    clock.set_offset(offset_seconds).map_err(totp_err)?;
+    totp::store::save_clock(&db, &clock).map_err(totp_err)
+}
+
+/// Bytes as UR frames (a CBOR byte string, fountain-coded when it does not
+/// fit one fragment), rendered as sensitive QR images.
+fn bytes_to_ur_qr(bytes: &[u8], ur_type: &str, max_fragment_len: u32) -> Result<Vec<QrData>, ErrorDisplayed> {
+    let mut cbor = Vec::with_capacity(bytes.len() + 5);
+    match bytes.len() {
+        n @ 0..=23 => cbor.push(0x40 | n as u8),
+        n @ 24..=0xff => cbor.extend_from_slice(&[0x58, n as u8]),
+        n @ 0x100..=0xffff => {
+            cbor.push(0x59);
+            cbor.extend_from_slice(&(n as u16).to_be_bytes());
+        }
+        n => {
+            cbor.push(0x5a);
+            cbor.extend_from_slice(&(n as u32).to_be_bytes());
+        }
+    }
+    cbor.extend_from_slice(bytes);
+    let frames = if max_fragment_len == 0 || cbor.len() <= max_fragment_len as usize {
+        vec![ur::ur::encode(&cbor, &ur::Type::Custom(ur_type))]
+    } else {
+        let mut encoder = ur::ur::Encoder::new(&cbor, max_fragment_len as usize, ur_type)
+            .map_err(|e| totp_err(format!("UR encoder: {e:?}")))?;
+        (0..encoder.fragment_count() * 2)
+            .map(|_| encoder.next_part().map_err(|e| totp_err(format!("UR part: {e:?}"))))
+            .collect::<Result<_, _>>()?
+    };
+    frames
+        .iter()
+        .map(|f| {
+            qrcode_static::png_qr_from_string(f, qrcode_static::DataType::Sensitive)
+                .map(|data| QrData::Sensitive { data })
+                .map_err(|e| totp_err(format!("QR encoding error: {e}")))
+        })
+        .collect()
+}
+
+fn totp_export_backup_qr(seed_name: &str, max_fragment_len: u32) -> Result<Vec<QrData>, ErrorDisplayed> {
+    let backup = totp_export_backup(seed_name)?;
+    bytes_to_ur_qr(&backup.bytes, "zigner-totp-vault", max_fragment_len)
+}
+
+pub struct PassPolicy {
+    pub words: bool,
+    pub length: u32,
+    pub lower: bool,
+    pub upper: bool,
+    pub digits: bool,
+    pub symbols: String,
+    pub word_count: u32,
+    pub separator: String,
+    pub decorate: bool,
+}
+
+pub struct PassProfile {
+    pub index: u32,
+    pub site: String,
+    pub login: String,
+    pub counter: u32,
+    pub policy: PassPolicy,
+}
+
+impl From<PassPolicy> for passwords::Policy {
+    fn from(p: PassPolicy) -> Self {
+        if p.words {
+            Self::Words { count: p.word_count, separator: p.separator, decorate: p.decorate }
+        } else {
+            Self::Chars { length: p.length, lower: p.lower, upper: p.upper, digits: p.digits, symbols: p.symbols }
+        }
+    }
+}
+
+fn pass_view(index: usize, p: &passwords::Profile) -> PassProfile {
+    // The other mode's fields carry defaults, so a UI toggle starts sensibly.
+    let mut policy = PassPolicy {
+        words: false,
+        length: 20,
+        lower: true,
+        upper: true,
+        digits: true,
+        symbols: passwords::DEFAULT_SYMBOLS.into(),
+        word_count: 5,
+        separator: "-".into(),
+        decorate: true,
+    };
+    match &p.policy {
+        passwords::Policy::Chars { length, lower, upper, digits, symbols } => {
+            (policy.length, policy.lower, policy.upper, policy.digits) = (*length, *lower, *upper, *digits);
+            policy.symbols = symbols.clone();
+        }
+        passwords::Policy::Words { count, separator, decorate } => {
+            policy.words = true;
+            (policy.word_count, policy.decorate) = (*count, *decorate);
+            policy.separator = separator.clone();
+        }
+    }
+    PassProfile { index: index as u32, site: p.site.clone(), login: p.login.clone(), counter: p.counter, policy }
+}
+
+fn pass_normalize_site(site: &str) -> String {
+    passwords::normalize_site(site)
+}
+
+fn pass_preview(seed_phrase: &str, site: &str, login: &str, counter: u32, policy: PassPolicy) -> Result<String, ErrorDisplayed> {
+    let p = passwords::Profile::new(site, login, counter, policy.into()).map_err(totp_err)?;
+    Ok(p.password(seed_phrase).map_err(totp_err)?.to_string())
+}
+
+fn pass_add(seed_name: &str, seed_phrase: &str, site: &str, login: &str, policy: PassPolicy) -> Result<PassProfile, ErrorDisplayed> {
+    let db = get_db()?;
+    let p = passwords::Profile::new(site, login, 1, policy.into()).map_err(totp_err)?;
+    let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    let index = vault.add_profile(p).map_err(totp_err)?;
+    totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
+    Ok(pass_view(index, &vault.profiles()[index]))
+}
+
+fn pass_list(seed_name: &str, seed_phrase: &str) -> Result<Vec<PassProfile>, ErrorDisplayed> {
+    let vault = totp::store::open(&get_db()?, seed_name, seed_phrase).map_err(totp_err)?;
+    Ok(vault.profiles().iter().enumerate().map(|(i, p)| pass_view(i, p)).collect())
+}
+
+fn pass_reveal(seed_name: &str, seed_phrase: &str, index: u32) -> Result<String, ErrorDisplayed> {
+    let vault = totp::store::open(&get_db()?, seed_name, seed_phrase).map_err(totp_err)?;
+    let p = vault.profiles().get(index as usize).ok_or_else(|| totp_err("no such site".into()))?;
+    Ok(p.password(seed_phrase).map_err(totp_err)?.to_string())
+}
+
+fn pass_rotate(seed_name: &str, seed_phrase: &str, index: u32) -> Result<PassProfile, ErrorDisplayed> {
+    let db = get_db()?;
+    let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    let mut p = vault.profiles().get(index as usize).cloned().ok_or_else(|| totp_err("no such site".into()))?;
+    p.counter = p.counter.checked_add(1).ok_or_else(|| totp_err("counter overflow".into()))?;
+    vault.update_profile(index as usize, p).map_err(totp_err)?;
+    totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
+    Ok(pass_view(index as usize, &vault.profiles()[index as usize]))
+}
+
+fn pass_remove(seed_name: &str, seed_phrase: &str, index: u32) -> Result<(), ErrorDisplayed> {
+    let db = get_db()?;
+    let mut vault = totp::store::open(&db, seed_name, seed_phrase).map_err(totp_err)?;
+    vault.remove_profile(index as usize).map_err(totp_err)?;
+    totp::store::save(&db, seed_name, seed_phrase, &mut vault).map_err(totp_err)?;
+    Ok(())
+}
+
+fn vault_export_kdbx(seed_name: &str, seed_phrase: &str, kdbx_password: &str) -> Result<Vec<u8>, ErrorDisplayed> {
+    let vault = totp::store::open(&get_db()?, seed_name, seed_phrase).map_err(totp_err)?;
+    let entries = kdbx::entries_from_vault(&vault, seed_phrase).map_err(totp_err)?;
+    kdbx::write(&format!("Zigner {seed_name}"), &entries, kdbx_password, kdbx::Kdf::default()).map_err(totp_err)
+}
+
+fn vault_export_kdbx_qr(seed_name: &str, seed_phrase: &str, kdbx_password: &str, max_fragment_len: u32) -> Result<Vec<QrData>, ErrorDisplayed> {
+    let file = vault_export_kdbx(seed_name, seed_phrase, kdbx_password)?;
+    bytes_to_ur_qr(&file, "zigner-kdbx", max_fragment_len)
+}
 
 fn store_contact(address: &str, label: &str, chain_id: &str) -> Result<(), ErrorDisplayed> {
     let db = get_db()?;
