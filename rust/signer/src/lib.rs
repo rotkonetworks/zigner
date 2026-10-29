@@ -544,11 +544,14 @@ fn get_managed_networks() -> anyhow::Result<MManageNetworks, ErrorDisplayed> {
     })
 }
 
-/// Whether this device holds a Penumbra key. The camera parses Penumbra
-/// requests only when it does.
-fn has_penumbra_keys() -> anyhow::Result<bool, ErrorDisplayed> {
-    db_handling::identities::has_keys_for(&get_db()?, definitions::crypto::Encryption::Penumbra)
-        .map_err(|e| e.to_string().into())
+/// The kinds of QR code the camera may parse on this device, as
+/// `db_handling::scan_policy` ids. Derived from what the device holds.
+fn scan_readable() -> anyhow::Result<Vec<String>, ErrorDisplayed> {
+    Ok(db_handling::scan_policy::readable(&get_db()?)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(String::from)
+        .collect())
 }
 
 fn get_logs() -> anyhow::Result<MLog, ErrorDisplayed> {

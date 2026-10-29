@@ -10,8 +10,6 @@ import net.rotko.zigner.domain.encodeHex
 import net.rotko.zigner.domain.submitErrorState
 import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
-import io.parity.signer.uniffi.ErrorDisplayed
-import io.parity.signer.uniffi.hasPenumbraKeys
 import io.parity.signer.uniffi.decodeUrModuleRequest
 import io.parity.signer.uniffi.decodeUrZcashPczt
 import io.parity.signer.uniffi.releaseClassifyRequest
@@ -43,11 +41,10 @@ class CameraViewModel() : ViewModel() {
 	// reaches a parser. Classifying by prefix first is a fixed-length string
 	// compare, not the thing being defended against.
 	//
-	// Defaults rather than empty when unset: a missed wiring call should not
-	// brick scanning. Penumbra waits for applyPolicy to find a Penumbra key,
-	// and the defaults exclude Substrate and Cosmos, so a missed call never
-	// opens a parser this device has no use for.
-	private var allowed: Set<ScanCapability> = ScanPolicy.DEFAULT_ON - ScanCapability.PENUMBRA
+	// Until applyPolicy runs, only what an empty device needs: a missed
+	// wiring call can refuse a code, but never opens a parser for something
+	// this device does not hold.
+	private var allowed: Set<ScanCapability> = ScanPolicy.ALWAYS
 
 	private val _refusedCapability = MutableStateFlow<ScanCapability?>(null)
 
@@ -55,19 +52,10 @@ class CameraViewModel() : ViewModel() {
 	 *  appearing to ignore the code. */
 	val refusedCapability: StateFlow<ScanCapability?> = _refusedCapability.asStateFlow()
 
-	/** Penumbra is parsed only on a device that holds a Penumbra key. A
-	 *  Zcash-only device never runs the Penumbra parser. If the lookup
-	 *  fails, Penumbra stays off. */
-	fun applyPolicy(context: android.content.Context) {
-		val hasPenumbraKey = try {
-			hasPenumbraKeys()
-		} catch (e: ErrorDisplayed) {
-			Timber.e("[SCAN] key lookup failed, Penumbra stays off: $e")
-			false
-		}
-		allowed = ScanPolicy.enabled(context).let {
-			if (hasPenumbraKey) it else it - ScanCapability.PENUMBRA
-		}
+	/** Re-read on every camera open, so a key added or deleted since takes
+	 *  effect the next time the camera opens. */
+	fun applyPolicy() {
+		allowed = ScanPolicy.readable()
 	}
 
 	fun clearRefusal() {
@@ -314,7 +302,14 @@ class CameraViewModel() : ViewModel() {
 							val json = JSONObject(jsonText)
 							Timber.d("[FROST] JSON parsed; keys=${json.keys().asSequence().toList()}")
 							if (json.has("frost")) {
-								if (!allow(ScanCapability.FROST)) return@forEach
+								// Key generation starts with no wallet; every
+								// other FROST message needs one on this device.
+								val cap = if (json.optString("frost").startsWith("dkg")) {
+									ScanCapability.FROST_DKG
+								} else {
+									ScanCapability.FROST
+								}
+								if (!allow(cap)) return@forEach
 								Timber.d("[FROST] frost type=${json.optString("frost")} -> setting frostPayload")
 								resetScanValues()
 								_frostPayload.value = json

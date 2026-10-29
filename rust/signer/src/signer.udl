@@ -741,7 +741,7 @@ namespace signer {
     MManageNetworks get_managed_networks();
 
     [Throws=ErrorDisplayed]
-    boolean has_penumbra_keys();
+    sequence<string> scan_readable();
 
     void init_logging(string tag);
 
