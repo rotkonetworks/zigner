@@ -544,6 +544,13 @@ fn get_managed_networks() -> anyhow::Result<MManageNetworks, ErrorDisplayed> {
     })
 }
 
+/// Whether this device holds a Penumbra key. The camera parses Penumbra
+/// requests only when it does.
+fn has_penumbra_keys() -> anyhow::Result<bool, ErrorDisplayed> {
+    db_handling::identities::has_keys_for(&get_db()?, definitions::crypto::Encryption::Penumbra)
+        .map_err(|e| e.to_string().into())
+}
+
 fn get_logs() -> anyhow::Result<MLog, ErrorDisplayed> {
     let history = db_handling::manage_history::get_history(&get_db()?)
         .map_err(|e| ErrorDisplayed::from(e.to_string()))?;

@@ -2,6 +2,15 @@
 
 All notable changes to zigner are documented in this file.
 
+## Unreleased
+
+### Penumbra
+
+- **The camera parses Penumbra only on a device that has a Penumbra key.**
+  On a Zcash-only device, Penumbra codes are refused before the Penumbra
+  parser runs, and a message says no Penumbra key is on the device. Adding a
+  Penumbra key turns it back on.
+
 ## 0.13.0 - 2026-10-29
 
 Minor. **Penumbra users: read the first entry.**

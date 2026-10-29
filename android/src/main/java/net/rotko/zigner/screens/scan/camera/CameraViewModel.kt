@@ -10,6 +10,8 @@ import net.rotko.zigner.domain.encodeHex
 import net.rotko.zigner.domain.submitErrorState
 import io.parity.signer.uniffi.BananaSplitRecoveryResult
 import io.parity.signer.uniffi.DecodeSequenceResult
+import io.parity.signer.uniffi.ErrorDisplayed
+import io.parity.signer.uniffi.hasPenumbraKeys
 import io.parity.signer.uniffi.decodeUrModuleRequest
 import io.parity.signer.uniffi.decodeUrZcashPczt
 import io.parity.signer.uniffi.releaseClassifyRequest
@@ -42,9 +44,10 @@ class CameraViewModel() : ViewModel() {
 	// compare, not the thing being defended against.
 	//
 	// Defaults rather than empty when unset: a missed wiring call should not
-	// brick scanning, and the defaults already exclude Substrate, Penumbra and
-	// Cosmos, so the security property survives that mistake.
-	private var allowed: Set<ScanCapability> = ScanPolicy.DEFAULT_ON
+	// brick scanning. Penumbra waits for applyPolicy to find a Penumbra key,
+	// and the defaults exclude Substrate and Cosmos, so a missed call never
+	// opens a parser this device has no use for.
+	private var allowed: Set<ScanCapability> = ScanPolicy.DEFAULT_ON - ScanCapability.PENUMBRA
 
 	private val _refusedCapability = MutableStateFlow<ScanCapability?>(null)
 
@@ -52,8 +55,19 @@ class CameraViewModel() : ViewModel() {
 	 *  appearing to ignore the code. */
 	val refusedCapability: StateFlow<ScanCapability?> = _refusedCapability.asStateFlow()
 
+	/** Penumbra is parsed only on a device that holds a Penumbra key. A
+	 *  Zcash-only device never runs the Penumbra parser. If the lookup
+	 *  fails, Penumbra stays off. */
 	fun applyPolicy(context: android.content.Context) {
-		allowed = ScanPolicy.enabled(context)
+		val hasPenumbraKey = try {
+			hasPenumbraKeys()
+		} catch (e: ErrorDisplayed) {
+			Timber.e("[SCAN] key lookup failed, Penumbra stays off: $e")
+			false
+		}
+		allowed = ScanPolicy.enabled(context).let {
+			if (hasPenumbraKey) it else it - ScanCapability.PENUMBRA
+		}
 	}
 
 	fun clearRefusal() {

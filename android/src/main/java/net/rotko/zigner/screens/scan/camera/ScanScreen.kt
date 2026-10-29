@@ -56,9 +56,9 @@ fun ScanScreen(
 	val viewModel: CameraViewModel = viewModel()
 
 	// Load the scan policy before any frame is processed. Without this the
-	// view model falls back to defaults, which still exclude Substrate,
-	// Penumbra and Cosmos - a missed call weakens the user's own choices but
-	// never opens the parsers the gate exists to keep unreachable.
+	// view model falls back to defaults, which exclude Substrate, Cosmos and
+	// Penumbra - a missed call can refuse a code, but never opens a parser
+	// the gate exists to keep unreachable.
 	val policyContext = LocalContext.current
 	LaunchedEffect(policyContext) { viewModel.applyPolicy(policyContext) }
 
@@ -72,6 +72,9 @@ fun ScanScreen(
 			// Substrate and Cosmos have no screens left to route to - this is
 			// not "off, enable it", it is not a request zigner reads at all.
 			policyContext.getString(R.string.scan_unsupported_request)
+		} else if (cap == ScanCapability.PENUMBRA) {
+			// Penumbra is refused only when this device holds no Penumbra key.
+			"No Penumbra key on this device. Add one to sign Penumbra."
 		} else {
 			"Zigner doesn't read ${cap.label} codes."
 		}

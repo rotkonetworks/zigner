@@ -2415,6 +2415,29 @@ fn test_validate_key_password() {
 }
 
 #[test]
+fn has_penumbra_keys_only_after_one_is_made() {
+    let dbname = tempdir().unwrap();
+    let db = sled::open(dbname).unwrap();
+
+    populate_all_network_specs(&db).unwrap();
+    try_create_seed(&db, "Alice", ALICE_SEED_PHRASE, true).unwrap();
+    assert!(!db_handling::identities::has_keys_for(&db, Encryption::Penumbra).unwrap());
+
+    let genesis =
+        H256::from_str("0000000000000000000000000000000000000000000000000000000000006532").unwrap();
+    let specs_key = NetworkSpecsKey::from_parts(&genesis, &Encryption::Penumbra);
+    try_create_address(
+        &db,
+        "Alice",
+        ALICE_SEED_PHRASE,
+        "m/44'/6532'/0'",
+        &specs_key,
+    )
+    .unwrap();
+    assert!(db_handling::identities::has_keys_for(&db, Encryption::Penumbra).unwrap());
+}
+
+#[test]
 fn export_alice_penumbra_is_tagged_penumbra() {
     let dbname = tempdir().unwrap();
     let db = sled::open(dbname).unwrap();

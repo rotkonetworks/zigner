@@ -956,6 +956,14 @@ pub fn inject_derivations_has_pwd(
     Ok(seed_derived_keys)
 }
 
+/// Whether any key on this device uses `encryption`.
+#[cfg(feature = "active")]
+pub fn has_keys_for(database: &sled::Db, encryption: Encryption) -> Result<bool> {
+    Ok(get_all_addresses(database)?
+        .iter()
+        .any(|(_, address_details)| address_details.encryption == encryption))
+}
+
 /// Get all existing addresses from the database.
 #[cfg(feature = "active")]
 pub fn get_all_addresses(database: &sled::Db) -> Result<Vec<(MultiSigner, AddressDetails)>> {
