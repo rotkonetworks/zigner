@@ -55,8 +55,15 @@ class CameraViewModel() : ViewModel() {
 	/** Re-read on every camera open, so a key added or deleted since takes
 	 *  effect the next time the camera opens. */
 	fun applyPolicy() {
-		allowed = ScanPolicy.readable()
+		val read = ScanPolicy.readable()
+		policyLookupFailed = read == null
+		allowed = read ?: ScanPolicy.ALWAYS
 	}
+
+	/** A failed lookup is a different fact from a missing key, and the
+	 *  refusal message says which one happened. */
+	var policyLookupFailed = false
+		private set
 
 	fun clearRefusal() {
 		_refusedCapability.value = null

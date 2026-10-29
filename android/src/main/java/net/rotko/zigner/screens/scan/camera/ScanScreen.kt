@@ -68,14 +68,18 @@ fun ScanScreen(
 		val cap = refused ?: return@LaunchedEffect
 		// Each refusal names what this device is missing; the camera reads
 		// a kind of code once the device holds something it is used with.
-		val message = when (cap) {
-			ScanCapability.SUBSTRATE, ScanCapability.COSMOS ->
+		val message = when {
+			cap == ScanCapability.SUBSTRATE || cap == ScanCapability.COSMOS ->
 				policyContext.getString(R.string.scan_unsupported_request)
-			ScanCapability.PENUMBRA -> "No Penumbra key on this device."
-			ScanCapability.ZCASH -> "No Zcash key or FROST wallet on this device."
-			ScanCapability.FROST -> "No FROST wallet on this device."
-			ScanCapability.AUTH -> "No key on this device."
-			else -> "Zigner doesn't read ${cap.label} codes."
+			viewModel.policyLookupFailed ->
+				"Couldn't read this device's keys, so only recovery and updates are on."
+			else -> when (cap) {
+				ScanCapability.PENUMBRA -> "No Penumbra key on this device."
+				ScanCapability.ZCASH -> "No Zcash key or FROST wallet on this device."
+				ScanCapability.FROST -> "No FROST wallet on this device."
+				ScanCapability.AUTH -> "No key on this device."
+				else -> "Zigner doesn't read ${cap.label} codes."
+			}
 		}
 		Toast.makeText(
 			policyContext,
