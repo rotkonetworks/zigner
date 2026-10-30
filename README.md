@@ -50,8 +50,8 @@ is recommended. See [Security and Privacy](docs/src/about/Security-And-Privacy.m
   never signs for another.
 - Penumbra requests carry a chain ID, which is checked on every signature.
 - The camera is the only input. Every QR code is classified first, and
-  Zigner refuses kinds it doesn't support before any parser runs. Polkadot
-  and Cosmos payloads are refused this way.
+  anything other than Zcash, Penumbra and Zigner's own codes is refused
+  before any parser runs.
 
 ## Penumbra
 
