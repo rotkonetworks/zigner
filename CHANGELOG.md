@@ -15,6 +15,27 @@ All notable changes to zigner are documented in this file.
   29.4.0. The unused code that signed supplied sighashes (`sign_pczt`,
   `ZcashAuthorizationData`) and an unused FROST attestation verifier are
   deleted with it.
+- **A hostile QR code can no longer crash or exhaust the phone through the
+  camera.**
+  - Every multi-frame transport now has a frame cap. Before, only one of
+    them did, and declared totals were trusted, so a crafted stream could
+    grow memory without bound or wrap a frame count negative.
+  - Animated UR frames are checked against the app's limits before the
+    fountain decoder sees them. One frame declaring hundreds of millions of
+    fragments made that decoder ask for gigabytes, on any device, since
+    module updates are always readable. A lone `1-1` frame now has its
+    checksum checked too.
+  - The note-import CBOR decoder no longer recurses into an unknown key, so
+    deep nesting cannot overflow the native stack. It also refuses trailing
+    bytes, strings that run past the end, and heights over 32 bits.
+  - FROST `P…` frames are parsed with bounds: a malformed index used to
+    crash the app, and a stream with gaps was assembled anyway. JSON
+    nested deeper than any real message is refused before parsing.
+  - The binary transport keeps its own frame total, so another transport's
+    frame can no longer make a single-frame request wait for more frames.
+  - The fountain and note-import decoders are retried at growing intervals
+    instead of every few frames, which kept a long hostile stream quadratic
+    on the main thread.
 - **iOS FROST signing is turned off.** Round 2 signed every action of a
   transaction with one nonce, which lets anyone who sees the signature
   shares recover this device's key share. The function that did it is
