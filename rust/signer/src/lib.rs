@@ -6089,6 +6089,62 @@ mod zcash_pczt_tests {
         );
     }
 
+    fn frost_verify_json(pczt: &[u8]) -> Result<serde_json::Value, String> {
+        crate::frost_multisig::frost_verify_pczt(&hex::encode(pczt), "", &wallet_uview())
+            .map(|j| serde_json::from_str(&j).unwrap())
+    }
+
+    /// A payment to someone else is listed as a send with its amount and the
+    /// fee; only an address of the group's own key is change.
+    #[test]
+    fn frost_verify_lists_the_payment_and_the_fee() {
+        use zcash_address::unified::{Address, Encoding, Receiver};
+        let fx = build_v5_fixture(true, false);
+        let v = frost_verify_json(&fx.pczt).expect("honest PCZT verifies");
+        assert_eq!(v["total_send_zat"], fx.sent, "{v}");
+        assert_eq!(v["fee_zat"], fx.fee, "{v}");
+        let paid = Address::try_from_items(vec![Receiver::Orchard(fx.recipient_raw)])
+            .unwrap()
+            .encode(&zcash_protocol::consensus::NetworkType::Regtest);
+        let outputs = v["outputs"].as_array().unwrap();
+        let payment = outputs
+            .iter()
+            .find(|o| o["recipient"] == paid.as_str())
+            .unwrap_or_else(|| panic!("payment not listed: {}", v));
+        assert_eq!(payment["is_change"], false, "{v}");
+        assert!(
+            outputs
+                .iter()
+                .filter(|o| o["is_change"] == true)
+                .all(|o| o["recipient"] != paid.as_str()),
+            "{}",
+            v
+        );
+    }
+
+    /// The old check decrypted outputs with the group's keys and silently
+    /// dropped any it could not open. Now a recipient that contradicts its
+    /// note commitment, or a withheld output, is refused.
+    #[test]
+    fn frost_verify_refuses_outputs_it_cannot_prove() {
+        let fx = build_v5_fixture(true, false);
+        let decoy = orchard::keys::FullViewingKey::from(
+            &orchard::keys::SpendingKey::from_bytes([11u8; 32]).unwrap(),
+        )
+        .address_at(0u32, orchard::keys::Scope::External)
+        .to_raw_address_bytes();
+        let (tampered, n) = patch_all(&fx.pczt, &fx.recipient_raw, &decoy);
+        assert!(n > 0);
+        assert!(frost_verify_json(&tampered).is_err(), "tampered recipient");
+
+        let withheld = pczt::roles::redactor::Redactor::new(Pczt::parse(&fx.pczt).unwrap())
+            .redact_orchard_with(|mut o| o.redact_actions(|mut a| a.clear_output_value()))
+            .finish()
+            .serialize()
+            .unwrap();
+        assert!(frost_verify_json(&withheld).is_err(), "withheld value");
+    }
+
     #[test]
     fn frost_verify_binds_a_v6_ironwood_spend() {
         assert_frost_verifies(params(true), "NU6.3");

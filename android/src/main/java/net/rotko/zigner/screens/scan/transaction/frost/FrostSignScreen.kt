@@ -49,6 +49,8 @@ private data class FrostVerdict(
 	/** could not verify (no PCZT, no UFVK on file, verifier error) - signing is blocked */
 	val unverifiedReason: String?,
 	val outputs: List<FrostOutputRow>,
+	/** network fee from the PCZT's value balance; null when unverified */
+	val feeZat: Long? = null,
 )
 
 private data class FrostOutputRow(val recipient: String, val amountZat: Long, val isChange: Boolean)
@@ -166,8 +168,8 @@ fun FrostSignScreen(
 					// explains it — don't imply a failed decode.
 					if (externals.isEmpty() && v.unverifiedReason == null && !v.hardMismatch) {
 						OutputCard(
-							title = "No recipient output derived",
-							body = "The PCZT decrypts to no external payment. Do not sign unless you expect a self-transfer.",
+							title = "No payment outside this group",
+							body = "Every output goes back to this group's own addresses. Do not sign unless you expect a self-transfer.",
 							danger = true,
 						)
 					}
@@ -184,6 +186,9 @@ fun FrostSignScreen(
 							body = o.recipient,
 							danger = false,
 						)
+					}
+					v.feeZat?.let { fee ->
+						OutputCard(title = "Fee ${zec(fee)} ZEC", body = "Network fee", danger = false)
 					}
 					if (summary.isNotEmpty()) {
 						Text(
@@ -295,7 +300,7 @@ private fun VerdictBanner(v: FrostVerdict) {
 	val (text, color) = when {
 		v.hardMismatch -> "MISMATCH — the transaction does not match the request. Do NOT sign." to MaterialTheme.colors.red500
 		v.unverifiedReason != null -> "Cannot verify this request on this device (${v.unverifiedReason}). Signing is blocked." to MaterialTheme.colors.red500
-		else -> "Verified on-device: outputs + sighash match the PCZT." to MaterialTheme.colors.textSecondary
+		else -> "Verified on-device: every output, the fee and the sighash come from the PCZT." to MaterialTheme.colors.textSecondary
 	}
 	Text(
 		text = text,
@@ -401,6 +406,7 @@ private suspend fun computeFrostVerdict(
 			hardMismatch = !sighashMatch,
 			unverifiedReason = null,
 			outputs = outs,
+			feeZat = o.optLong("fee_zat", 0L),
 		)
 	} catch (e: Exception) {
 		Timber.e(e, "[FROST] frostVerifyPczt failed")

@@ -7440,7 +7440,6 @@ dependencies = [
  "zakura-primitives",
  "zakura-protocol",
  "zakura-transparent",
- "zcash_note_encryption",
  "zeroize",
  "zoda-vss",
 ]
