@@ -49,9 +49,10 @@ is recommended. See [Security and Privacy](docs/src/about/Security-And-Privacy.m
   (Zcash `m/32'/133'/…`, Penumbra `m/44'/6532'/…`). A key for one network
   never signs for another.
 - Penumbra requests carry a chain ID, which is checked on every signature.
-- The camera is the only input. Every QR code is classified first, and
-  anything other than Zcash, Penumbra and Zigner's own codes is refused
-  before any parser runs.
+- The camera is the only input. A network's codes are parsed only when the
+  device holds a key for that network: a Zcash-only phone never runs the
+  Penumbra parser. Other networks' codes are always refused. (Multi-frame
+  codes still pass through a shared frame decoder before they are sorted.)
 
 ## Penumbra
 
