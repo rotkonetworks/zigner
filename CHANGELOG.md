@@ -2,6 +2,24 @@
 
 All notable changes to zigner are documented in this file.
 
+## Unreleased
+
+### Security
+
+- **The camera parses a network's codes only when the device holds a key
+  for it.** A Zcash-only device refuses Penumbra codes, and a Penumbra-only
+  device refuses Zcash codes, before their content parsers run. Zcash also opens
+  with a FROST wallet, FROST signing needs a FROST wallet, and identity
+  challenges need a key. Recovery, FROST wallet creation and module updates
+  stay open on an empty device, because that is how it stops being empty.
+  Polkadot and Cosmos codes are always refused. A refused code says what
+  the device is missing; a failed key lookup says that instead.
+- Not yet covered: the multi-frame QR transport decoder still runs on
+  byte-mode codes before they are classified.
+- The set comes from the Rust core and is derived from the database each
+  time the camera opens. The stored scan setting, which nothing could
+  change, is gone.
+
 ## 0.13.0 - 2026-10-29
 
 Minor. **Penumbra users: read the first entry.**
