@@ -6,6 +6,19 @@ All notable changes to zigner are documented in this file.
 
 ### Security
 
+- **Zigner no longer signs a hash handed to it by the wallet.** The legacy
+  Zcash request (`530402`) carried a bare sighash plus a free-text summary,
+  and the review screen showed the amount and recipient parsed from that
+  summary - text the wallet wrote, not what was signed. The request is now
+  refused as an unknown type. Zcash is signed only from a PCZT, whose
+  sighash Zigner computes itself. Zafu has not sent this request since
+  29.4.0. The unused code that signed supplied sighashes (`sign_pczt`,
+  `ZcashAuthorizationData`) and an unused FROST attestation verifier are
+  deleted with it.
+- **iOS FROST signing is turned off.** Round 2 signed every action of a
+  transaction with one nonce, which lets anyone who sees the signature
+  shares recover this device's key share. The function that did it is
+  deleted; Android takes one nonce per action and is unaffected.
 - **The camera parses a network's codes only when the device holds a key
   for it.** A Zcash-only device refuses Penumbra codes, and a Penumbra-only
   device refuses Zcash codes, before their content parsers run. Zcash also opens

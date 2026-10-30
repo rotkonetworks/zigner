@@ -866,14 +866,6 @@ namespace signer {
     // Zcash simple sign request (from Zafu wallet)
     // ========================================================================
 
-    // Parse Zcash simple sign request from QR hex data
-    [Throws=ErrorDisplayed]
-    ZcashSimpleSignRequest parse_zcash_sign_request([ByRef] string qr_hex);
-
-    // Sign Zcash simple sign request and return signature QR hex string
-    [Throws=ErrorDisplayed]
-    string sign_zcash_simple([ByRef] string seed_phrase, ZcashSimpleSignRequest request);
-
     // ========================================================================
     // Zcash cold signing functions
     // ========================================================================
@@ -1078,11 +1070,6 @@ namespace signer {
     // over the relay to prevent the positional-fallback id-mismatch aggregate bug.
     [Throws=ErrorDisplayed]
     string frost_spend_sign_round2_signed([ByRef] string ephemeral_seed_hex, [ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alpha_hex, [ByRef] string commitments_json);
-
-    // Sign multiple actions at once (one share per alpha)
-    // Returns JSON: { "shares": [hex, ...] }
-    [Throws=ErrorDisplayed]
-    string frost_spend_sign_actions([ByRef] string key_package_hex, [ByRef] string nonces_hex, [ByRef] string sighash_hex, [ByRef] string alphas_json, [ByRef] string commitments_json);
 
     // Derive raw Orchard address from FROST group key (hex-encoded 43 bytes)
     [Throws=ErrorDisplayed]
@@ -1628,16 +1615,6 @@ dictionary AuthSignResult {
     string pubkey_hex;
     string signature_hex;
     string domain;
-};
-
-// Zcash simple sign request (parsed from QR)
-dictionary ZcashSimpleSignRequest {
-    u32 account_index;
-    string sighash_hex;
-    u32 action_count;
-    string summary;
-    boolean mainnet;
-    string raw_qr_hex;
 };
 
 // Signing context: what the signer knows about its balance

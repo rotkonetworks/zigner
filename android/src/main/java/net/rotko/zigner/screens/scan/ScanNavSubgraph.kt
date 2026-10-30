@@ -445,9 +445,6 @@ fun ScanNavSubgraph(
 			onCosmosSignRequest = { payload ->
 				scanViewModel.performUnifiedSignRequest(payload, context)
 			},
-			onZcashSimpleSign = { payload ->
-				scanViewModel.performUnifiedSignRequest(payload, context)
-			},
 			onUrBackupRestore = { urFrames ->
 				scanViewModel.urBackupFrames.value = urFrames
 			},

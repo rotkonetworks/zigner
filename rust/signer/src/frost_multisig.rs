@@ -212,43 +212,6 @@ pub fn frost_spend_sign_round2_signed(
     .map_err(|e| e.to_string())
 }
 
-/// sign multiple actions at once (one share per alpha).
-/// alphas_json: JSON array of hex-encoded 32-byte alphas (one per Orchard action).
-/// commitments_json: JSON array of hex-encoded signed commitments.
-/// Returns JSON: { "shares": [hex, ...] }
-pub fn frost_spend_sign_actions(
-    key_package_hex: &str,
-    nonces_hex: &str,
-    sighash_hex: &str,
-    alphas_json: &str,
-    commitments_json: &str,
-) -> Result<String, String> {
-    // Consume nonce BEFORE any signing — prevents reuse even if one action fails
-    consume_nonce(nonces_hex)?;
-
-    let sighash = parse_32(sighash_hex, "sighash")?;
-    let alphas: Vec<String> =
-        serde_json::from_str(alphas_json).map_err(|e| format!("bad alphas JSON: {}", e))?;
-    let commitments: Vec<String> = serde_json::from_str(commitments_json)
-        .map_err(|e| format!("bad commitments JSON: {}", e))?;
-
-    let mut shares = Vec::new();
-    for alpha_hex in &alphas {
-        let alpha = parse_32(alpha_hex, "alpha")?;
-        let share = orchestrate::spend_sign_round2(
-            key_package_hex,
-            nonces_hex,
-            &sighash,
-            &alpha,
-            &commitments,
-        )
-        .map_err(|e| e.to_string())?;
-        shares.push(share);
-    }
-
-    serde_json::to_string(&serde_json::json!({ "shares": shares })).map_err(|e| e.to_string())
-}
-
 /// derive raw Orchard address bytes (43 bytes, hex-encoded) from public key package.
 /// Caller encodes to unified address string for the appropriate network.
 pub fn frost_derive_address_raw(

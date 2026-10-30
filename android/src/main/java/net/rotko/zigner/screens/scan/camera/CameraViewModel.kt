@@ -137,11 +137,6 @@ class CameraViewModel() : ViewModel() {
 	val cosmosSignRequestPayload: StateFlow<String?> =
 		_cosmosSignRequestPayload.asStateFlow()
 
-	// Zcash simple sign request payload (detected by 530402 prefix)
-	private val _zcashSimpleSignPayload = MutableStateFlow<String?>(null)
-	val zcashSimpleSignPayload: StateFlow<String?> =
-		_zcashSimpleSignPayload.asStateFlow()
-
 	// Zcash PCZT protocol-module request payload (530403 single / 530404 batch),
 	// routed to the wasm protocol module instead of the built-in parsers.
 	private val _zcashModulePcztPayload = MutableStateFlow<String?>(null)
@@ -428,13 +423,6 @@ class CameraViewModel() : ViewModel() {
 				return
 			}
 
-			if (isZcashSimpleSignRequest(firstPayload)) {
-				if (!allow(ScanCapability.ZCASH)) return
-				resetScanValues()
-				_zcashSimpleSignPayload.value = firstPayload
-				return
-			}
-
 			if (isZcashModulePcztRequest(firstPayload)) {
 				if (!allow(ScanCapability.ZCASH)) return
 				resetScanValues()
@@ -507,13 +495,6 @@ class CameraViewModel() : ViewModel() {
 	}
 
 	/**
-	 * Check if hex payload is a Zcash simple sign request (prefix 530402)
-	 */
-	private fun isZcashSimpleSignRequest(hexPayload: String): Boolean {
-		return hexPayload.length >= 6 && hexPayload.substring(0, 6).equals("530402", ignoreCase = true)
-	}
-
-	/**
 	 * Check if hex payload is a Zcash PCZT protocol-module request:
 	 * prelude [0x53][crypto=0x04][tx_type], 0x03 single / 0x04 batch,
 	 * 0x05 single-compact / 0x06 batch-compact (signatures-only response -
@@ -535,10 +516,6 @@ class CameraViewModel() : ViewModel() {
 	private fun isZcashModulePcztRequest(hexPayload: String): Boolean {
 		if (hexPayload.length < 6) return false
 		return hexPayload.substring(0, 4).lowercase() == "5304"
-	}
-
-	fun resetZcashSimpleSign() {
-		_zcashSimpleSignPayload.value = null
 	}
 
 	fun resetZcashModulePczt() {
@@ -766,7 +743,6 @@ class CameraViewModel() : ViewModel() {
 		_bananaSplitPayload.value = null
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null
-		_zcashSimpleSignPayload.value = null
 		_zcashModulePcztPayload.value = null
 		_urBackupFrames.value = emptyList()
 		forgetFrames(_urBackupFrames)

@@ -44,7 +44,6 @@ use crate::ffi_types::*;
 use db_handling::identities::{import_all_addrs, inject_derivations_has_pwd};
 use db_handling::{Error as DbHandlingError, Error};
 use definitions::keyring::AddressKey;
-use definitions::navigation::ZcashSimpleSignRequest;
 use lazy_static::lazy_static;
 use navigator::Error as NavigatorError;
 use sled::Db;
@@ -1574,46 +1573,6 @@ fn sign_penumbra_transaction(
 /// - 0xa0-0xb7: map, length 0-23 in low 5 bits (pairs count)
 /// - 0xd8: tag, 1-byte tag number follows
 /// - 0xd9: tag, 2-byte tag number follows (big-endian)
-///
-/// Parse a Zcash simple sign request from QR hex data.
-/// This is the non-PCZT signing flow used by Zafu wallet.
-fn parse_zcash_sign_request(qr_hex: &str) -> Result<ZcashSimpleSignRequest, ErrorDisplayed> {
-    let request = transaction_signing::ZcashSignRequest::from_qr_hex(qr_hex).map_err(|e| {
-        ErrorDisplayed::Str {
-            s: format!("Failed to parse Zcash sign request: {e}"),
-        }
-    })?;
-
-    Ok(ZcashSimpleSignRequest {
-        account_index: request.account_index,
-        sighash_hex: hex::encode(request.sighash),
-        action_count: request.orchard_alphas.len() as u32,
-        summary: request.summary,
-        mainnet: request.mainnet,
-        raw_qr_hex: qr_hex.to_string(),
-    })
-}
-
-/// Sign a Zcash simple sign request and return the signature QR hex string.
-fn sign_zcash_simple(
-    seed_phrase: &str,
-    request: ZcashSimpleSignRequest,
-) -> Result<String, ErrorDisplayed> {
-    // Re-parse the original QR to get the full data (including alphas)
-    let sign_data = transaction_signing::ZcashSignRequest::from_qr_hex(&request.raw_qr_hex)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to parse Zcash sign request for signing: {e}"),
-        })?;
-
-    let response = sign_data
-        .sign(seed_phrase)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Zcash signing failed: {e}"),
-        })?;
-
-    Ok(response.to_qr_hex())
-}
-
 // hand-rolls ZcashAccounts CBOR with per-byte annotated pushes (clearer than a
 // dense vec![...] literal); silence the resulting vec-init-then-push lint.
 #[allow(clippy::vec_init_then_push)]
@@ -4017,23 +3976,6 @@ fn frost_spend_sign_round2_signed(
         nonces_hex,
         sighash_hex,
         alpha_hex,
-        commitments_json,
-    )
-    .map_err(|e| ErrorDisplayed::Str { s: e })
-}
-
-fn frost_spend_sign_actions(
-    key_package_hex: &str,
-    nonces_hex: &str,
-    sighash_hex: &str,
-    alphas_json: &str,
-    commitments_json: &str,
-) -> Result<String, ErrorDisplayed> {
-    frost_multisig::frost_spend_sign_actions(
-        key_package_hex,
-        nonces_hex,
-        sighash_hex,
-        alphas_json,
         commitments_json,
     )
     .map_err(|e| ErrorDisplayed::Str { s: e })

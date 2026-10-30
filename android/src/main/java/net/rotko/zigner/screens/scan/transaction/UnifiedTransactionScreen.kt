@@ -172,7 +172,6 @@ private fun TxTypeBadge(signRequest: SignRequest) {
 				else -> "Transaction"
 			}
 		}
-		is SignRequest.ZcashSimple -> "Orchard Spend"
 		is SignRequest.ZcashPczt -> "PCZT"
 	}
 
@@ -196,7 +195,6 @@ private fun SimpleTabContent(signRequest: SignRequest) {
 	when (signRequest) {
 		is SignRequest.Penumbra -> PenumbraSimpleContent(signRequest)
 		is SignRequest.Cosmos -> CosmosSimpleContent(signRequest)
-		is SignRequest.ZcashSimple -> ZcashSimpleContent(signRequest)
 		is SignRequest.ZcashPczt -> ZcashPcztSimpleContent(signRequest)
 	}
 }
@@ -325,49 +323,6 @@ private fun CosmosSimpleContent(req: SignRequest.Cosmos) {
 }
 
 @Composable
-private fun ZcashSimpleContent(req: SignRequest.ZcashSimple) {
-	val r = req.request
-
-	// Summary from zafu — this is the most important info
-	// Format: "Send X.XX ZEC to u1abc...\nFee: 0.0001 ZEC\nSpending 1 note(s)\nAccount #0: 1 signature required"
-	if (r.summary.isNotEmpty()) {
-		// Parse summary lines for better display
-		val lines = r.summary.split("\n").filter { it.isNotBlank() }
-		val sendLine = lines.firstOrNull { it.startsWith("Send ") }
-
-		if (sendLine != null) {
-			// Extract amount and recipient from "Send X.XX ZEC to ADDRESS"
-			val parts = sendLine.removePrefix("Send ").split(" to ", limit = 2)
-			val amount = parts.getOrNull(0) ?: ""
-			val recipient = parts.getOrNull(1) ?: ""
-
-			HighlightCard(
-				title = amount,
-				subtitle = if (recipient.isNotEmpty()) "To: $recipient" else "",
-				color = Color(0xFFF5A623),
-			)
-		} else {
-			// Fallback: show full summary
-			HighlightCard(title = r.summary, subtitle = "", color = Color(0xFFF5A623))
-		}
-
-		// Show remaining lines as details
-		lines.filter { !it.startsWith("Send ") }.forEach { line ->
-			when {
-				line.startsWith("Fee:") -> DetailRow(label = "Fee", value = line.removePrefix("Fee: "))
-				line.startsWith("Spending") -> DetailRow(label = "Notes", value = line)
-				line.startsWith("Account") -> DetailRow(label = "Account", value = line)
-				else -> DetailRow(label = "", value = line)
-			}
-		}
-	} else {
-		// No summary — show raw fields
-		DetailRow(label = "Actions", value = "${r.actionCount} orchard action(s)")
-		DetailRow(label = "Account", value = "#${r.accountIndex}")
-	}
-}
-
-@Composable
 internal fun ZcashPcztSimpleContent(req: SignRequest.ZcashPczt) {
 	val inspection = req.inspection
 	if (inspection == null) {
@@ -484,20 +439,6 @@ private fun AdvancedTabContent(signRequest: SignRequest) {
 					appendLine("spend_count: ${signRequest.request.spendCount}")
 					appendLine("vote_count: ${signRequest.request.voteCount}")
 					appendLine("lqt_vote_count: ${signRequest.request.lqtVoteCount}")
-					appendLine()
-					appendLine("--- raw hex ---")
-					append(payload)
-				}
-			}
-			is SignRequest.ZcashSimple -> {
-				buildString {
-					appendLine("account: ${signRequest.request.accountIndex}")
-					appendLine("sighash: ${signRequest.request.sighashHex}")
-					appendLine("actions: ${signRequest.request.actionCount}")
-					appendLine("mainnet: ${signRequest.request.mainnet}")
-					if (signRequest.request.summary.isNotEmpty()) {
-						appendLine("summary: ${signRequest.request.summary}")
-					}
 					appendLine()
 					appendLine("--- raw hex ---")
 					append(payload)
