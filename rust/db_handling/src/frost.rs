@@ -67,6 +67,18 @@ pub fn wallet_id_hex(public_key_package_hex: &str) -> String {
 pub fn store_frost_wallet(database: &sled::Db, data: &FrostWalletData) -> Result<String> {
     let tree = database.open_tree(FROST_KEYS_TREE)?;
     let id = wallet_id_bytes(&data.public_key_package_hex);
+    // The id is a 64-bit non-cryptographic hash of a package a co-signer can
+    // influence, so a different group could land on an existing id. Storing
+    // it would overwrite that wallet's key share; refuse instead.
+    if let Some(existing) = tree.get(id)? {
+        let existing: FrostWalletData = serde_json::from_slice(&existing)
+            .map_err(|e| Error::Other(anyhow::anyhow!("FROST deserialize: {e}")))?;
+        if existing.public_key_package_hex != data.public_key_package_hex {
+            return Err(Error::Other(anyhow::anyhow!(
+                "another FROST wallet already uses this id; refusing to overwrite it"
+            )));
+        }
+    }
     let json = serde_json::to_vec(data)
         .map_err(|e| Error::Other(anyhow::anyhow!("FROST serialize: {e}")))?;
     tree.insert(id, json.as_slice())?;
@@ -236,6 +248,41 @@ mod tests {
         let id2 = wallet_id_hex("abcdef1234");
         assert_eq!(id1, id2);
         assert_eq!(id1.len(), 16); // 8 bytes = 16 hex chars
+    }
+
+    /// Two different groups whose packages hash to the same id must not
+    /// overwrite each other; re-storing the same group still updates it.
+    #[test]
+    fn store_refuses_to_overwrite_another_group_on_an_id_collision() {
+        let db = sled::Config::new().temporary(true).open().unwrap();
+        let wallet = |pkg: &str, label: &str| FrostWalletData {
+            key_package_hex: "aabb".to_string(),
+            public_key_package_hex: pkg.to_string(),
+            ephemeral_seed_hex: "eeff".to_string(),
+            label: label.to_string(),
+            min_signers: 2,
+            max_signers: 3,
+            mainnet: true,
+            created_at: 0,
+            orchard_fvk_uview: None,
+            address: None,
+            relay_url: None,
+        };
+        let id = store_frost_wallet(&db, &wallet("ccdd", "first")).unwrap();
+        // same group again: allowed (an update)
+        store_frost_wallet(&db, &wallet("ccdd", "renamed")).unwrap();
+
+        // plant a different package under the same id, as a collision would
+        let tree = db.open_tree(FROST_KEYS_TREE).unwrap();
+        let mut other = wallet("ccdd", "victim");
+        other.public_key_package_hex = "different".to_string();
+        tree.insert(
+            hex::decode(&id).unwrap(),
+            serde_json::to_vec(&other).unwrap(),
+        )
+        .unwrap();
+        assert!(store_frost_wallet(&db, &wallet("ccdd", "attacker")).is_err());
+        assert_eq!(get_frost_wallet(&db, &id).unwrap().unwrap().label, "victim");
     }
 
     #[test]
