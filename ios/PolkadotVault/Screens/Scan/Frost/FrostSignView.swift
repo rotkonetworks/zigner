@@ -155,16 +155,13 @@ extension FrostSignView {
                             self.state = .displayQr(commitments)
                         }
                     case 2:
-                        let result = try frostSpendSignActions(
-                            keyPackageHex: self.previousKeyPackage,
-                            noncesHex: self.previousNonces,
-                            sighashHex: self.sighashHex,
-                            alphasJson: self.alphasJson,
-                            commitmentsJson: self.commitmentsJson
-                        )
+                        // Round 2 signed every action with one nonce, which
+                        // leaks this device's share. Refused until iOS takes
+                        // one nonce per action and checks the PCZT on-device,
+                        // as Android does.
                         DispatchQueue.main.async {
                             self.onStateUpdated("", "")
-                            self.state = .displayQr(result)
+                            self.state = .error("FROST signing is not available on iOS yet.")
                         }
                     default:
                         DispatchQueue.main.async { self.state = .error("Invalid round") }

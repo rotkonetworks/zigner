@@ -45,11 +45,8 @@ import io.parity.signer.uniffi.CosmosSignRequest
 import io.parity.signer.uniffi.parseCosmosSignRequest
 import io.parity.signer.uniffi.signCosmosTransaction as uniffiSignCosmosTransaction
 import io.parity.signer.uniffi.ZcashNoteSyncResult
-import io.parity.signer.uniffi.ZcashSimpleSignRequest
 import io.parity.signer.uniffi.ModulePackageInfo
 import io.parity.signer.uniffi.decodeAndVerifyZcashNotes
-import io.parity.signer.uniffi.parseZcashSignRequest
-import io.parity.signer.uniffi.signZcashSimple
 import io.parity.signer.uniffi.decodeUrZcashPczt
 import io.parity.signer.uniffi.inspectZcashPczt
 import io.parity.signer.uniffi.signZcashPcztUr
@@ -667,7 +664,7 @@ class ScanViewModel : ViewModel() {
 	// ========================================================================
 
 	/**
-	 * Parse any hex-based sign request (Penumbra, Cosmos, or Zcash simple)
+	 * Parse any hex-based sign request (Penumbra or Cosmos)
 	 * and set the unified signRequest state.
 	 */
 	fun performUnifiedSignRequest(qrHex: String, context: Context) {
@@ -679,9 +676,6 @@ class ScanViewModel : ViewModel() {
 				}
 				prefix == "530510" -> {
 					SignRequest.Cosmos(parseCosmosSignRequest(qrHex))
-				}
-				prefix == "530402" -> {
-					SignRequest.ZcashSimple(parseZcashSignRequest(qrHex))
 				}
 				else -> {
 					throw IllegalArgumentException("Unknown QR prefix: $prefix")
@@ -743,10 +737,6 @@ class ScanViewModel : ViewModel() {
 					is SignRequest.Cosmos -> {
 						val sigBytes = uniffiSignCosmosTransaction(seedPhrase, req.request)
 						val hex = sigBytes.joinToString("") { "%02x".format(it.toByte()) }
-						signatureResult.value = SignatureResult.HexQr(hex, req.networkName)
-					}
-					is SignRequest.ZcashSimple -> {
-						val hex = signZcashSimple(seedPhrase, req.request)
 						signatureResult.value = SignatureResult.HexQr(hex, req.networkName)
 					}
 					is SignRequest.ZcashPczt -> {
