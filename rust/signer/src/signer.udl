@@ -1102,17 +1102,23 @@ namespace signer {
         boolean mainnet,
         [ByRef] string orchard_fvk_uview,
         [ByRef] string address,
-        [ByRef] string relay_url
+        [ByRef] string relay_url,
+        sequence<string> seed_phrases
     );
 
     // List all stored FROST wallets (summaries, no secrets)
     [Throws=ErrorDisplayed]
     sequence<FrostWalletSummaryFFI> frost_list_wallets();
 
-    // Load FROST wallet secrets for signing (key_package + ephemeral_seed)
+    // Load a FROST wallet's public fields (no secrets)
     // Returns JSON: { "key_package": hex, "ephemeral_seed": hex, "public_key_package": hex }
     [Throws=ErrorDisplayed]
     string frost_load_wallet([ByRef] string wallet_id);
+
+    // Key package and ephemeral seed of a FROST wallet, opened with the seed
+    // its share is sealed under. Returns JSON {key_package, ephemeral_seed}.
+    [Throws=ErrorDisplayed]
+    string frost_load_wallet_secrets([ByRef] string wallet_id, sequence<string> seed_phrases);
 
     // Delete a FROST wallet
     [Throws=ErrorDisplayed]
@@ -1154,7 +1160,8 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string frost_export_backup_envelope(
         [ByRef] string wallet_id,
-        [ByRef] string passphrase
+        [ByRef] string passphrase,
+        sequence<string> seed_phrases
     );
 
     // FROST backup restore: decrypt an envelope JSON, store the wallet,
@@ -1162,13 +1169,14 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string frost_import_backup_envelope(
         [ByRef] string envelope_json,
-        [ByRef] string passphrase
+        [ByRef] string passphrase,
+        sequence<string> seed_phrases
     );
 
     // Encrypt every FROST wallet on this device into a single batch envelope.
     // Caller writes the returned JSON to a `.json` file.
     [Throws=ErrorDisplayed]
-    string frost_export_all_backup_envelope([ByRef] string passphrase);
+    string frost_export_all_backup_envelope([ByRef] string passphrase, sequence<string> seed_phrases);
 
     // Decrypt a batch envelope and import every share inside.
     // Skips wallets whose publicKeyPackage already exists.
@@ -1176,7 +1184,8 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string frost_import_all_backup_envelope(
         [ByRef] string envelope_json,
-        [ByRef] string passphrase
+        [ByRef] string passphrase,
+        sequence<string> seed_phrases
     );
 
     // This device's backup recipient, as an `ssh-ed25519 AAAA...` line.
@@ -1203,7 +1212,8 @@ namespace signer {
     [Throws=ErrorDisplayed]
     string frost_export_all_backup_age(
         [ByRef] string seed_phrase,
-        sequence<string> extra_recipients
+        sequence<string> extra_recipients,
+        sequence<string> seed_phrases
     );
 
     // Import an age-encrypted batch backup addressed to this device.

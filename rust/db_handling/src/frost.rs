@@ -31,6 +31,15 @@ pub struct FrostWalletData {
     pub address: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relay_url: Option<String>,
+    /// `key_package_hex` and `ephemeral_seed_hex`, sealed under a key derived
+    /// from one of the device's seeds (signer `frost_storage`). When set, the
+    /// two plaintext fields are empty. Absent on wallets stored before
+    /// sealing; those are sealed the next time their secrets are read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sealed: Option<String>,
+    /// Fingerprint of the seed `sealed` is under, to pick it among several.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_id: Option<String>,
 }
 
 /// Summary for listing wallets (no secrets)
@@ -267,6 +276,8 @@ mod tests {
             orchard_fvk_uview: None,
             address: None,
             relay_url: None,
+            sealed: None,
+            seed_id: None,
         };
         let id = store_frost_wallet(&db, &wallet("ccdd", "first")).unwrap();
         // same group again: allowed (an update)
@@ -300,6 +311,8 @@ mod tests {
             orchard_fvk_uview: None,
             address: None,
             relay_url: None,
+            sealed: None,
+            seed_id: None,
         };
         let id = store_frost_wallet(&db, &data).unwrap();
         let retrieved = get_frost_wallet(&db, &id).unwrap().unwrap();

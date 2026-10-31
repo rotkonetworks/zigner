@@ -6,6 +6,21 @@ All notable changes to zigner are documented in this file.
 
 ### Security
 
+- **FROST key shares are encrypted at rest.** A share has no seed phrase
+  behind it and used to sit in the database as plaintext JSON, readable from
+  a forensic image without any unlock. It is now sealed with
+  XChaCha20-Poly1305 under a key derived from one of the device's seeds,
+  with the wallet id bound in, so the seed you already back up is the only
+  thing that opens it.
+  - Storing, signing with, exporting or importing a share asks for the
+    unlock at that moment; the wallet list and details stay readable
+    without it.
+  - Existing wallets are sealed the first time they are used with a seed
+    unlocked, and only after the sealed copy reads back correctly.
+  - **Creating a FROST wallet now needs a key set on the device**, since
+    the share is sealed under that seed.
+  - iOS FROST wallet creation is turned off with signing until iOS has the
+    unlock flow.
 - **Zigner no longer signs a hash handed to it by the wallet.** The legacy
   Zcash request (`530402`) carried a bare sighash plus a free-text summary,
   and the review screen showed the amount and recipient parsed from that

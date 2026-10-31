@@ -35,6 +35,7 @@ pub mod backup;
 mod ffi_types;
 pub mod frost_backup;
 pub mod frost_multisig;
+pub mod frost_storage;
 pub mod release_signing;
 pub use release_signing::ReleaseSigningRequest;
 pub mod ssh;
@@ -3993,9 +3994,13 @@ fn frost_store_wallet(
     orchard_fvk_uview: &str,
     address: &str,
     relay_url: &str,
+    seed_phrases: Vec<String>,
 ) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+    let sealing_seed = seed_phrases.first().ok_or_else(|| ErrorDisplayed::Str {
+        s: "FROST needs a key set on this device: its share is sealed under that seed".into(),
+    })?;
 
     // Empty strings → None, so older callers that pass "" don't poison the
     // optional fields with empty data.
@@ -4022,7 +4027,11 @@ fn frost_store_wallet(
         orchard_fvk_uview: none_if_empty(orchard_fvk_uview),
         address: none_if_empty(address),
         relay_url: none_if_empty(relay_url),
+        sealed: None,
+        seed_id: None,
     };
+    let mut data = data;
+    frost_storage::seal_wallet(&mut data, sealing_seed).map_err(|s| ErrorDisplayed::Str { s })?;
 
     db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to store FROST wallet: {e}"),
@@ -4063,11 +4072,9 @@ fn frost_load_wallet(wallet_id: &str) -> Result<String, ErrorDisplayed> {
             s: format!("FROST wallet not found: {wallet_id}"),
         })?;
 
-    // Include the optional public-derived metadata fields so callers building
-    // backup payloads or "send to zafu" QRs don't need a separate FFI.
+    // Public fields only: the key package and ephemeral seed come from
+    // `frost_load_wallet_secrets`, which needs the seed they are sealed under.
     serde_json::to_string(&serde_json::json!({
-        "key_package": data.key_package_hex,
-        "ephemeral_seed": data.ephemeral_seed_hex,
         "public_key_package": data.public_key_package_hex,
         "label": data.label,
         "min_signers": data.min_signers,
@@ -4081,6 +4088,40 @@ fn frost_load_wallet(wallet_id: &str) -> Result<String, ErrorDisplayed> {
     .map_err(|e| ErrorDisplayed::Str {
         s: format!("Serialize: {e}"),
     })
+}
+
+/// A wallet's key package and ephemeral seed, for signing. Opens the sealed
+/// share with whichever of `seed_phrases` it is under; a wallet stored before
+/// sealing is sealed on this read. Returns `{key_package, ephemeral_seed}`.
+fn frost_load_wallet_secrets(
+    wallet_id: &str,
+    seed_phrases: Vec<String>,
+) -> Result<String, ErrorDisplayed> {
+    let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
+    let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
+    let data = load_frost_wallet_data(database, wallet_id)?;
+    let secrets = frost_storage::wallet_secrets(database, &data, &seed_phrases)
+        .map_err(|s| ErrorDisplayed::Str { s })?;
+    serde_json::to_string(&serde_json::json!({
+        "key_package": secrets.key_package_hex.as_str(),
+        "ephemeral_seed": secrets.ephemeral_seed_hex.as_str(),
+    }))
+    .map_err(|e| ErrorDisplayed::Str {
+        s: format!("Serialize: {e}"),
+    })
+}
+
+fn load_frost_wallet_data(
+    database: &sled::Db,
+    wallet_id: &str,
+) -> Result<db_handling::frost::FrostWalletData, ErrorDisplayed> {
+    db_handling::frost::get_frost_wallet(database, wallet_id)
+        .map_err(|e| ErrorDisplayed::Str {
+            s: format!("load FROST wallet: {e}"),
+        })?
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: format!("FROST wallet not found: {wallet_id}"),
+        })
 }
 
 fn frost_delete_wallet(wallet_id: &str) -> Result<(), ErrorDisplayed> {
@@ -4153,25 +4194,22 @@ fn frost_set_wallet_metadata(
 fn frost_export_backup_envelope(
     wallet_id: &str,
     passphrase: &str,
+    seed_phrases: Vec<String>,
 ) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
-    let data = db_handling::frost::get_frost_wallet(database, wallet_id)
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("load FROST wallet: {e}"),
-        })?
-        .ok_or_else(|| ErrorDisplayed::Str {
-            s: format!("FROST wallet not found: {wallet_id}"),
-        })?;
+    let data = load_frost_wallet_data(database, wallet_id)?;
+    let secrets = frost_storage::wallet_secrets(database, &data, &seed_phrases)
+        .map_err(|s| ErrorDisplayed::Str { s })?;
 
     let payload = frost_backup::PlaintextPayload {
         version: 1,
         kind: "frost-share".into(),
         label: data.label,
         public_key_package: data.public_key_package_hex,
-        key_package: data.key_package_hex,
-        ephemeral_seed: data.ephemeral_seed_hex,
+        key_package: secrets.key_package_hex.to_string(),
+        ephemeral_seed: secrets.ephemeral_seed_hex.to_string(),
         threshold: data.min_signers,
         max_signers: data.max_signers,
         mainnet: data.mainnet,
@@ -4187,7 +4225,9 @@ fn frost_export_backup_envelope(
 fn frost_import_backup_envelope(
     envelope_json: &str,
     passphrase: &str,
+    seed_phrases: Vec<String>,
 ) -> Result<String, ErrorDisplayed> {
+    let sealing_seed = first_seed(&seed_phrases)?;
     let payload = frost_backup::open_envelope(envelope_json, passphrase)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
 
@@ -4217,11 +4257,25 @@ fn frost_import_backup_envelope(
         orchard_fvk_uview: payload.orchard_fvk,
         address: payload.address,
         relay_url: payload.relay_url,
+        sealed: None,
+        seed_id: None,
     };
+    let mut data = data;
+    frost_storage::seal_wallet(&mut data, sealing_seed).map_err(|s| ErrorDisplayed::Str { s })?;
 
     db_handling::frost::store_frost_wallet(database, &data).map_err(|e| ErrorDisplayed::Str {
         s: format!("store imported wallet: {e}"),
     })
+}
+
+/// The seed new shares are sealed under: the first unlocked one.
+fn first_seed(seed_phrases: &[String]) -> Result<&str, ErrorDisplayed> {
+    seed_phrases
+        .first()
+        .map(String::as_str)
+        .ok_or_else(|| ErrorDisplayed::Str {
+            s: "FROST needs a key set on this device: its share is sealed under that seed".into(),
+        })
 }
 
 /// Parse the KeyPackage + PublicKeyPackage hex and assert they agree with
@@ -4282,6 +4336,7 @@ fn verify_envelope_threshold(
 /// path - so the two can never disagree about what a backup contains.
 fn collect_all_frost_shares(
     database: &sled::Db,
+    seed_phrases: &[String],
 ) -> Result<Vec<frost_backup::ShareEntry>, ErrorDisplayed> {
     let summaries =
         db_handling::frost::list_frost_wallets(database).map_err(|e| ErrorDisplayed::Str {
@@ -4303,11 +4358,13 @@ fn collect_all_frost_shares(
             .ok_or_else(|| ErrorDisplayed::Str {
                 s: format!("FROST wallet not found: {}", s.wallet_id),
             })?;
+        let secrets = frost_storage::wallet_secrets(database, &data, seed_phrases)
+            .map_err(|s| ErrorDisplayed::Str { s })?;
         shares.push(frost_backup::ShareEntry {
             label: data.label,
             public_key_package: data.public_key_package_hex,
-            key_package: data.key_package_hex,
-            ephemeral_seed: data.ephemeral_seed_hex,
+            key_package: secrets.key_package_hex.to_string(),
+            ephemeral_seed: secrets.ephemeral_seed_hex.to_string(),
             threshold: data.min_signers,
             max_signers: data.max_signers,
             mainnet: data.mainnet,
@@ -4320,10 +4377,13 @@ fn collect_all_frost_shares(
     Ok(shares)
 }
 
-fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDisplayed> {
+fn frost_export_all_backup_envelope(
+    passphrase: &str,
+    seed_phrases: Vec<String>,
+) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
-    let shares = collect_all_frost_shares(database)?;
+    let shares = collect_all_frost_shares(database, &seed_phrases)?;
     frost_backup::seal_batch_envelope(&shares, passphrase).map_err(|e| ErrorDisplayed::Str { s: e })
 }
 
@@ -4333,16 +4393,21 @@ fn frost_export_all_backup_envelope(passphrase: &str) -> Result<String, ErrorDis
 fn frost_import_all_backup_envelope(
     envelope_json: &str,
     passphrase: &str,
+    seed_phrases: Vec<String>,
 ) -> Result<String, ErrorDisplayed> {
+    let sealing_seed = first_seed(&seed_phrases)?;
     let shares = frost_backup::open_batch_envelope(envelope_json, passphrase)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
-    import_frost_shares(shares)
+    import_frost_shares(shares, sealing_seed)
 }
 
 /// Store a decrypted share list. The half of import that is the same however
 /// the bytes were protected - including the envelope-vs-KeyPackage threshold
 /// cross-check, which must not be skippable by arriving via a new transport.
-fn import_frost_shares(shares: Vec<frost_backup::ShareEntry>) -> Result<String, ErrorDisplayed> {
+fn import_frost_shares(
+    shares: Vec<frost_backup::ShareEntry>,
+    sealing_seed: &str,
+) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
 
@@ -4378,7 +4443,12 @@ fn import_frost_shares(shares: Vec<frost_backup::ShareEntry>) -> Result<String, 
             orchard_fvk_uview: share.orchard_fvk,
             address: share.address,
             relay_url: share.relay_url,
+            sealed: None,
+            seed_id: None,
         };
+        let mut data = data;
+        frost_storage::seal_wallet(&mut data, sealing_seed)
+            .map_err(|s| ErrorDisplayed::Str { s })?;
         db_handling::frost::store_frost_wallet(database, &data).map_err(|e| {
             ErrorDisplayed::Str {
                 s: format!("store imported wallet: {e}"),
@@ -4421,10 +4491,11 @@ fn age_device_recipient(seed_phrase: &str) -> Result<String, ErrorDisplayed> {
 fn frost_export_all_backup_age(
     seed_phrase: &str,
     extra_recipients: Vec<String>,
+    seed_phrases: Vec<String>,
 ) -> Result<String, ErrorDisplayed> {
     let db_guard = DB.read().map_err(|_| ErrorDisplayed::MutexPoisoned)?;
     let database = db_guard.as_ref().ok_or(ErrorDisplayed::DbNotInitialized)?;
-    let shares = collect_all_frost_shares(database)?;
+    let shares = collect_all_frost_shares(database, &seed_phrases)?;
     let plaintext =
         frost_backup::batch_plaintext(&shares).map_err(|e| ErrorDisplayed::Str { s: e })?;
 
@@ -4451,7 +4522,7 @@ fn frost_import_all_backup_age(seed_phrase: &str, armored: &str) -> Result<Strin
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
     let shares = frost_backup::parse_batch_plaintext(&plaintext)
         .map_err(|e| ErrorDisplayed::Str { s: e })?;
-    import_frost_shares(shares)
+    import_frost_shares(shares, seed_phrase)
 }
 
 // ── anchor verifier registry FFI ──
