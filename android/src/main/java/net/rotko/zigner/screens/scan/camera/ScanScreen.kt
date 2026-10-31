@@ -42,7 +42,6 @@ fun ScanScreen(
 	onBananaSplit: (List<String>) -> Unit,
 	onPenumbraSignRequest: (String) -> Unit = {},
 	onCosmosSignRequest: (String) -> Unit = {},
-	onZcashSimpleSign: (String) -> Unit = {},
 	onZcashModulePczt: (String) -> Unit = {},
 	onModulePackage: (ByteArray) -> Unit = {},
 	onReleaseSignPrefix: (ByteArray) -> Unit = {},
@@ -96,7 +95,6 @@ fun ScanScreen(
 	val currentOnBananaSplit by rememberUpdatedState(onBananaSplit)
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
-	val currentOnZcashSimpleSign by rememberUpdatedState(onZcashSimpleSign)
 	val currentOnZcashModulePczt by rememberUpdatedState(onZcashModulePczt)
 	val currentOnModulePackage by rememberUpdatedState(onModulePackage)
 	val currentOnReleaseSignPrefix by rememberUpdatedState(onReleaseSignPrefix)
@@ -149,17 +147,6 @@ fun ScanScreen(
 				.collect { qrData ->
 					currentOnCosmosSignRequest(qrData)
 					viewModel.resetCosmosSignRequest()
-				}
-		}
-
-		// Zcash simple sign request handler
-		launch {
-			viewModel.zcashSimpleSignPayload
-				.filterNotNull()
-				.filter { it.isNotEmpty() }
-				.collect { qrData ->
-					currentOnZcashSimpleSign(qrData)
-					viewModel.resetZcashSimpleSign()
 				}
 		}
 
