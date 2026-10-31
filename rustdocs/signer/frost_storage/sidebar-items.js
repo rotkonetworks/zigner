@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["seal_wallet","seed_id","wallet_secrets"],"struct":["Secrets"]};
