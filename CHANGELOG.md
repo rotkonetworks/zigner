@@ -2,7 +2,11 @@
 
 All notable changes to zigner are documented in this file.
 
-## Unreleased
+## 0.14.0 - 2026-10-31
+
+Minor. Security release from a full review of the signer. **Penumbra users:
+liquidity positions, Dutch auctions and votes are refused until each has a
+review screen.** iOS FROST signing is turned off.
 
 ### Security
 
