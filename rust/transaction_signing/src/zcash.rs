@@ -675,7 +675,8 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 // anchor_height: uint
                 let (val, consumed) = cbor_decode_uint(data, offset)?;
                 offset = consumed;
-                anchor_height = val as u32;
+                anchor_height = u32::try_from(val)
+                    .map_err(|_| Error::ZcashParsing("anchor_height out of range".to_string()))?;
             }
             3 => {
                 // mainnet: bool
@@ -716,7 +717,10 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 // anchor_time: uint (unix seconds of the anchor block header)
                 let (val, consumed) = cbor_decode_uint(data, offset)?;
                 offset = consumed;
-                anchor_time = Some(val as u32);
+                anchor_time =
+                    Some(u32::try_from(val).map_err(|_| {
+                        Error::ZcashParsing("anchor_time out of range".to_string())
+                    })?);
             }
             _ => {
                 // skip unknown keys
@@ -724,6 +728,13 @@ pub fn decode_notes_bundle_from_cbor(data: &[u8]) -> Result<ZcashNotesBundle> {
                 offset = consumed;
             }
         }
+    }
+
+    if offset != data.len() {
+        return Err(Error::ZcashParsing(format!(
+            "{} trailing bytes after the notes bundle",
+            data.len() - offset
+        )));
     }
 
     Ok(ZcashNotesBundle {
@@ -1000,12 +1011,14 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
             4 => {
                 let (val, consumed) = cbor_decode_uint(data, offset)?;
                 offset = consumed;
-                position = val as u32;
+                position = u32::try_from(val)
+                    .map_err(|_| Error::ZcashParsing("position out of range".to_string()))?;
             }
             5 => {
                 let (val, consumed) = cbor_decode_uint(data, offset)?;
                 offset = consumed;
-                block_height = val as u32;
+                block_height = u32::try_from(val)
+                    .map_err(|_| Error::ZcashParsing("block_height out of range".to_string()))?;
             }
             6 => {
                 let (arr_len, consumed) = cbor_decode_array_len(data, offset)?;
@@ -1045,76 +1058,55 @@ fn cbor_decode_note_with_path(data: &[u8], offset: usize) -> Result<(ZcashNoteWi
     ))
 }
 
-/// Skip a single CBOR value (for unknown map keys)
+/// Skip the value of an unknown map key (key 0, the version, today).
+///
+/// Only a number, a byte or text string, or a simple value is skipped. A
+/// nested array or map under an unknown key is refused rather than walked,
+/// so no input can drive recursion, and a string must fit in the data.
 fn cbor_skip_value(data: &[u8], offset: usize) -> Result<usize> {
-    if offset >= data.len() {
-        return Err(Error::ZcashParsing("truncated CBOR value".to_string()));
-    }
-    let first = data[offset];
+    let truncated = || Error::ZcashParsing("truncated CBOR value".to_string());
+    let first = *data.get(offset).ok_or_else(truncated)?;
     let major = first >> 5;
     let additional = first & 0x1f;
+    if major == 7 {
+        // true / false / null / undefined; floats are not expected here
+        return match additional {
+            20..=23 => Ok(offset + 1),
+            _ => Err(Error::ZcashParsing(format!(
+                "unsupported CBOR simple value {additional}"
+            ))),
+        };
+    }
 
-    let (content_len, header_end) = match additional {
-        0..=23 => (additional as usize, offset + 1),
-        24 => {
-            if offset + 2 > data.len() {
-                return Err(Error::ZcashParsing("truncated".to_string()));
-            }
-            (data[offset + 1] as usize, offset + 2)
-        }
-        25 => {
-            if offset + 3 > data.len() {
-                return Err(Error::ZcashParsing("truncated".to_string()));
-            }
-            (
-                u16::from_be_bytes([data[offset + 1], data[offset + 2]]) as usize,
-                offset + 3,
-            )
-        }
-        26 => {
-            if offset + 5 > data.len() {
-                return Err(Error::ZcashParsing("truncated".to_string()));
-            }
-            (
-                u32::from_be_bytes([
-                    data[offset + 1],
-                    data[offset + 2],
-                    data[offset + 3],
-                    data[offset + 4],
-                ]) as usize,
-                offset + 5,
-            )
-        }
+    let width = match additional {
+        0..=23 => 0,
+        24 => 1,
+        25 => 2,
+        26 => 4,
+        27 => 8,
         _ => {
             return Err(Error::ZcashParsing(format!(
                 "unsupported CBOR additional {additional}"
             )))
         }
     };
+    let header_end = offset + 1 + width;
+    let header = data.get(offset + 1..header_end).ok_or_else(truncated)?;
+    let arg = if width == 0 {
+        additional as u64
+    } else {
+        header.iter().fold(0u64, |v, b| (v << 8) | *b as u64)
+    };
 
     match major {
-        0 | 1 => Ok(header_end), // uint/negint: no content beyond header
-        2 | 3 => Ok(header_end + content_len), // bstr/tstr: skip content bytes
-        4 => {
-            // array: skip N items
-            let mut pos = header_end;
-            for _ in 0..content_len {
-                pos = cbor_skip_value(data, pos)?;
-            }
-            Ok(pos)
-        }
-        5 => {
-            // map: skip N key-value pairs
-            let mut pos = header_end;
-            for _ in 0..content_len {
-                pos = cbor_skip_value(data, pos)?; // key
-                pos = cbor_skip_value(data, pos)?; // value
-            }
-            Ok(pos)
-        }
-        7 => Ok(offset + 1), // simple values (true/false/null) or floats
+        0 | 1 => Ok(header_end),
+        2 | 3 => usize::try_from(arg)
+            .ok()
+            .and_then(|len| header_end.checked_add(len))
+            .filter(|end| *end <= data.len())
+            .ok_or_else(truncated),
         _ => Err(Error::ZcashParsing(format!(
-            "unsupported CBOR major type {major}"
+            "unknown key holds CBOR major type {major}, refusing to walk it"
         ))),
     }
 }
@@ -1472,6 +1464,70 @@ mod tests {
         assert_eq!(decoded.anchor_height, 0);
         assert!(!decoded.mainnet);
         assert!(decoded.notes.is_empty());
+    }
+
+    /// The empty bundle with one more map entry, `key: value`, appended.
+    fn bundle_with_extra(extra: &[u8]) -> Vec<u8> {
+        let mut cbor = encode_notes_bundle_to_cbor(&ZcashNotesBundle {
+            anchor: [0xFF; 32],
+            anchor_height: 7,
+            mainnet: true,
+            notes: vec![],
+            anchor_attestation: None,
+            anchor_time: None,
+        });
+        assert!((0xa1..0xb7).contains(&cbor[0]), "small map header");
+        cbor[0] += 1;
+        cbor.extend_from_slice(extra);
+        cbor
+    }
+
+    #[test]
+    fn notes_cbor_skips_a_scalar_under_an_unknown_key() {
+        // key 0 = version 1, as zcli sends it
+        let decoded = decode_notes_bundle_from_cbor(&bundle_with_extra(&[0x00, 0x01])).unwrap();
+        assert_eq!(decoded.anchor_height, 7);
+        // a short text value under key 9
+        assert!(
+            decode_notes_bundle_from_cbor(&bundle_with_extra(&[0x09, 0x62, b'h', b'i'])).is_ok()
+        );
+    }
+
+    /// Deep nesting under an unknown key used to recurse once per level, so
+    /// a long run of 0x81 overflowed the native stack.
+    #[test]
+    fn notes_cbor_refuses_nesting_under_an_unknown_key() {
+        let mut extra = vec![0x09];
+        extra.extend(std::iter::repeat_n(0x81, 200_000));
+        extra.push(0x00);
+        assert!(decode_notes_bundle_from_cbor(&bundle_with_extra(&extra)).is_err());
+        assert!(decode_notes_bundle_from_cbor(&bundle_with_extra(&[0x09, 0xa0])).is_err());
+    }
+
+    #[test]
+    fn notes_cbor_refuses_a_string_past_the_end() {
+        let extra = [0x09, 0x5b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        assert!(decode_notes_bundle_from_cbor(&bundle_with_extra(&extra)).is_err());
+    }
+
+    #[test]
+    fn notes_cbor_refuses_trailing_bytes_and_wide_heights() {
+        let mut cbor = bundle_with_extra(&[0x00, 0x01]);
+        cbor.push(0x00);
+        assert!(decode_notes_bundle_from_cbor(&cbor).is_err());
+
+        let mut wide = encode_notes_bundle_to_cbor(&ZcashNotesBundle {
+            anchor: [0; 32],
+            anchor_height: 0,
+            mainnet: true,
+            notes: vec![],
+            anchor_attestation: None,
+            anchor_time: None,
+        });
+        // anchor_height is key 2: replace its uint 0 with 2^32
+        let at = wide.windows(2).position(|w| w == [0x02, 0x00]).unwrap();
+        wide.splice(at + 1..at + 2, [0x1b, 0, 0, 0, 1, 0, 0, 0, 0]);
+        assert!(decode_notes_bundle_from_cbor(&wide).is_err());
     }
 
     #[test]

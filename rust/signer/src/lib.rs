@@ -879,50 +879,109 @@ fn export_backup_ur(
     }
 }
 
-/// Decode UR-encoded backup and return JSON string
-fn decode_backup_ur(ur_parts: Vec<String>) -> Result<String, ErrorDisplayed> {
-    if ur_parts.is_empty() {
-        return Err(ErrorDisplayed::Str {
-            s: "No UR parts provided".to_string(),
-        });
-    }
+/// Largest legitimate animated scan, in fountain fragments: a 2.7 MB module
+/// is about 6,000 fragments. Matches the camera's frame cap.
+const UR_MAX_SEQUENCE_COUNT: u64 = 20_000;
+/// Largest legitimate UR message (the module is 2.7 MB).
+const UR_MAX_MESSAGE_LEN: u64 = 8 * 1024 * 1024;
 
-    // Try single-part decode first
+fn ur_err(what: &str, e: impl core::fmt::Debug) -> ErrorDisplayed {
+    ErrorDisplayed::Str {
+        s: format!("{what}: {e:?}"),
+    }
+}
+
+/// One CBOR unsigned integer (major type 0) at `data[*at..]`.
+fn ur_header_uint(data: &[u8], at: &mut usize) -> Option<u64> {
+    let first = *data.get(*at)?;
+    *at += 1;
+    if first >> 5 != 0 {
+        return None;
+    }
+    let width = match first & 0x1f {
+        n @ 0..=23 => return Some(n as u64),
+        24 => 1,
+        25 => 2,
+        26 => 4,
+        27 => 8,
+        _ => return None,
+    };
+    let bytes = data.get(*at..*at + width)?;
+    *at += width;
+    Some(bytes.iter().fold(0u64, |v, b| (v << 8) | *b as u64))
+}
+
+/// A fountain part is CBOR `[seq, seq_count, message_len, checksum, data]`.
+/// The decoder sizes its allocations from `seq_count` and `message_len`, so
+/// both are bounded here, before the part reaches it.
+fn ur_check_part_header(cbor: &[u8]) -> Result<(), ErrorDisplayed> {
+    let mut at = 1;
+    let fields = (cbor.first() == Some(&0x85))
+        .then(|| {
+            let seq = ur_header_uint(cbor, &mut at)?;
+            let count = ur_header_uint(cbor, &mut at)?;
+            let len = ur_header_uint(cbor, &mut at)?;
+            Some((seq, count, len))
+        })
+        .flatten();
+    match fields {
+        Some((_, count, len))
+            if (1..=UR_MAX_SEQUENCE_COUNT).contains(&count)
+                && (1..=UR_MAX_MESSAGE_LEN).contains(&len) =>
+        {
+            Ok(())
+        }
+        _ => Err(ErrorDisplayed::Str {
+            s: "UR part declares an implausible size".to_string(),
+        }),
+    }
+}
+
+/// Reassemble a UR message from the scanned parts.
+///
+/// A lone single-part UR is returned as is. Anything multi-part, including
+/// a lone `1-1` part, goes through the fountain decoder so its checksum is
+/// checked, and every part's declared size is bounded first.
+fn ur_message(ur_parts: &[String]) -> Result<Vec<u8>, ErrorDisplayed> {
+    let first = ur_parts.first().ok_or_else(|| ErrorDisplayed::Str {
+        s: "No UR parts provided".to_string(),
+    })?;
     if ur_parts.len() == 1 {
-        let (_, cbor_data) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
-            s: format!("UR decode error: {:?}", e),
-        })?;
-        return extract_backup_json_from_cbor(&cbor_data);
-    }
-
-    // Multi-part decode using fountain codes
-    let mut decoder = ur::ur::Decoder::default();
-
-    for part in &ur_parts {
-        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
-            s: format!("UR receive error: {:?}", e),
-        })?;
-
-        if decoder.complete() {
-            match decoder.message() {
-                Ok(Some(cbor_data)) => return extract_backup_json_from_cbor(&cbor_data),
-                Ok(None) => {
-                    return Err(ErrorDisplayed::Str {
-                        s: "UR decoder complete but no message".to_string(),
-                    })
-                }
-                Err(e) => {
-                    return Err(ErrorDisplayed::Str {
-                        s: format!("UR message error: {:?}", e),
-                    })
-                }
-            }
+        let (kind, data) = ur::ur::decode(first).map_err(|e| ur_err("UR decode", e))?;
+        if kind == ur::ur::Kind::SinglePart {
+            return Ok(data);
         }
     }
-
+    let mut decoder = ur::ur::Decoder::default();
+    for part in ur_parts {
+        let (kind, cbor) = ur::ur::decode(part).map_err(|e| ur_err("UR decode", e))?;
+        if kind != ur::ur::Kind::MultiPart {
+            return Err(ErrorDisplayed::Str {
+                s: "single-part UR inside an animated sequence".to_string(),
+            });
+        }
+        ur_check_part_header(&cbor)?;
+        decoder.receive(part).map_err(|e| ur_err("UR receive", e))?;
+        if decoder.complete() {
+            return decoder
+                .message()
+                .map_err(|e| ur_err("UR message", e))?
+                .ok_or_else(|| ErrorDisplayed::Str {
+                    s: "UR decoder complete but no message".to_string(),
+                });
+        }
+    }
     Err(ErrorDisplayed::Str {
-        s: "Incomplete UR data - need more frames".to_string(),
+        s: format!(
+            "Incomplete UR sequence: received {} parts but not complete",
+            ur_parts.len()
+        ),
     })
+}
+
+/// Decode UR-encoded backup and return JSON string
+fn decode_backup_ur(ur_parts: Vec<String>) -> Result<String, ErrorDisplayed> {
+    extract_backup_json_from_cbor(&ur_message(&ur_parts)?)
 }
 
 fn extract_backup_json_from_cbor(cbor_data: &[u8]) -> Result<String, ErrorDisplayed> {
@@ -1835,76 +1894,20 @@ fn get_zcash_transparent_address(
 /// Decode UR string to get PCZT bytes
 /// Handles both single QR and animated QR sequences
 fn decode_ur_zcash_pczt(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDisplayed> {
-    use ur::ur::decode;
-
-    if ur_parts.is_empty() {
-        return Err(ErrorDisplayed::Str {
-            s: "No UR parts provided".to_string(),
-        });
-    }
-
-    // Verify UR type from the URI string (format: ur:type/data)
-    fn verify_ur_type(ur_string: &str) -> Result<(), ErrorDisplayed> {
-        let lower = ur_string.to_lowercase();
-        if !lower.starts_with("ur:zcash-pczt/") {
+    // Every part must be ur:zcash-pczt/... so a stray QR mid-stream can
+    // never reach the fountain decoder.
+    for part in &ur_parts {
+        if !part.to_lowercase().starts_with("ur:zcash-pczt/") {
             return Err(ErrorDisplayed::Str {
                 s: format!(
                     "Expected ur:zcash-pczt/... got: {}",
-                    ur_string.chars().take(30).collect::<String>()
+                    part.chars().take(30).collect::<String>()
                 ),
             });
         }
-        Ok(())
     }
-
-    // For single-part UR, decode directly
-    if ur_parts.len() == 1 {
-        verify_ur_type(&ur_parts[0])?;
-
-        let (_kind, cbor_data) = decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to decode UR: {:?}", e),
-        })?;
-
-        // Extract PCZT bytes from CBOR
-        // CBOR structure: { 1: bytes } (map with key 1 containing the PCZT bytes)
-        extract_pczt_from_cbor(&cbor_data)
-    } else {
-        // For multi-part (animated) UR, use fountain decoder
-        let mut decoder = ur::ur::Decoder::default();
-
-        // Verify type from first part
-        verify_ur_type(&ur_parts[0])?;
-
-        for part in &ur_parts {
-            decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
-                s: format!("Failed to receive UR part: {:?}", e),
-            })?;
-
-            if decoder.complete() {
-                break;
-            }
-        }
-
-        if !decoder.complete() {
-            return Err(ErrorDisplayed::Str {
-                s: format!(
-                    "Incomplete UR sequence: received {} parts but not complete",
-                    ur_parts.len()
-                ),
-            });
-        }
-
-        let cbor_data = decoder
-            .message()
-            .map_err(|e| ErrorDisplayed::Str {
-                s: format!("Failed to get UR message: {:?}", e),
-            })?
-            .ok_or_else(|| ErrorDisplayed::Str {
-                s: "UR decoder returned None despite being complete".to_string(),
-            })?;
-
-        extract_pczt_from_cbor(&cbor_data)
-    }
+    // CBOR structure: { 1: bytes } (map with key 1 containing the PCZT bytes)
+    extract_pczt_from_cbor(&ur_message(&ur_parts)?)
 }
 
 /// Extract PCZT bytes from CBOR wrapper
@@ -3165,56 +3168,19 @@ fn decode_zt_payload(parts: &[String], expected_type: &str) -> Result<Vec<u8>, E
 }
 
 fn decode_ur_payload(ur_parts: &[String], expected_type: &str) -> Result<Vec<u8>, ErrorDisplayed> {
-    use ur::ur::decode;
-
     let expected_prefix = format!("ur:{}/", expected_type);
-
-    // Verify UR type
-    let lower = ur_parts[0].to_lowercase();
-    if !lower.starts_with(&expected_prefix) {
-        return Err(ErrorDisplayed::Str {
-            s: format!(
-                "Expected ur:{}/... got: {}",
-                expected_type,
-                ur_parts[0].chars().take(40).collect::<String>()
-            ),
-        });
-    }
-
-    if ur_parts.len() == 1 {
-        let (_kind, data) = decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to decode UR: {:?}", e),
-        })?;
-        Ok(data)
-    } else {
-        let mut decoder = ur::ur::Decoder::default();
-        for part in ur_parts {
-            decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
-                s: format!("Failed to receive UR part: {:?}", e),
-            })?;
-            if decoder.complete() {
-                break;
-            }
-        }
-
-        if !decoder.complete() {
+    for part in ur_parts {
+        if !part.to_lowercase().starts_with(&expected_prefix) {
             return Err(ErrorDisplayed::Str {
                 s: format!(
-                    "Incomplete UR sequence: received {} parts but not complete",
-                    ur_parts.len()
+                    "Expected ur:{}/... got: {}",
+                    expected_type,
+                    part.chars().take(40).collect::<String>()
                 ),
             });
         }
-
-        decoder
-            .message()
-            .map_err(|e| ErrorDisplayed::Str {
-                s: format!("Failed to get UR message: {:?}", e),
-            })?
-            .ok_or_else(|| ErrorDisplayed::Str {
-                s: "UR decoder returned None despite being complete".to_string(),
-            })
     }
+    ur_message(ur_parts)
 }
 
 /// High-level function to sign a PCZT from UR-encoded QR data
@@ -3709,43 +3675,11 @@ fn ur_encode_cbor(
 }
 
 fn ur_decode_parts(ur_parts: &[String]) -> Result<Vec<u8>, ErrorDisplayed> {
-    if ur_parts.is_empty() {
-        return Err(ErrorDisplayed::Str {
-            s: "no UR parts".to_string(),
-        });
-    }
-    if ur_parts.len() == 1 {
-        let (_, cbor) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
-            s: format!("UR decode: {e:?}"),
-        })?;
-        let (bytes, _) = parse_cbor_bytes(&cbor).map_err(|e| ErrorDisplayed::Str {
-            s: format!("CBOR: {e}"),
-        })?;
-        return Ok(bytes);
-    }
-    let mut decoder = ur::ur::Decoder::default();
-    for part in ur_parts {
-        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
-            s: format!("UR receive: {e:?}"),
-        })?;
-        if decoder.complete() {
-            let cbor = decoder
-                .message()
-                .map_err(|e| ErrorDisplayed::Str {
-                    s: format!("UR message: {e:?}"),
-                })?
-                .ok_or_else(|| ErrorDisplayed::Str {
-                    s: "UR complete but no message".to_string(),
-                })?;
-            let (bytes, _) = parse_cbor_bytes(&cbor).map_err(|e| ErrorDisplayed::Str {
-                s: format!("CBOR: {e}"),
-            })?;
-            return Ok(bytes);
-        }
-    }
-    Err(ErrorDisplayed::Str {
-        s: "incomplete UR".to_string(),
-    })
+    let cbor = ur_message(ur_parts)?;
+    let (bytes, _) = parse_cbor_bytes(&cbor).map_err(|e| ErrorDisplayed::Str {
+        s: format!("CBOR: {e}"),
+    })?;
+    Ok(bytes)
 }
 
 fn cbor_tstr_into(buf: &mut Vec<u8>, s: &[u8]) {
@@ -4964,38 +4898,7 @@ fn decode_ur_module_request(ur_parts: Vec<String>) -> Result<Vec<u8>, ErrorDispl
         }
     }
 
-    if ur_parts.len() == 1 {
-        let (_kind, bytes) = ur::ur::decode(&ur_parts[0]).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to decode UR: {e:?}"),
-        })?;
-        return Ok(bytes);
-    }
-
-    let mut decoder = ur::ur::Decoder::default();
-    for part in &ur_parts {
-        decoder.receive(part).map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to receive UR part: {e:?}"),
-        })?;
-        if decoder.complete() {
-            break;
-        }
-    }
-    if !decoder.complete() {
-        return Err(ErrorDisplayed::Str {
-            s: format!(
-                "Incomplete UR sequence: received {} parts but not complete",
-                ur_parts.len()
-            ),
-        });
-    }
-    decoder
-        .message()
-        .map_err(|e| ErrorDisplayed::Str {
-            s: format!("Failed to get UR message: {e:?}"),
-        })?
-        .ok_or_else(|| ErrorDisplayed::Str {
-            s: "UR decoder returned None despite being complete".to_string(),
-        })
+    ur_message(&ur_parts)
 }
 
 /// CBOR unsigned integer (major type 0), shortest form.
@@ -5088,6 +4991,48 @@ mod tests {
         expect.extend_from_slice(&[0x02, 0x19, 0x01, 0x00, 0x03]);
         cbor_uint(&mut expect, module_host::HOST_ABI_VERSION);
         assert_eq!(out, expect);
+    }
+
+    fn ur_frames(message: &[u8], fragment: usize, count: usize) -> Vec<String> {
+        let mut encoder = ur::ur::Encoder::new(message, fragment, "zigner-module").unwrap();
+        (0..count).map(|_| encoder.next_part().unwrap()).collect()
+    }
+
+    #[test]
+    fn ur_message_reassembles_an_animated_scan() {
+        let message: Vec<u8> = (0..5000u32).map(|i| (i * 7) as u8).collect();
+        let frames = ur_frames(&message, 200, 40);
+        assert_eq!(ur_message(&frames).unwrap(), message);
+    }
+
+    #[test]
+    fn ur_message_checks_a_lone_multipart_frame() {
+        let frames = ur_frames(b"short", 200, 1);
+        assert!(frames[0].contains("/1-1/"));
+        assert_eq!(ur_message(&frames).unwrap(), b"short");
+    }
+
+    /// A part whose text counter is valid but whose CBOR declares 400 million
+    /// fragments made the fountain decoder ask for gigabytes; it is refused
+    /// before the decoder sees it.
+    #[test]
+    fn ur_message_refuses_an_implausible_part() {
+        let frame = &ur_frames(&[1u8; 600], 200, 1)[0];
+        let (_, mut cbor) = ur::ur::decode(frame).unwrap();
+        // [seq, count, len, checksum, data]: replace count with 400_000_000
+        let mut at = 1;
+        ur_header_uint(&cbor, &mut at).unwrap();
+        let count_at = at;
+        ur_header_uint(&cbor, &mut at).unwrap();
+        cbor.splice(count_at..at, [0x1a, 0x17, 0xd7, 0x84, 0x00]);
+        let evil = format!(
+            "ur:zigner-module/1-3/{}",
+            ur::bytewords::encode(&cbor, ur::bytewords::Style::Minimal)
+        );
+        match ur_message(&[evil.clone(), evil]) {
+            Err(ErrorDisplayed::Str { s }) => assert!(s.contains("implausible"), "{}", s),
+            other => panic!("expected a refusal, got {:?}", other.map(|m| m.len())),
+        }
     }
 }
 
