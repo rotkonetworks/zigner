@@ -36,6 +36,14 @@ All notable changes to zigner are documented in this file.
   - The fountain and note-import decoders are retried at growing intervals
     instead of every few frames, which kept a long hostile stream quadratic
     on the main thread.
+- **Smaller leaks closed.**
+  - Rust logs go to logcat only in debug builds; release builds have no
+    Rust logger at all.
+  - A debug build no longer logs a FROST wallet's key package when its
+    detail screen fails to parse it.
+  - A FROST wallet whose 64-bit id collides with an existing one is
+    refused instead of overwriting that wallet's key share.
+  - Every signing path asks for an unlock at the moment of signing.
 - **Penumbra signing shows what it signs.** The approve screen showed only
   the chain, a spend count and part of a hash - never a recipient, amount
   or fee - so a hostile wallet could pay any address. It now decodes the
