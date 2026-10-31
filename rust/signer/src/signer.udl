@@ -1469,45 +1469,6 @@ dictionary MSCTxSpecPlain {
     string tx_version;
 };
 
-// penumbra transaction types
-dictionary PenumbraSpendAction {
-    string note_value;
-    string note_asset;
-    string note_address;
-};
-
-dictionary PenumbraOutputAction {
-    string value;
-    string asset;
-    string dest_address;
-};
-
-dictionary PenumbraSwapAction {
-    string input_value;
-    string input_asset;
-    string output_asset;
-};
-
-dictionary PenumbraDelegateAction {
-    string amount;
-    string validator;
-};
-
-dictionary PenumbraVoteAction {
-    u64 proposal_id;
-    string vote;
-};
-
-dictionary PenumbraTransactionSummary {
-    string chain_id;
-    u64? expiry_height;
-    string fee;
-    string fee_asset;
-    u64 spend_count;
-    u64 output_count;
-    string effect_hash;
-};
-
 // Penumbra FVK export for watch-only wallet import
 // Includes UR-encoded string for hardware wallet QR compatibility
 // UR type: penumbra-accounts (CBOR tag 49301)
@@ -1572,29 +1533,24 @@ dictionary PenumbraSignRequest {
     u32 vote_count;
     u32 lqt_vote_count;
     string raw_qr_hex;
+    u64 expiry_height;
+    string fee;
+    string memo;
+    sequence<PenumbraReviewLine> lines;
 };
 
-// Penumbra generic action (for unrecognized action types)
-dictionary PenumbraGenericAction {
-    string action_name;
-    string description;
-    sequence<StringPair> fields;
-    boolean recognized;
-    u32 field_number;
+// One action of a Penumbra transaction, decoded from the plan for review
+dictionary PenumbraReviewLine {
+    string kind;
+    string amount;
+    string counterparty;
+    boolean is_own;
 };
 
 // String pair for generic action fields
 dictionary StringPair {
     string first;
     string second;
-};
-
-// Penumbra schema info
-dictionary PenumbraSchemaInfo {
-    string chain_id;
-    string protocol_version;
-    u32 action_count;
-    u32 schema_version;
 };
 
 // ============================================================================
@@ -1803,14 +1759,6 @@ interface Card {
     VarNameCard(string f);
     VerifierCard(MVerifierDetails f);
     WarningCard(string f);
-    PenumbraSummaryCard(PenumbraTransactionSummary f);
-    PenumbraSpendCard(PenumbraSpendAction f);
-    PenumbraOutputCard(PenumbraOutputAction f);
-    PenumbraSwapCard(PenumbraSwapAction f);
-    PenumbraDelegateCard(PenumbraDelegateAction f);
-    PenumbraVoteCard(PenumbraVoteAction f);
-    PenumbraGenericActionCard(PenumbraGenericAction f);
-    PenumbraSchemaCard(PenumbraSchemaInfo f);
     ZcashSummaryCard(ZcashTransactionSummary f);
     ZcashOrchardSpendCard(ZcashOrchardSpend f);
     ZcashOrchardOutputCard(ZcashOrchardOutput f);

@@ -413,10 +413,11 @@ fun ScanNavSubgraph(
 			}
 		)
 	} else if (unifiedSignRequest.value != null) {
-		// Unified transaction screen (currently for zcash simple sign)
+		// Unified transaction screen (Penumbra and Cosmos)
 		UnifiedTransactionScreen(
 			signRequest = unifiedSignRequest.value!!,
 			modifier = Modifier.statusBarsPadding(),
+			getSeedName = { scanViewModel.getFirstSeedName() },
 			onApprove = {
 				scanViewModel.signUnifiedTransaction(context)
 			},

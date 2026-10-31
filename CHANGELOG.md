@@ -36,6 +36,23 @@ All notable changes to zigner are documented in this file.
   - The fountain and note-import decoders are retried at growing intervals
     instead of every few frames, which kept a long hostile stream quadratic
     on the main thread.
+- **Penumbra signing shows what it signs.** The approve screen showed only
+  the chain, a spend count and part of a hash - never a recipient, amount
+  or fee - so a hostile wallet could pay any address. It now decodes the
+  transaction plan with the Penumbra SDK, from the same bytes Zigner
+  checks against the effect hash, and shows each action's amount and full
+  address, the fee, expiry and memo, and the key that signs. The chain is
+  the plan's own, not the QR header's (the header defaulted to
+  `penumbra-1` when missing).
+  - Sends, swaps, swap claims, delegation, undelegation and claims, and IBC
+    withdrawals are shown and signed. Liquidity positions, Dutch auctions,
+    votes and governance actions are refused until each has a screen.
+  - An output is marked as this device's own only when it pays a receive
+    address stored on the device.
+  - The QR's spend randomizers must match the plan's, and the review runs
+    again at signing time, so nothing it cannot show is ever signed.
+  - The old card display, its hand-written protobuf decoder, and the
+    unauthenticated schema-update QR that rewrote it are deleted.
 - **FROST review can no longer hide a payment or call it change.** The
   on-device check listed only the outputs it could decrypt with the group's
   keys and silently dropped the rest, and it labelled an output "change"

@@ -33,6 +33,8 @@ subtle = { version = "2.5", optional = true }
 penumbra-transaction = { git = "https://github.com/penumbra-zone/penumbra.git", tag = "v2.0.4", package = "penumbra-sdk-transaction", default-features = false, optional = true }
 penumbra-keys = { git = "https://github.com/penumbra-zone/penumbra.git", tag = "v2.0.4", package = "penumbra-sdk-keys", optional = true }
 penumbra-proto = { git = "https://github.com/penumbra-zone/penumbra.git", tag = "v2.0.4", package = "penumbra-sdk-proto", default-features = false, optional = true }
+# known denominations for the review screen (already in the graph via keys)
+penumbra-asset = { git = "https://github.com/penumbra-zone/penumbra.git", tag = "v2.0.4", package = "penumbra-sdk-asset", default-features = false, optional = true }
 
 # cosmos signing (reuses secp256k1 + sha2 from zcash)
 serde_json = { version = "1", optional = true }
@@ -49,7 +51,7 @@ frost-spend = { workspace = true, optional = true }
 
 [features]
 default = []
-penumbra = ["decaf377", "decaf377-rdsa", "blake2b_simd", "rand_chacha", "bip32", "sha2", "poseidon377", "bech32", "subtle", "penumbra-transaction", "penumbra-keys", "penumbra-proto"]
+penumbra = ["decaf377", "decaf377-rdsa", "blake2b_simd", "rand_chacha", "bip32", "sha2", "poseidon377", "bech32", "subtle", "penumbra-transaction", "penumbra-keys", "penumbra-proto", "penumbra-asset"]
 zcash = ["orchard", "secp256k1", "ripemd", "bs58", "bip32", "bech32", "sha2", "zip32", "zcash_address", "zcash_protocol", "frost-spend"]
 cosmos = ["secp256k1", "sha2", "serde_json"]
 

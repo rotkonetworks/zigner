@@ -23,6 +23,8 @@ pub use error::{Error, Result};
 #[cfg(feature = "penumbra")]
 pub mod penumbra;
 #[cfg(feature = "penumbra")]
+pub mod penumbra_review;
+#[cfg(feature = "penumbra")]
 pub use penumbra::{
     derive_spend_auth_key as penumbra_derive_spend_auth_key, sign_spend as penumbra_sign_spend,
     sign_transaction as penumbra_sign_transaction, EffectHash as PenumbraEffectHash,
