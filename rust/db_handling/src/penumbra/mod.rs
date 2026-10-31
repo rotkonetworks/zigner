@@ -10,10 +10,6 @@
 //! seed, and existing installs keep those keys, so new entries use the same id.
 //! It is not a Penumbra key and must not be shown as one.
 
-pub mod schema;
-
-pub use schema::*;
-
 use crate::error::Result;
 use constants::{PENUMBRA_ADDRS_UNSPENDABLE, PENUMBRA_RECEIVE_ADDRS};
 
@@ -62,6 +58,20 @@ pub fn store_penumbra_address(
     let tree = database.open_tree(PENUMBRA_RECEIVE_ADDRS)?;
     tree.insert(key_id_hex.as_bytes(), bech32m_address.as_bytes())?;
     Ok(())
+}
+
+/// Every stored receive address on this device. The review screen marks an
+/// output as the user's own only when it pays one of these.
+pub fn receive_addresses(database: &sled::Db) -> Result<Vec<String>> {
+    let tree = database.open_tree(PENUMBRA_RECEIVE_ADDRS)?;
+    let mut out = Vec::new();
+    for entry in tree.iter() {
+        let (_, bytes) = entry?;
+        if let Ok(address) = String::from_utf8(bytes.to_vec()) {
+            out.push(address);
+        }
+    }
+    Ok(out)
 }
 
 /// The stored receive address for a key id. `None` for a key added before the

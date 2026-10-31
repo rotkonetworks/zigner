@@ -1505,20 +1505,63 @@ fn sign_cosmos_transaction(
 fn parse_penumbra_sign_request(qr_hex: &str) -> Result<PenumbraSignRequest, ErrorDisplayed> {
     use transaction_parsing::penumbra::parse_penumbra_transaction;
 
-    let plan = parse_penumbra_transaction(qr_hex).map_err(|e| ErrorDisplayed::Str {
+    let qr = parse_penumbra_transaction(qr_hex).map_err(|e| ErrorDisplayed::Str {
         s: format!("Failed to parse Penumbra QR: {e}"),
     })?;
-
-    let effect_hash_hex = plan.effect_hash.map(hex::encode).unwrap_or_default();
+    let own = db_handling::penumbra::receive_addresses(&get_db()?)
+        .map_err(|e| ErrorDisplayed::from(e.to_string()))?;
+    let review = review_penumbra_qr(&qr, &own)?;
 
     Ok(PenumbraSignRequest {
-        chain_id: plan.chain_id.unwrap_or_default(),
-        effect_hash_hex,
-        spend_count: plan.spend_randomizers.len() as u32,
-        vote_count: plan.delegator_vote_randomizers.len() as u32,
-        lqt_vote_count: plan.lqt_vote_randomizers.len() as u32,
+        chain_id: review.chain_id,
+        effect_hash_hex: qr.effect_hash.map(hex::encode).unwrap_or_default(),
+        spend_count: qr.spend_randomizers.len() as u32,
+        vote_count: 0,
+        lqt_vote_count: 0,
         raw_qr_hex: qr_hex.to_string(),
+        expiry_height: review.expiry_height,
+        fee: review.fee,
+        memo: review.memo.unwrap_or_default(),
+        lines: review
+            .lines
+            .into_iter()
+            .map(|l| PenumbraReviewLine {
+                kind: l.kind,
+                amount: l.amount,
+                counterparty: l.counterparty,
+                is_own: l.is_own,
+            })
+            .collect(),
     })
+}
+
+/// Describe the plan in a Penumbra QR, refusing anything the review screen
+/// cannot show and any QR whose own fields disagree with the plan.
+fn review_penumbra_qr(
+    qr: &transaction_parsing::penumbra::PenumbraTransactionPlan,
+    own_addresses: &[String],
+) -> Result<transaction_signing::penumbra_review::PlanReview, ErrorDisplayed> {
+    let review = transaction_signing::penumbra_review::review_plan(&qr.plan_bytes, own_addresses)
+        .map_err(|e| ErrorDisplayed::Str { s: e.to_string() })?;
+    let refuse = |s: &str| {
+        Err(ErrorDisplayed::Str {
+            s: format!("Penumbra QR disagrees with its plan: {s} - refusing to sign it"),
+        })
+    };
+    if let Some(header) = &qr.chain_id {
+        if *header != review.chain_id {
+            return refuse("chain");
+        }
+    }
+    // Votes are refused by the review, so a QR may carry no vote randomizers;
+    // the spend randomizers must be exactly the plan's.
+    if !qr.delegator_vote_randomizers.is_empty() || !qr.lqt_vote_randomizers.is_empty() {
+        return refuse("vote randomizers");
+    }
+    if qr.spend_randomizers != review.spend_randomizers {
+        return refuse("spend randomizers");
+    }
+    Ok(review)
 }
 
 /// Sign a Penumbra transaction and return encoded signature QR bytes
@@ -1540,6 +1583,9 @@ fn sign_penumbra_transaction(
     let effect_hash = plan.effect_hash.ok_or_else(|| ErrorDisplayed::Str {
         s: "No effect hash in QR".to_string(),
     })?;
+
+    // Only a plan the review screen can show is ever signed.
+    review_penumbra_qr(&plan, &[])?;
 
     // Derive spend key from seed phrase (account 0)
     let spend_key =

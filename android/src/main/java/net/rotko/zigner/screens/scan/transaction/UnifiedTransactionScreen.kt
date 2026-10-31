@@ -39,9 +39,13 @@ fun UnifiedTransactionScreen(
 	onApprove: Callback,
 	onDecline: Callback,
 	modifier: Modifier = Modifier,
+	getSeedName: suspend () -> String = { "" },
 ) {
 	// Approval screen: reject touches while an overlay is up.
 	TapjackGuard()
+
+	var signingSeedName by remember { mutableStateOf("") }
+	LaunchedEffect(Unit) { signingSeedName = getSeedName() }
 
 	var selectedTab by remember { mutableStateOf(0) }
 	val tabs = listOf("Simple", "Advanced")
@@ -107,7 +111,7 @@ fun UnifiedTransactionScreen(
 			verticalArrangement = Arrangement.spacedBy(12.dp),
 		) {
 			when (selectedTab) {
-				0 -> SimpleTabContent(signRequest)
+				0 -> SimpleTabContent(signRequest, signingSeedName)
 				1 -> AdvancedTabContent(signRequest)
 			}
 		}
@@ -191,55 +195,38 @@ private fun TxTypeBadge(signRequest: SignRequest) {
 // =============================================================================
 
 @Composable
-private fun SimpleTabContent(signRequest: SignRequest) {
+private fun SimpleTabContent(signRequest: SignRequest, signingSeedName: String) {
 	when (signRequest) {
-		is SignRequest.Penumbra -> PenumbraSimpleContent(signRequest)
+		is SignRequest.Penumbra -> PenumbraSimpleContent(signRequest, signingSeedName)
 		is SignRequest.Cosmos -> CosmosSimpleContent(signRequest)
 		is SignRequest.ZcashPczt -> ZcashPcztSimpleContent(signRequest)
 	}
 }
 
 @Composable
-private fun PenumbraSimpleContent(req: SignRequest.Penumbra) {
+private fun PenumbraSimpleContent(req: SignRequest.Penumbra, signingSeedName: String) {
 	val r = req.request
 
-	// Chain
-	DetailRow(label = "Chain", value = r.chainId.ifEmpty { "penumbra-1" })
+	// Everything below is decoded from the transaction plan Zigner signs; the
+	// chain is the plan's own, not the QR header's.
+	DetailRow(label = "Chain", value = r.chainId)
 
-	// What this tx does
-	if (r.spendCount > 0u) {
+	r.lines.forEach { line ->
 		HighlightCard(
-			title = "Sending funds",
-			subtitle = "${r.spendCount} spend action(s)",
-			color = Color(0xFF8B5CF6),
-		)
-	}
-	if (r.voteCount > 0u) {
-		HighlightCard(
-			title = "Governance Vote",
-			subtitle = "${r.voteCount} delegator vote(s)",
-			color = Color(0xFF3B82F6),
-		)
-	}
-	if (r.lqtVoteCount > 0u) {
-		HighlightCard(
-			title = "Liquidity Tournament",
-			subtitle = "${r.lqtVoteCount} LQT vote(s)",
-			color = Color(0xFF10B981),
+			title = "${line.kind} ${line.amount}",
+			subtitle = when {
+				line.counterparty.isEmpty() -> ""
+				line.isOwn -> "${line.counterparty}\n(this device's address)"
+				else -> line.counterparty
+			},
+			color = if (line.isOwn) Color(0xFF10B981) else Color(0xFF8B5CF6),
 		)
 	}
 
-	// Signatures required
-	val totalSigs = r.spendCount + r.voteCount + r.lqtVoteCount
-	DetailRow(label = "Signatures required", value = "$totalSigs")
-
-	// Effect hash (abbreviated)
-	if (r.effectHashHex.isNotEmpty()) {
-		DetailRow(
-			label = "Effect hash",
-			value = r.effectHashHex.take(8) + "..." + r.effectHashHex.takeLast(8),
-		)
-	}
+	DetailRow(label = "Fee", value = r.fee)
+	if (r.memo.isNotEmpty()) DetailRow(label = "Memo", value = r.memo)
+	DetailRow(label = "Expires at block", value = if (r.expiryHeight == 0uL) "never" else "${r.expiryHeight}")
+	DetailRow(label = "Signing as", value = "${signingSeedName.ifEmpty { "(no seed available)" }} · account 0")
 }
 
 @Composable
@@ -434,11 +421,16 @@ private fun AdvancedTabContent(signRequest: SignRequest) {
 			}
 			is SignRequest.Penumbra -> {
 				buildString {
-					appendLine("chain_id: ${signRequest.request.chainId}")
-					appendLine("effect_hash: ${signRequest.request.effectHashHex}")
-					appendLine("spend_count: ${signRequest.request.spendCount}")
-					appendLine("vote_count: ${signRequest.request.voteCount}")
-					appendLine("lqt_vote_count: ${signRequest.request.lqtVoteCount}")
+					val r = signRequest.request
+					appendLine("chain_id: ${r.chainId}")
+					appendLine("expiry_height: ${r.expiryHeight}")
+					appendLine("fee: ${r.fee}")
+					if (r.memo.isNotEmpty()) appendLine("memo: ${r.memo}")
+					appendLine("effect_hash: ${r.effectHashHex}")
+					r.lines.forEachIndexed { i, l ->
+						appendLine("  [$i] ${l.kind} ${l.amount}")
+						if (l.counterparty.isNotEmpty()) appendLine("      ${l.counterparty}${if (l.isOwn) " (own)" else ""}")
+					}
 					appendLine()
 					appendLine("--- raw hex ---")
 					append(payload)
