@@ -142,17 +142,10 @@ extension FrostSignView {
                 do {
                     switch self.round {
                     case 1:
-                        let walletJson = try frostLoadWallet(walletId: self.walletId)
-                        let wallet = try JSONSerialization.jsonObject(with: Data(walletJson.utf8)) as? [String: Any]
-                        let kp = wallet?["key_package"] as? String ?? ""
-                        let es = wallet?["ephemeral_seed"] as? String ?? ""
-                        let result = try frostSignRound1(ephemeralSeedHex: es, keyPackageHex: kp)
-                        let json = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
-                        let nonces = json?["nonces"] as? String ?? ""
-                        let commitments = json?["commitments"] as? String ?? ""
+                        // Signing needs the sealed share, opened with the seed;
+                        // not ported to iOS yet (round 2 is refused as well).
                         DispatchQueue.main.async {
-                            self.onStateUpdated(nonces, kp)
-                            self.state = .displayQr(commitments)
+                            self.state = .error("FROST signing is not available on iOS yet.")
                         }
                     case 2:
                         // Round 2 signed every action with one nonce, which
