@@ -1076,8 +1076,9 @@ namespace signer {
     string frost_derive_address_raw([ByRef] string public_key_package_hex, u32 diversifier_index);
 
     // gh #17: verify a FROST payout PCZT before signing — recompute the sighash
-    // and OVK-decode outputs with the group UFVK. Returns JSON; caller blocks the
-    // signature on sighash/recipient/amount mismatch. See frost_multisig::frost_verify_pczt.
+    // and list every output from the PCZT's own proven fields; change only when
+    // the group's key owns the address. Throws on anything it cannot prove.
+    // See frost_multisig::frost_verify_pczt.
     [Throws=ErrorDisplayed]
     string frost_verify_pczt([ByRef] string pczt_hex, [ByRef] string claimed_sighash_hex, [ByRef] string orchard_fvk_uview);
 

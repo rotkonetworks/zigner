@@ -36,6 +36,14 @@ All notable changes to zigner are documented in this file.
   - The fountain and note-import decoders are retried at growing intervals
     instead of every few frames, which kept a long hostile stream quadratic
     on the main thread.
+- **FROST review can no longer hide a payment or call it change.** The
+  on-device check listed only the outputs it could decrypt with the group's
+  keys and silently dropped the rest, and it labelled an output "change"
+  by which key decrypted it - a coordinator could encrypt a payment to
+  itself that way. It now lists every output from the transaction's own
+  fields, each proven against its note commitment, refuses any output it
+  cannot prove and any transparent or Sapling part, calls an output change
+  only when its address belongs to the group, and shows the fee.
 - **iOS FROST signing is turned off.** Round 2 signed every action of a
   transaction with one nonce, which lets anyone who sees the signature
   shares recover this device's key share. The function that did it is
