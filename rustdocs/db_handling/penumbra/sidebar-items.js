@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fresh_receive_address","get_penumbra_address","key_id","receive_address","receive_addresses","refresh_receive_address","store_penumbra_address"]};
