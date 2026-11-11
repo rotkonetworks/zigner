@@ -1560,7 +1560,15 @@ fn json_text(value: &str) -> Option<serde_json::Value> {
 }
 
 fn decode_b64(compact: &str) -> Option<Vec<u8>> {
-    if compact.len() < 16 || compact.len() % 4 != 0 {
+    if compact.len() < 16 {
+        return None;
+    }
+    decode_b64_padded(compact)
+}
+
+/// Standard padded base64 of any length, including empty.
+fn decode_b64_padded(compact: &str) -> Option<Vec<u8>> {
+    if compact.len() % 4 != 0 {
         return None;
     }
     let bytes = compact.as_bytes();
@@ -1593,6 +1601,24 @@ fn decode_b64(compact: &str) -> Option<Vec<u8>> {
         }
     }
     Some(out)
+}
+
+fn encode_b64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16)
+            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*chunk.get(2).unwrap_or(&0));
+        for (i, shift) in [18, 12, 6, 0].into_iter().enumerate() {
+            if i <= chunk.len() {
+                out.push(ALPHABET[(n >> shift) as usize & 63] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 fn b64_val(c: u8) -> Option<u8> {
@@ -1633,7 +1659,123 @@ pub fn granter_binding(bytes: &[u8]) -> Result<Option<&str>> {
     Ok(Some(binding))
 }
 
+/// Amino type of the one message in an ADR-036 sign doc.
+pub const ADR036_MSG_TYPE: &str = "sign/MsgSignData";
+
+/// Card title for an ADR-036 off-chain message.
+pub const ADR036_CARD_TITLE: &str = "Sign message (ADR-036)";
+
+/// An ADR-036 off-chain message, as Keplr's `signArbitrary` makes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Adr036Message {
+    /// bech32 address that signs; the device signs only with this key
+    pub signer: String,
+    /// the message bytes, decoded from base64
+    pub data: Vec<u8>,
+}
+
+/// Keplr's ADR-036 sign doc for `signer` and `data`, serialized the way
+/// Keplr signs it: sorted keys, no whitespace. One `sign/MsgSignData`, empty
+/// chain id and memo, no fee, zero gas, account number and sequence 0.
+///
+/// `signer` is a bech32 address and base64 has no characters amino escapes,
+/// so formatting is the canonical serialization.
+pub fn adr036_sign_doc(signer: &str, data: &[u8]) -> Vec<u8> {
+    format!(
+        r#"{{"account_number":"0","chain_id":"","fee":{{"amount":[],"gas":"0"}},"memo":"","msgs":[{{"type":"{ADR036_MSG_TYPE}","value":{{"data":"{}","signer":"{signer}"}}}}],"sequence":"0"}}"#,
+        encode_b64(data)
+    )
+    .into_bytes()
+}
+
+/// The ADR-036 message in a sign doc, or `None` when no message is a
+/// `sign/MsgSignData`.
+///
+/// A doc that names `sign/MsgSignData` is signed only when its bytes are
+/// exactly Keplr's sign doc for that signer and data. Anything else, such as
+/// a second message, a chain id, a fee, a nonzero sequence, an extra field or
+/// other key order, is an error and is not signed.
+pub fn adr036_message(bytes: &[u8]) -> Result<Option<Adr036Message>> {
+    let err = |m: &str| Error::Other(anyhow::anyhow!("invalid ADR-036 sign doc: {m}"));
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Ok(None);
+    };
+    let msgs = json["msgs"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    if !msgs
+        .iter()
+        .any(|m| m["type"].as_str() == Some(ADR036_MSG_TYPE))
+    {
+        return Ok(None);
+    }
+    let [m] = msgs else {
+        return Err(err("it must hold exactly one message"));
+    };
+    let signer = m["value"]["signer"]
+        .as_str()
+        .filter(|s| bech32_parts(s).is_some())
+        .ok_or_else(|| err("signer is not a bech32 address"))?;
+    let data = m["value"]["data"]
+        .as_str()
+        .and_then(decode_b64_padded)
+        .ok_or_else(|| err("data is not base64"))?;
+    if bytes != adr036_sign_doc(signer, &data).as_slice() {
+        return Err(err(
+            "it must be one sign/MsgSignData with empty chain id and memo, no fee, \
+             zero gas, account number and sequence 0, in canonical form",
+        ));
+    }
+    Ok(Some(Adr036Message {
+        signer: signer.to_string(),
+        data,
+    }))
+}
+
+/// The message as a person reads it: UTF-8 text when printable, else hex.
+/// Same rule as Zafu's `describeArbitraryData`: tab, newline and carriage
+/// return are text; other C0 and C1 controls and DEL make it hex.
+pub fn describe_arbitrary_data(data: &[u8]) -> (String, bool) {
+    if let Ok(text) = std::str::from_utf8(data) {
+        let control = |c: char| matches!(c, '\u{0}'..='\u{8}' | '\u{b}' | '\u{c}' | '\u{e}'..='\u{1f}' | '\u{7f}'..='\u{9f}');
+        if !text.chars().any(control) {
+            return (text.to_string(), false);
+        }
+    }
+    (hex::encode(data), true)
+}
+
 impl CosmosSignDocDisplay {
+    /// One card for an ADR-036 message: the signer and the decoded message.
+    pub fn adr036(message: &Adr036Message) -> Self {
+        let (mut text, mut is_hex) = describe_arbitrary_data(&message.data);
+        // The review card folds anything after this marker away; show such
+        // text as hex so no part of the message starts hidden.
+        if !is_hex && text.contains("\n@@encoded\n") {
+            (text, is_hex) = (hex::encode(&message.data), true);
+        }
+        let shown = if is_hex {
+            format!("Message (hex, {} bytes):\n{text}", message.data.len())
+        } else if text.is_empty() {
+            "Message: (empty)".to_string()
+        } else {
+            format!("Message:\n{text}")
+        };
+        Self {
+            chain_id: String::new(),
+            fee: "none".to_string(),
+            memo: String::new(),
+            msgs: vec![CosmosMsg {
+                msg_type: ADR036_CARD_TITLE.to_string(),
+                recipient: message.signer.clone(),
+                amount: String::new(),
+                detail: format!(
+                    "Not a transaction. Signing proves this address signed the message; \
+                     it moves no funds and cannot be broadcast.\n\n{shown}"
+                ),
+                blind: false,
+            }],
+        }
+    }
+
     /// One card. The key that signs the raw challenge becomes the granter for `binding`.
     pub fn granter(binding: &str) -> Self {
         Self {
@@ -1670,6 +1812,11 @@ impl CosmosSignDocDisplay {
     pub fn from_json(bytes: &[u8]) -> Result<Self> {
         let json: serde_json::Value = serde_json::from_slice(bytes)
             .map_err(|e| Error::Other(anyhow::anyhow!("invalid sign doc JSON: {e}")))?;
+
+        // An ADR-036 message is one card, never a transaction.
+        if let Some(message) = adr036_message(bytes)? {
+            return Ok(Self::adr036(&message));
+        }
 
         let chain_id = json["chain_id"].as_str().unwrap_or("").to_string();
         let memo = json["memo"].as_str().unwrap_or("").to_string();
@@ -2577,6 +2724,185 @@ mod tests {
         assert_eq!(dec_percent("0").unwrap(), "0%");
         assert!(dec_percent("1.000000000000000001").is_err());
         assert!(dec_percent("-0.1").is_err());
+    }
+}
+
+/// ADR-036 sign docs, checked against Keplr's bytes and signatures.
+#[cfg(test)]
+mod adr036_tests {
+    use super::*;
+
+    // Vectors from Zafu's adr036.test.ts: @keplr-wallet/cosmos 0.13.41
+    // (makeADR36AminoSignDoc + serializeSignDoc) for the public "abandon …
+    // about" test seed, which never holds funds.
+    const SIGNER: &str = "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4";
+    const KEPLR: [(&[u8], &str); 2] = [
+        (
+            b"hello from zafu",
+            r#"{"account_number":"0","chain_id":"","fee":{"amount":[],"gas":"0"},"memo":"","msgs":[{"type":"sign/MsgSignData","value":{"data":"aGVsbG8gZnJvbSB6YWZ1","signer":"cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4"}}],"sequence":"0"}"#,
+        ),
+        (
+            &[0, 1, 2, 0xff],
+            r#"{"account_number":"0","chain_id":"","fee":{"amount":[],"gas":"0"},"memo":"","msgs":[{"type":"sign/MsgSignData","value":{"data":"AAEC/w==","signer":"cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4"}}],"sequence":"0"}"#,
+        ),
+    ];
+
+    #[test]
+    fn sign_doc_is_the_bytes_keplr_signs() {
+        for (data, doc) in KEPLR {
+            assert_eq!(adr036_sign_doc(SIGNER, data), doc.as_bytes());
+            assert_eq!(
+                adr036_message(doc.as_bytes()).unwrap(),
+                Some(Adr036Message {
+                    signer: SIGNER.to_string(),
+                    data: data.to_vec(),
+                })
+            );
+            assert_eq!(
+                extract_signers(doc.as_bytes()).unwrap(),
+                vec![SIGNER.to_string()]
+            );
+        }
+    }
+
+    #[test]
+    fn base64_matches_the_standard_alphabet() {
+        for (data, b64) in [
+            (&b""[..], ""),
+            (b"f", "Zg=="),
+            (b"fo", "Zm8="),
+            (b"foo", "Zm9v"),
+            (&[0xfb, 0xff, 0xbf], "+/+/"),
+        ] {
+            assert_eq!(encode_b64(data), b64);
+            assert_eq!(decode_b64_padded(b64).unwrap(), data);
+        }
+    }
+
+    #[test]
+    fn keplr_signature_from_the_wild_verifies() {
+        // juno105asxv7pt0fzxlz642pf4svm29u39zxzdq2ad5 over "test", from the
+        // verify-keplr-sign crate's tests (also in Zafu's adr036.test.ts)
+        use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
+        use sha2::{Digest, Sha256};
+        let signer = "juno105asxv7pt0fzxlz642pf4svm29u39zxzdq2ad5";
+        let pubkey = decode_b64_padded("Avt8e5UqfoRAh0RBUzHCu9arv7UFEFdfcv657h6TtSZE").unwrap();
+        let sig = decode_b64_padded(
+            "9PrDYrTb1tv/TALC/lgRIIekfwNMBPOra0QpaAqNCbADXT8vR9n0SS7L2OSaXma3UMrOLGTbWlLDImNhcZVgzA==",
+        )
+        .unwrap();
+        let pubkey = PublicKey::from_slice(&pubkey).unwrap();
+        let sig = Signature::from_compact(&sig).unwrap();
+        let verifies = |data: &[u8]| {
+            let hash = Sha256::digest(adr036_sign_doc(signer, data));
+            let msg = Message::from_digest_slice(&hash).unwrap();
+            Secp256k1::verification_only()
+                .verify_ecdsa(&msg, &sig, &pubkey)
+                .is_ok()
+        };
+        assert!(verifies(b"test"));
+        assert!(!verifies(b"not test"));
+    }
+
+    #[test]
+    fn card_shows_signer_and_text() {
+        let d = CosmosSignDocDisplay::from_json(KEPLR[0].1.as_bytes()).unwrap();
+        assert_eq!(
+            (d.chain_id.as_str(), d.fee.as_str(), d.memo.as_str()),
+            ("", "none", "")
+        );
+        assert_eq!(d.msgs.len(), 1);
+        let card = &d.msgs[0];
+        assert_eq!(card.msg_type, "Sign message (ADR-036)");
+        assert_eq!(card.recipient, SIGNER);
+        assert!(card.amount.is_empty());
+        assert!(!card.blind);
+        assert!(card.detail.starts_with("Not a transaction."));
+        assert!(card.detail.contains("moves no funds"));
+        assert!(card.detail.ends_with("Message:\nhello from zafu"));
+        // the sign path enters through from_sign_bytes
+        let d = CosmosSignDocDisplay::from_sign_bytes(KEPLR[0].1.as_bytes()).unwrap();
+        assert_eq!(d.msgs[0].msg_type, ADR036_CARD_TITLE);
+    }
+
+    #[test]
+    fn card_shows_binary_as_hex_with_length() {
+        let d = CosmosSignDocDisplay::from_json(KEPLR[1].1.as_bytes()).unwrap();
+        assert!(d.msgs[0]
+            .detail
+            .ends_with("Message (hex, 4 bytes):\n000102ff"));
+        // text that would fold behind the card's encoded marker is hex too
+        let doc = adr036_sign_doc(SIGNER, b"ok\n@@encoded\nhidden");
+        let d = CosmosSignDocDisplay::from_json(&doc).unwrap();
+        assert!(d.msgs[0].detail.contains("Message (hex, 19 bytes):"));
+        assert!(!d.msgs[0].detail.contains("hidden"));
+    }
+
+    #[test]
+    fn describe_matches_zafu() {
+        assert_eq!(
+            describe_arbitrary_data("sign in to zafu\nnonce: 7 · ok".as_bytes()),
+            ("sign in to zafu\nnonce: 7 · ok".to_string(), false)
+        );
+        assert_eq!(
+            describe_arbitrary_data(&[0, 1, 2, 0xff]),
+            ("000102ff".to_string(), true)
+        );
+        assert_eq!(
+            describe_arbitrary_data(&[0xc3, 0x28]),
+            ("c328".to_string(), true)
+        );
+        assert_eq!(
+            describe_arbitrary_data(b"a\x07b"),
+            ("610762".to_string(), true)
+        );
+        assert_eq!(
+            describe_arbitrary_data("\u{85}".as_bytes()),
+            ("c285".to_string(), true)
+        );
+    }
+
+    #[test]
+    fn anything_but_keplrs_exact_doc_is_refused() {
+        let good = KEPLR[0].1;
+        let send = r#"{"type":"cosmos-sdk/MsgSend","value":{"amount":[{"amount":"1","denom":"uatom"}],"from_address":"cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4","to_address":"cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4"}}"#;
+        let bad = [
+            good.replace(r#""chain_id":"""#, r#""chain_id":"cosmoshub-4""#),
+            good.replace(r#""memo":"""#, r#""memo":"x""#),
+            good.replace(r#""account_number":"0""#, r#""account_number":"1""#),
+            good.replace(r#""sequence":"0""#, r#""sequence":"1""#),
+            good.replace(r#""gas":"0""#, r#""gas":"1""#),
+            good.replace(
+                r#""amount":[]"#,
+                r#""amount":[{"amount":"1","denom":"uatom"}]"#,
+            ),
+            good.replace(r#""msgs":["#, &format!(r#""msgs":[{send},"#)),
+            good.replace(r#"}],"sequence""#, &format!(r#"}},{send}],"sequence""#)),
+            good.replace(r#""signer":"#, r#""extra":"1","signer":"#),
+            good.replace(r#""aGVsbG8gZnJvbSB6YWZ1""#, r#""not base64!""#),
+            good.replace(r#""aGVsbG8gZnJvbSB6YWZ1""#, r#""Zh==""#),
+            good.replace(SIGNER, "not-an-address"),
+            good.replace(",", ", "),
+            good.replace(
+                r#""account_number":"0","chain_id":"","#,
+                r#""chain_id":"","account_number":"0","#,
+            ),
+        ];
+        for doc in &bad {
+            assert_ne!(doc, good);
+            assert!(adr036_message(doc.as_bytes()).is_err(), "{doc}");
+            assert!(
+                CosmosSignDocDisplay::from_json(doc.as_bytes()).is_err(),
+                "{doc}"
+            );
+        }
+    }
+
+    #[test]
+    fn other_docs_are_not_adr036() {
+        let doc = br#"{"account_number":"0","chain_id":"","fee":{"amount":[],"gas":"0"},"memo":"","msgs":[],"sequence":"0"}"#;
+        assert_eq!(adr036_message(doc).unwrap(), None);
+        assert_eq!(adr036_message(b"cw-orch-granter:v1\nx").unwrap(), None);
     }
 }
 

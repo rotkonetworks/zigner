@@ -288,7 +288,9 @@ private fun CosmosMsgCard(prefix: String, msg: CosmosMsgDisplay) {
 			)
 		}
 		if (msg.recipient.isNotEmpty()) {
-			Text(text = "To", style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textTertiary)
+			// An ADR-036 message names who signs it; nothing is sent anywhere.
+			val label = if (msg.msgType == "Sign message (ADR-036)") "Signer" else "To"
+			Text(text = label, style = SignerTypeface.CaptionM, color = MaterialTheme.colors.textTertiary)
 			Text(
 				text = msg.recipient,
 				style = SignerTypeface.CaptionM.copy(fontFamily = FontFamily.Monospace),

@@ -5675,6 +5675,65 @@ mod multichain_cosmos_tests {
         assert!(format!("{err:?}").contains("Source mismatch"), "{err:?}");
     }
 
+    /// ADR-036 messages sign exactly as Keplr's signArbitrary does. Vectors
+    /// from Zafu's adr036.test.ts (@keplr-wallet/cosmos 0.13.41, seed `M`).
+    #[test]
+    fn adr036_signature_matches_keplr() {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        use transaction_signing::cosmos::adr036_sign_doc;
+        const SIGNER: &str = "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4";
+        const PUBKEY: &str = "Ak9OKtmcNNYLm6YoPJQxqEGK+GcyEpYfl6d7Y3f80Fti";
+        let keplr: [(&[u8], &str); 2] = [
+            (
+                b"hello from zafu",
+                "INXJIBwvKgWVWGvXWPfeiu4xfuvi5HJ6qErH8LpwszQZMdkXGZDHLj8LHFdikiXIbhNAKe3NhZGdMh+etdxz3w==",
+            ),
+            (
+                &[0, 1, 2, 0xff],
+                "9ly6+ri5oN5THVIZZ/CuFIE8gadTaMFAzPLTfso+gMAUWbd6UiQBkhRb873icprQNM3FcrJMi3zVi8CWaTmGUw==",
+            ),
+        ];
+        for (data, signature) in keplr {
+            let doc = adr036_sign_doc(SIGNER, data);
+            let qr = hex::encode(encode_cosmos_sign_request(0, "cosmos", &doc, 0, None));
+            let req = parse_cosmos_sign_request(&qr).unwrap();
+            assert_eq!(req.msgs.len(), 1);
+            assert_eq!(req.msgs[0].msg_type, "Sign message (ADR-036)");
+            assert_eq!(req.msgs[0].recipient, SIGNER);
+            assert_eq!(
+                cosmos_public_key_for_signers(M, req.clone()).unwrap(),
+                hex::encode(STANDARD.decode(PUBKEY).unwrap())
+            );
+            let sig = sign_cosmos_transaction(M, req).unwrap();
+            assert_eq!(STANDARD.encode(sig), signature);
+
+            // the card the person approved is bound to the QR
+            let mut tampered = parse_cosmos_sign_request(&qr).unwrap();
+            tampered.msgs[0].detail = "Message:\nsomething else".into();
+            assert!(sign_cosmos_transaction(M, tampered).is_err());
+        }
+
+        // a signer that is not this seed's key is refused
+        let other = "cosmos1hsk6jryyqjfhp5dhc55tc9jtckygx0eph6dd02";
+        let doc = adr036_sign_doc(other, b"x");
+        let qr = hex::encode(encode_cosmos_sign_request(0, "cosmos", &doc, 0, None));
+        let err = sign_cosmos_transaction(M, parse_cosmos_sign_request(&qr).unwrap()).unwrap_err();
+        assert!(format!("{err:?}").contains("Source mismatch"), "{:?}", err);
+
+        // a doc that bends ADR-036 is not shown, so it is never signed
+        let bent = String::from_utf8(adr036_sign_doc(SIGNER, b"x"))
+            .unwrap()
+            .replace(r#""sequence":"0""#, r#""sequence":"5""#);
+        let qr = hex::encode(encode_cosmos_sign_request(
+            0,
+            "cosmos",
+            bent.as_bytes(),
+            0,
+            None,
+        ));
+        assert!(parse_cosmos_sign_request(&qr).is_err());
+    }
+
     /// Pre-change export algorithm, kept here as the byte-identical reference.
     fn legacy_export_json(account_index: u32, label: &str, filter: &str) -> Vec<u8> {
         use db_handling::cosmos::derive_cosmos_account_xpub;
