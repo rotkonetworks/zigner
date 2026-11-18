@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["info_from_metadata","runtime_metadata_from_slice"],"struct":["AddressBookEntry","MetaHistoryEntry","MetaInfo","MetaSetElement","MetaValues"]};
