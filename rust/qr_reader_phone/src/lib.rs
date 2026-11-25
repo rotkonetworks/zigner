@@ -67,7 +67,13 @@ pub fn decode_sequence(
         }
     }
     match final_result {
-        Some(s) => Ok(DecodeSequenceResult::Other { s }),
+        // Every request starts with the 0x53 prelude and a crypto and
+        // payload type byte; anything else is not for this device.
+        Some(s) if s.len() >= 6 && s.starts_with("53") => Ok(DecodeSequenceResult::Other { s }),
+        Some(s) => Err(Error::UnexpectedData(format!(
+            "payload does not start with the 0x53 prelude: {}",
+            &s[..s.len().min(6)]
+        ))),
         None => Err(Error::UnableToDecode),
     }
 }

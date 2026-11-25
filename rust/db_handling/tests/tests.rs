@@ -1841,3 +1841,48 @@ fn export_alice_penumbra_is_tagged_penumbra() {
         format!("penumbra:{}:0x{}", key.base58, hex::encode(genesis))
     );
 }
+
+/// A signed transaction from before Substrate signing was removed still
+/// shows the key that signed it in the log details.
+#[test]
+fn log_details_show_signer_of_old_transaction() {
+    use db_handling::manage_history::entry_events_with_signers;
+
+    let dbname = tempdir().unwrap();
+    let db = sled::open(dbname).unwrap();
+    populate_cold(&db, Verifier { v: None }).unwrap();
+
+    let (multisigner, _) = get_all_addresses(&db)
+        .unwrap()
+        .into_iter()
+        .find(|(_, d)| d.path == "//Alice" && d.encryption == Encryption::Sr25519)
+        .unwrap();
+    let signed_by = VerifierValue::Standard { m: multisigner };
+    enter_events(
+        &db,
+        vec![Event::TransactionSigned {
+            sign_display: SignDisplay::get(&[1, 2, 3], "westend", &signed_by, "old"),
+        }],
+    )
+    .unwrap();
+
+    let (order, _) = get_history(&db)
+        .unwrap()
+        .into_iter()
+        .find(|(_, e)| {
+            e.events
+                .iter()
+                .any(|ev| matches!(ev, Event::TransactionSigned { .. }))
+        })
+        .unwrap();
+    let entry = get_history_entry_by_order(&db, order.stamp()).unwrap();
+    let event = entry_events_with_signers(&db, entry)
+        .unwrap()
+        .into_iter()
+        .find(|e| matches!(e.event, Event::TransactionSigned { .. }))
+        .unwrap();
+    let card = event.signed_by.expect("signer card");
+    assert_eq!(card.address.path, "//Alice");
+    assert_eq!(card.address.seed_name, "Alice");
+    assert!(event.verifier_details.is_some());
+}

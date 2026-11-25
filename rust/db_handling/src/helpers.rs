@@ -80,11 +80,6 @@ pub struct SpecsInvariants {
 /// Search for network genesis hash in [`OrderedNetworkSpecs`] entries in [`SPECSTREE`]
 /// of the Vault database.
 ///
-/// Genesis hash is calculated from network [`VerifierKey`] input.
-// TODO too convoluted, historically so; replace VerifierKey with genesis hash;
-// fixes needed in `add_specs`, `load_metadata` and
-// `try_get_valid_current_verifier` function above
-///
 /// If there are more than one network corresponding to the same genesis hash,
 /// outputs network specs key for the network with the lowest order.
 ///
