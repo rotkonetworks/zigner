@@ -42,23 +42,16 @@ pub mod ssh;
 mod zcash_consensus_gate;
 
 use crate::ffi_types::*;
-use db_handling::identities::{import_all_addrs, inject_derivations_has_pwd};
 use db_handling::{Error as DbHandlingError, Error};
 use definitions::keyring::AddressKey;
 use lazy_static::lazy_static;
-use navigator::Error as NavigatorError;
 use sled::Db;
 use std::{
-    collections::HashMap,
     convert::TryInto,
     fmt::Display,
     str::FromStr,
     sync::{Arc, RwLock},
 };
-use transaction_parsing::dynamic_derivations::process_dynamic_derivations;
-use transaction_parsing::entry_to_transactions_with_decoding;
-use transaction_parsing::Error as TxParsingError;
-use transaction_signing::SufficientContent;
 
 lazy_static! {
     static ref DB: Arc<RwLock<Option<Db>>> = Arc::new(RwLock::new(None));
@@ -76,93 +69,8 @@ pub enum ErrorDisplayed {
     },
     MutexPoisoned,
     DbNotInitialized,
-    /// Tried to load metadata for unknown network.
-    LoadMetaUnknownNetwork {
-        /// Name of the network not known to the Vault.
-        name: String,
-    },
-    /// Tried to add specs already present in Vault.
-    SpecsKnown {
-        name: String,
-        encryption: Encryption,
-    },
-    /// The metadata with this network version already in db.
-    MetadataKnown {
-        name: String,
-        version: u32,
-    },
-    /// Do not have an up-to-date version of metadata in db
-    MetadataOutdated {
-        name: String,
-        have: u32,
-        want: u32,
-    },
-    /// Tried to sign transaction with an unknown network
-    UnknownNetwork {
-        genesis_hash: H256,
-        encryption: Encryption,
-    },
-    /// No metadata for a known network found in store
-    NoMetadata {
-        name: String,
-    },
-    /// Provided password is incorrect
-    WrongPassword,
     /// Database schema mismatch
     DbSchemaMismatch,
-}
-
-impl From<NavigatorError> for ErrorDisplayed {
-    fn from(e: NavigatorError) -> Self {
-        match &e {
-            NavigatorError::MutexPoisoned => Self::MutexPoisoned,
-            NavigatorError::DbNotInitialized => Self::DbNotInitialized,
-            NavigatorError::TransactionParsing(t) => match t {
-                TxParsingError::LoadMetaUnknownNetwork { name } => {
-                    Self::LoadMetaUnknownNetwork { name: name.clone() }
-                }
-                TxParsingError::SpecsKnown { name, encryption } => Self::SpecsKnown {
-                    name: name.clone(),
-                    encryption: *encryption,
-                },
-                TxParsingError::MetadataKnown { name, version } => Self::MetadataKnown {
-                    name: name.clone(),
-                    version: *version,
-                },
-                TxParsingError::AllExtensionsParsingFailed {
-                    ref network_name,
-                    ref errors,
-                } => {
-                    if let Some((want, parser::Error::WrongNetworkVersion { in_metadata, .. })) =
-                        errors.first()
-                    {
-                        Self::MetadataOutdated {
-                            name: network_name.to_string(),
-                            have: *in_metadata,
-                            want: *want,
-                        }
-                    } else {
-                        Self::Str { s: format!("{e}") }
-                    }
-                }
-                TxParsingError::UnknownNetwork {
-                    genesis_hash,
-                    encryption,
-                } => Self::UnknownNetwork {
-                    genesis_hash: *genesis_hash,
-                    encryption: *encryption,
-                },
-                TxParsingError::NoMetadata { name } => Self::NoMetadata {
-                    name: name.to_string(),
-                },
-                _ => Self::Str { s: format!("{e}") },
-            },
-            NavigatorError::TransactionSigning(transaction_signing::Error::WrongPassword) => {
-                Self::WrongPassword
-            }
-            _ => Self::Str { s: format!("{e}") },
-        }
-    }
 }
 
 impl From<DbHandlingError> for ErrorDisplayed {
@@ -230,40 +138,9 @@ impl From<qr_reader_phone::Error> for QrSequenceDecodeError {
 
 include!(concat!(env!("OUT_DIR"), "/signer.uniffi.rs"));
 
-fn action_get_name(action: &Action) -> Option<FooterButton> {
-    match action {
-        Action::NavbarLog => Some(FooterButton::Log),
-        Action::NavbarScan => Some(FooterButton::Scan),
-        Action::NavbarKeys => Some(FooterButton::Keys),
-        Action::NavbarSettings => Some(FooterButton::Settings),
-        Action::GoBack => Some(FooterButton::Back),
-        _ => None,
-    }
-}
-
-/// Perform action in frontend.
-///
-/// This call should be debounced.
-///
-/// Action tries to acquire lock on app state mutex and is ignored on failure.
-///
-/// `seed_phrase` field is zeroized, it is expected to be used for secrets only.
-///
-/// `details` field is not always zeroized.
-///
-/// App view contents are returned as result, this should be sufficient to render view.
-fn backend_action(
-    action: Action,
-    details: &str,
-    seed_phrase: &str,
-) -> Result<ActionResult, ErrorDisplayed> {
-    Ok(navigator::do_action(action, details, seed_phrase)?)
-}
-
-/// Should be called once at start of the app and could be called on app reset
-///
-/// Accepts list of seed names to avoid calling [`update_seed_names`] every time
-fn init_navigation(dbname: &str, seed_names: Vec<String>) -> Result<(), ErrorDisplayed> {
+/// Opens the database. Should be called once at start of the app and could
+/// be called again on app reset.
+fn init_navigation(dbname: &str) -> Result<(), ErrorDisplayed> {
     let val = Some(sled::open(dbname).map_err(|e| ErrorDisplayed::from(e.to_string()))?);
 
     // Each DB lock MUST be released before the next is acquired. `DB` is a
@@ -305,22 +182,7 @@ fn init_navigation(dbname: &str, seed_names: Vec<String>) -> Result<(), ErrorDis
         }
     }
 
-    // Clone the sled handle out under a short-lived read lock, then release it
-    // before calling navigator::init_navigation (which may lock DB itself).
-    let database = {
-        let guard = match DB.read() {
-            Ok(g) => g,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        guard.as_ref().unwrap().clone()
-    };
-    Ok(navigator::init_navigation(database, seed_names)?)
-}
-
-/// Should be called every time any change could have been done to seeds. Accepts updated list of
-/// seeds, completely disregards previously known list
-fn update_seed_names(seed_names: Vec<String>) -> Result<(), ErrorDisplayed> {
-    Ok(navigator::update_seed_names(seed_names)?)
+    Ok(())
 }
 
 /// Determines estimated required number of multiframe QR that should be gathered before decoding
@@ -371,25 +233,6 @@ fn generate_secret_key_qr(
         key_password,
     )
     .map_err(|e| e.to_string().into())
-}
-
-fn import_derivations(seed_derived_keys: Vec<SeedKeysPreview>) -> Result<(), ErrorDisplayed> {
-    import_all_addrs(&get_db()?, seed_derived_keys).map_err(|e| e.to_string().into())
-}
-
-/// Calculate if derivation path has a password
-fn populate_derivations_has_pwd(
-    seeds: HashMap<String, String>,
-    seed_derived_keys: Vec<SeedKeysPreview>,
-) -> Result<Vec<SeedKeysPreview>, anyhow::Error> {
-    inject_derivations_has_pwd(seed_derived_keys, seeds).map_err(Into::into)
-}
-
-fn preview_dynamic_derivations(
-    seeds: HashMap<String, String>,
-    payload: String,
-) -> Result<DDPreview, ErrorDisplayed> {
-    process_dynamic_derivations(&get_db()?, seeds, &payload).map_err(|e| e.to_string().into())
 }
 
 /// Checks derivation path for validity and collisions
@@ -460,23 +303,10 @@ fn try_create_address_by_genesis(
     .map_err(|e| e.to_string().into())
 }
 
-/// Must be called with `DecodeSequenceResult::DynamicDerivationTransaction` payload
-fn sign_dd_transaction(
-    payload: &[String],
-    seeds: HashMap<String, String>,
-) -> Result<MSignedTransaction, ErrorDisplayed> {
-    navigator::sign_dd_transaction(&get_db()?, payload, seeds).map_err(|e| e.to_string().into())
-}
-
 /// Must be called once on normal first start of the app upon accepting conditions; relies on old
 /// data being already removed
 fn history_init_history_with_cert() -> anyhow::Result<(), ErrorDisplayed> {
     db_handling::cold_default::signer_init_with_cert(&get_db()?).map_err(|e| e.to_string().into())
-}
-
-/// Must be called once upon jailbreak (removal of general verifier) after all old data was removed
-fn history_init_history_no_cert() -> anyhow::Result<(), ErrorDisplayed> {
-    db_handling::cold_default::signer_init_no_cert(&get_db()?).map_err(|e| e.to_string().into())
 }
 
 /// Must be called every time network detector detects network. Sets alert flag in database that could
@@ -517,12 +347,18 @@ fn export_key_info(
     seed_name: &str,
     exported_set: ExportedSet,
 ) -> anyhow::Result<MKeysInfoExport, ErrorDisplayed> {
-    navigator::export_key_info(&get_db()?, seed_name, exported_set)
-        .map_err(|e| e.to_string().into())
+    use parity_scale_codec::Encode;
+
+    let export_all_addrs =
+        db_handling::identities::export_key_set_addrs(&get_db()?, seed_name, exported_set)?;
+    let data = [&[0x53, 0xff, 0xde], export_all_addrs.encode().as_slice()].concat();
+    let frames = qrcode_rtx::make_data_packs(&data, 128).map_err(|e| e.to_string())?;
+    Ok(MKeysInfoExport { frames })
 }
 
 fn keys_by_seed_name(seed_name: &str) -> anyhow::Result<MKeysNew, ErrorDisplayed> {
-    navigator::keys_by_seed_name(&get_db()?, seed_name).map_err(|e| e.to_string().into())
+    db_handling::interface_signer::keys_by_seed_name(&get_db()?, seed_name)
+        .map_err(|e| e.to_string().into())
 }
 
 /// Encode binary info into qr code
@@ -575,7 +411,7 @@ fn get_log_details(order: u32) -> anyhow::Result<MLogDetails, ErrorDisplayed> {
 
     let timestamp = e.timestamp.clone();
 
-    let events = entry_to_transactions_with_decoding(&get_db()?, e)
+    let events = db_handling::manage_history::entry_events_with_signers(&get_db()?, e)
         .map_err(|e| ErrorDisplayed::from(e.to_string()))?;
 
     Ok(MLogDetails { timestamp, events })
@@ -640,43 +476,11 @@ fn remove_key_set(seed_name: &str) -> anyhow::Result<(), ErrorDisplayed> {
         .map_err(|e| ErrorDisplayed::from(e.to_string()))
 }
 
-fn get_managed_network_details(
-    network_key: &str,
-) -> anyhow::Result<MNetworkDetails, ErrorDisplayed> {
-    let network_key = NetworkSpecsKey::from_hex(network_key).map_err(|e| format!("{e}"))?;
-    db_handling::interface_signer::network_details_by_key(&get_db()?, &network_key)
-        .map_err(|e| ErrorDisplayed::from(e.to_string()))
-}
-
-fn remove_metadata_on_managed_network(
-    network_key: &str,
-    metadata_specs_version: &str,
-) -> anyhow::Result<(), ErrorDisplayed> {
-    let network_key = NetworkSpecsKey::from_hex(network_key).map_err(|e| format!("{e}"))?;
-    let version = metadata_specs_version
-        .parse::<u32>()
-        .map_err(|e| format!("{e}"))?;
-    db_handling::helpers::remove_metadata(&get_db()?, &network_key, version)
-        .map_err(|e| ErrorDisplayed::from(e.to_string()))
-}
-
 fn seed_phrase_guess_words(user_input: &str) -> Vec<String> {
     db_handling::interface_signer::guess(user_input)
         .into_iter()
         .map(|s| s.to_owned())
         .collect()
-}
-
-fn get_verifier_details() -> anyhow::Result<MVerifierDetails, ErrorDisplayed> {
-    Ok(db_handling::helpers::get_general_verifier(&get_db()?)
-        .map_err(|e| e.to_string())?
-        .show_card())
-}
-
-fn remove_managed_network(network_key: &str) -> anyhow::Result<(), ErrorDisplayed> {
-    let network_key = NetworkSpecsKey::from_hex(network_key).map_err(|e| format!("{e}"))?;
-    db_handling::helpers::remove_network(&get_db()?, &network_key)
-        .map_err(|e| ErrorDisplayed::from(e.to_string()))
 }
 
 fn print_new_seed(new_seed_name: &str) -> anyhow::Result<MNewSeedBackup, ErrorDisplayed> {
@@ -701,12 +505,6 @@ fn check_db_version() -> anyhow::Result<(), ErrorDisplayed> {
     db_handling::helpers::assert_db_version(&get_db()?).map_err(ErrorDisplayed::from)
 }
 
-fn get_keys_for_signing() -> Result<MSignSufficientCrypto, ErrorDisplayed> {
-    let identities = db_handling::interface_signer::print_all_identities(&get_db()?)
-        .map_err(|e| ErrorDisplayed::from(e.to_string()))?;
-    Ok(MSignSufficientCrypto { identities })
-}
-
 fn validate_key_password(
     address_key: &str,
     seed_phrase: &str,
@@ -725,13 +523,27 @@ fn bs_encrypt(
     total_shards: u32,
     required_shards: u32,
 ) -> Result<Vec<QrData>, ErrorDisplayed> {
-    navigator::banana_split_encode(secret, title, passphrase, total_shards, required_shards)
-        .map_err(|e| ErrorDisplayed::from(e.to_string()))
+    banana_recovery::encrypt(
+        secret,
+        title,
+        passphrase,
+        total_shards as usize,
+        required_shards as usize,
+    )
+    .map_err(|e| ErrorDisplayed::from(e.to_string()))
+    .map(|shares| {
+        shares
+            .into_iter()
+            .map(|share| QrData::Regular {
+                data: share.into_bytes(),
+            })
+            .collect()
+    })
 }
 
 /// Generate Banana Split passphrase
 fn bs_generate_passphrase(n: u32) -> String {
-    navigator::banana_split_passphrase(n)
+    banana_recovery::generate(n as usize)
 }
 
 /// Export seed backup data as JSON including account metadata (NO seed phrase)
@@ -994,46 +806,6 @@ fn extract_backup_json_from_cbor(cbor_data: &[u8]) -> Result<String, ErrorDispla
     String::from_utf8(json_bytes).map_err(|e| ErrorDisplayed::Str {
         s: format!("Invalid UTF-8 in backup: {e}"),
     })
-}
-
-fn sign_metadata_with_key(
-    network_key: &str,
-    metadata_specs_version: &str,
-    signing_address_key: &str,
-    seed_phrase: &str,
-    password: Option<String>,
-) -> Result<MSufficientCryptoReady, ErrorDisplayed> {
-    let network_key = NetworkSpecsKey::from_hex(network_key).map_err(|e| format!("{e}"))?;
-    let version = metadata_specs_version
-        .parse::<u32>()
-        .map_err(|e| format!("{e}"))?;
-    let address_key = AddressKey::from_hex(signing_address_key).map_err(|e| format!("{e}"))?;
-    navigator::sign_sufficient_content(
-        &get_db()?,
-        &address_key,
-        SufficientContent::LoadMeta(network_key, version),
-        seed_phrase,
-        &password.unwrap_or("".to_owned()),
-    )
-    .map_err(|e| e.into())
-}
-
-fn sign_network_spec_with_key(
-    network_key: &str,
-    signing_address_key: &str,
-    seed_phrase: &str,
-    password: Option<String>,
-) -> Result<MSufficientCryptoReady, ErrorDisplayed> {
-    let network_key = NetworkSpecsKey::from_hex(network_key).map_err(|e| format!("{e}"))?;
-    let address_key = AddressKey::from_hex(signing_address_key).map_err(|e| format!("{e}"))?;
-    navigator::sign_sufficient_content(
-        &get_db()?,
-        &address_key,
-        SufficientContent::AddSpecs(network_key),
-        seed_phrase,
-        &password.unwrap_or("".to_owned()),
-    )
-    .map_err(|e| e.into())
 }
 
 /// Export Penumbra Full Viewing Key for import into watch-only wallet (e.g., Prax)

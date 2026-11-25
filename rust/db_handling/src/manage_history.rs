@@ -18,13 +18,16 @@ use sled::Batch;
 use constants::DANGER;
 use constants::HISTORY;
 use definitions::{
-    history::{Entry, Event},
-    keyring::Order,
+    helpers::{make_identicon_from_multisigner, print_multisigner_as_base58_or_eth_address},
+    history::{Entry, Event, SignDisplay},
+    keyring::{AddressKey, Order},
+    navigation::{Address, MAddressCard, MEventMaybeDecoded},
+    network_specs::VerifierValue,
 };
 
 use definitions::danger::DangerRecord;
 
-use crate::helpers::open_tree;
+use crate::helpers::{get_all_networks, open_tree, try_get_address_details, try_get_network_specs};
 use crate::Error;
 use crate::Result;
 use crate::{db_transactions::TrDbCold, helpers::make_batch_clear_tree};
@@ -72,6 +75,72 @@ pub fn get_history_entry_by_order(database: &sled::Db, order: u32) -> Result<Ent
         }
     }
     found.ok_or_else(|| Error::HistoryEntryNotFound(order.stamp()))
+}
+
+/// Events of one history entry, each with the key that signed it when the
+/// event records a signature.
+///
+/// Entries from before Substrate signing was removed can hold
+/// `TransactionSigned` / `TransactionSignError` events. They are shown with
+/// their signer; the transaction itself is no longer decoded.
+pub fn entry_events_with_signers(
+    database: &sled::Db,
+    entry: Entry,
+) -> Result<Vec<MEventMaybeDecoded>> {
+    let mut res = Vec::new();
+    for event in entry.events.into_iter() {
+        let (verifier_details, signed_by) = match event {
+            Event::TransactionSigned { ref sign_display }
+            | Event::TransactionSignError { ref sign_display } => (
+                Some(sign_display.signed_by.show_card()),
+                signer_card(database, sign_display)?,
+            ),
+            _ => (None, None),
+        };
+        res.push(MEventMaybeDecoded {
+            event,
+            signed_by,
+            verifier_details,
+        });
+    }
+    Ok(res)
+}
+
+/// The address card of the key that made `sign_display`, if that key and
+/// the network named in it are still in the database.
+fn signer_card(database: &sled::Db, sign_display: &SignDisplay) -> Result<Option<MAddressCard>> {
+    let VerifierValue::Standard { m } = &sign_display.signed_by;
+    let Some(network) = get_all_networks(database)?
+        .into_iter()
+        .find(|network| network.specs.name == sign_display.network_name)
+    else {
+        return Ok(None);
+    };
+    let address_key = AddressKey::new(m.clone(), Some(network.specs.genesis_hash));
+    let Some(address_details) = try_get_address_details(database, &address_key)? else {
+        return Ok(None);
+    };
+    let Some(id) = &address_details.network_id else {
+        return Ok(None);
+    };
+    match try_get_network_specs(database, id)? {
+        Some(specs) if specs.specs.name == sign_display.network_name => Ok(Some(MAddressCard {
+            base58: print_multisigner_as_base58_or_eth_address(
+                m,
+                Some(specs.specs.base58prefix),
+                address_details.encryption,
+            ),
+            address_key: hex::encode(address_key.key()),
+            address: Address {
+                identicon: make_identicon_from_multisigner(m, address_details.identicon_style()),
+                seed_name: address_details.seed_name.clone(),
+                path: address_details.path.clone(),
+                has_pwd: address_details.has_pwd,
+                secret_exposed: address_details.secret_exposed,
+            },
+        })),
+        _ => Ok(None),
+    }
 }
 
 /// Clear Vault history and make a log [`Entry`] that history was cleared.

@@ -519,14 +519,6 @@ class CameraViewModel() : ViewModel() {
 						allow(ScanCapability.SUBSTRATE)
 					}
 				}
-
-				// No screen renders these any more (dynamicderivations deleted);
-				// the capability gate refuses them the same way an unknown
-				// payload is refused.
-				is DecodeSequenceResult.DynamicDerivations,
-				is DecodeSequenceResult.DynamicDerivationTransaction -> {
-					allow(ScanCapability.SUBSTRATE)
-				}
 			}
 
 		} catch (e: Exception) {

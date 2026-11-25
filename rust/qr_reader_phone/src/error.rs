@@ -22,9 +22,6 @@ pub enum Error {
     #[error(transparent)]
     BananaSplitError(#[from] banana_recovery::Error),
 
-    #[error(transparent)]
-    TransactionParsingError(#[from] transaction_parsing::Error),
-
     #[error("Unable to decode on given dataset")]
     UnableToDecode,
 

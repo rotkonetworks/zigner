@@ -121,19 +121,6 @@ fun MKeysCard.toKeyModel() = KeyModel(
 )
 
 /**
- * Local copy of shared [MNetworkCard] class
- */
-data class NetworkBasicModel(
-	val title: String,
-	val logo: String,
-)
-
-fun MNetworkCard.toNetworkBasicModel() = NetworkBasicModel(
-	title = title,
-	logo = logo,
-)
-
-/**
  * Local copy of shared [MSeeds] class
  */
 data class KeySetsListModel(val keys: List<KeySetModel>)

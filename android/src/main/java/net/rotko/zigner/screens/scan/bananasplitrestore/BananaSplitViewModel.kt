@@ -138,14 +138,6 @@ class BananaSplitViewModel() : ViewModel() {
 				is DecodeSequenceResult.Other -> {
 					submitErrorState("already processing banana split, but other qr code data happened to be here, submit it!, $qrResult")
 				}
-
-				is DecodeSequenceResult.DynamicDerivations -> {
-					submitErrorState("already processing banana split, but other qr code data happened to be here, submit it!, $qrResult")
-				}
-
-				is DecodeSequenceResult.DynamicDerivationTransaction -> {
-					submitErrorState("already processing banana split, but other qr code data happened to be here, submit it!, $qrResult")
-				}
 			}
 		} catch (e: QrSequenceDecodeException) {
 			when (e) {

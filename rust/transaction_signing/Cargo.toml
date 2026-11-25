@@ -6,17 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hex = "0.4.3"
-parity-scale-codec = "3.6.9"
-zeroize = { version = "1.7.0", features = ["std", "derive"] }
+hex = { version = "0.4.3", optional = true }
+zeroize = { version = "1.7.0", features = ["std", "derive"], optional = true }
 
-definitions = { path = "../definitions", default-features = false, features = ["active"] }
-db_handling = { path = "../db_handling", default-features = false, features = ["active"] }
-sp-core = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, features = ["full_crypto"] }
-sp-runtime = { git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false }
 thiserror = "1.0.57"
 anyhow = "1.0.82"
-sled = "0.34"
 
 # penumbra crypto dependencies
 decaf377 = { version = "0.10.1", optional = true }
@@ -51,21 +45,16 @@ frost-spend = { workspace = true, optional = true }
 
 [features]
 default = []
-penumbra = ["decaf377", "decaf377-rdsa", "blake2b_simd", "rand_chacha", "bip32", "sha2", "poseidon377", "bech32", "subtle", "penumbra-transaction", "penumbra-keys", "penumbra-proto", "penumbra-asset"]
-zcash = ["orchard", "secp256k1", "ripemd", "bs58", "bip32", "bech32", "sha2", "zip32", "zcash_address", "zcash_protocol", "frost-spend"]
-cosmos = ["secp256k1", "sha2", "serde_json"]
+penumbra = ["hex", "zeroize", "decaf377", "decaf377-rdsa", "blake2b_simd", "rand_chacha", "bip32", "sha2", "poseidon377", "bech32", "subtle", "penumbra-transaction", "penumbra-keys", "penumbra-proto", "penumbra-asset"]
+zcash = ["hex", "zeroize", "orchard", "secp256k1", "ripemd", "bs58", "bip32", "bech32", "sha2", "zip32", "zcash_address", "zcash_protocol", "frost-spend"]
+cosmos = ["hex", "secp256k1", "sha2", "serde_json"]
 
 
 [dev-dependencies]
-pretty_assertions = "1"
+db_handling = { path = "../db_handling", default-features = false, features = ["active"] }
 # An output plan makes the effect hash depend on the viewing key. The
 # transaction crate uses this type but does not re-export it.
 penumbra-sdk-shielded-pool = { git = "https://github.com/penumbra-zone/penumbra.git", tag = "v2.0.4", package = "penumbra-sdk-shielded-pool", default-features = false }
-sled = "0.34.6"
-constants = { path = "../constants" }
-db_handling = {path = "../db_handling", default-features = false, features = ["active"]}
-transaction_parsing = { path = "../transaction_parsing", default-features = false }
-tempfile = "3.10"
 
 [lib]
 name = "transaction_signing"

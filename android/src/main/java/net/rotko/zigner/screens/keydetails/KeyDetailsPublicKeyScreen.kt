@@ -70,7 +70,6 @@ import net.rotko.zigner.ui.theme.pink500
 import net.rotko.zigner.ui.theme.red500
 import net.rotko.zigner.ui.theme.red500fill12
 import net.rotko.zigner.ui.theme.textTertiary
-import io.parity.signer.uniffi.Action
 import io.parity.signer.uniffi.PenumbraReceive
 import io.parity.signer.uniffi.ZcashVerifiedNoteDisplay
 import io.parity.signer.uniffi.encodeToQr

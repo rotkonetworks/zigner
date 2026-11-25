@@ -131,7 +131,7 @@ pub fn parse_penumbra_transaction(data_hex: &str) -> Result<PenumbraTransactionP
         return Err(Error::TooShort);
     }
     if data[0] != 0x53 {
-        return Err(Error::NotSubstrate(format!("{:02x}", data[0])));
+        return Err(Error::UnexpectedPrelude(format!("{:02x}", data[0])));
     }
     if data[1] != PENUMBRA_CRYPTO_TYPE {
         return Err(Error::PenumbraParseError(format!(
@@ -399,7 +399,7 @@ mod tests {
     fn test_invalid_prelude() {
         // wrong first byte
         let result = parse_penumbra_transaction("5403100001000000ff");
-        assert!(matches!(result, Err(Error::NotSubstrate(_))));
+        assert!(matches!(result, Err(Error::UnexpectedPrelude(_))));
 
         // wrong crypto type
         let result = parse_penumbra_transaction("5301100001000000ff");

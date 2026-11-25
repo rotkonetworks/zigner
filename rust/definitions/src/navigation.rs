@@ -226,7 +226,6 @@ pub struct MLog {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MEventMaybeDecoded {
     pub event: Event,
-    pub decoded: Option<TransactionCardSet>,
     pub signed_by: Option<MAddressCard>,
     pub verifier_details: Option<MVerifierDetails>,
 }
@@ -262,8 +261,6 @@ pub enum BananaSplitRecoveryResult {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DecodeSequenceResult {
     BBananaSplitRecoveryResult { b: BananaSplitRecoveryResult },
-    DynamicDerivations { s: String },
-    DynamicDerivationTransaction { s: Vec<String> },
     Other { s: String },
 }
 

@@ -2,19 +2,16 @@ use crate::UniffiCustomTypeConverter;
 use definitions::helpers::{get_multisigner, multisigner_to_encryption, multisigner_to_public};
 pub use definitions::{
     crypto::Encryption,
-    derivations::{DerivedKeyError, DerivedKeyPreview, DerivedKeyStatus, SeedKeysPreview},
     history::{
         Event, IdentityHistory, MetaValuesDisplay, MetaValuesExport, NetworkSpecsDisplay,
         NetworkSpecsExport, NetworkVerifierDisplay, SignDisplay, SignMessageDisplay, TypesDisplay,
         TypesExport,
     },
-    metadata::MetaValues,
     navigation::*,
     network_specs::{
         NetworkSpecs, OrderedNetworkSpecs, ValidCurrentVerifier, Verifier, VerifierValue,
     },
 };
-pub use navigator::Action;
 
 use std::convert::{TryFrom, TryInto};
 
@@ -32,9 +29,6 @@ impl UniffiCustomTypeConverter for NetworkSpecsKey {
     }
 }
 
-pub type Ed25519Public = sp_core::ed25519::Public;
-pub type Sr25519Public = sp_core::sr25519::Public;
-pub type EcdsaPublic = sp_core::ecdsa::Public;
 pub type MultiSigner = sp_runtime::MultiSigner;
 pub type H256 = sp_core::H256;
 
@@ -60,52 +54,6 @@ impl UniffiCustomTypeConverter for sp_runtime::MultiSigner {
             hex::encode(multisigner_to_public(&obj)),
             multisigner_to_encryption(&obj).show(),
         ]
-    }
-}
-
-impl UniffiCustomTypeConverter for Ed25519Public {
-    type Builtin = Vec<u8>;
-
-    fn into_custom(val: Self::Builtin) -> uniffi::Result<Self> {
-        let public = Ed25519Public::try_from(val.as_ref())
-            .map_err(|_| anyhow::Error::msg("ed25519".to_string()))?;
-
-        Ok(public)
-    }
-
-    // Convert our custom type to Builtin
-    fn from_custom(obj: Self) -> Self::Builtin {
-        obj.0.to_vec()
-    }
-}
-
-impl UniffiCustomTypeConverter for Sr25519Public {
-    type Builtin = Vec<u8>;
-
-    fn into_custom(val: Self::Builtin) -> uniffi::Result<Self> {
-        let public = Sr25519Public::try_from(val.as_ref())
-            .map_err(|_| anyhow::Error::msg("sr25519".to_string()))?;
-
-        Ok(public)
-    }
-
-    fn from_custom(obj: Self) -> Self::Builtin {
-        obj.0.to_vec()
-    }
-}
-
-impl UniffiCustomTypeConverter for EcdsaPublic {
-    type Builtin = Vec<u8>;
-
-    fn into_custom(val: Self::Builtin) -> uniffi::Result<Self> {
-        let public = EcdsaPublic::try_from(val.as_ref())
-            .map_err(|_| anyhow::Error::msg("ecdsa".to_string()))?;
-
-        Ok(public)
-    }
-
-    fn from_custom(obj: Self) -> Self::Builtin {
-        obj.0.to_vec()
     }
 }
 

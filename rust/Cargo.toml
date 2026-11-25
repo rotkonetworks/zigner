@@ -7,7 +7,6 @@ members = [
 	"defaults",
 	"definitions",
 	"generate_message",
-	"navigator",
 	"parser",
 	"printing_balance",
 	"qr_reader_phone",

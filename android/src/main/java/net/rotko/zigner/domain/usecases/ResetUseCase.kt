@@ -50,8 +50,7 @@ class ResetUseCase {
 	}
 
 	private fun totalRefreshDbExist() {
-		val allNames = seedStorage.getSeedNames()
-		initNavigation(appContext.getDbNameFromContext(), allNames.toList())
+		initNavigation(appContext.getDbNameFromContext())
 		ServiceLocator.uniffiInteractor.wasRustInitialized.value = true
 		networkExposedStateKeeper.updateAlertStateFromHistory()
 	}

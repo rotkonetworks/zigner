@@ -33,7 +33,6 @@ import net.rotko.zigner.ui.theme.SignerNewTheme
 import net.rotko.zigner.ui.theme.SignerTypeface
 import net.rotko.zigner.ui.theme.red500
 import net.rotko.zigner.ui.theme.textTertiary
-import io.parity.signer.uniffi.MEnterPassword
 
 
 @Composable
@@ -180,9 +179,6 @@ private fun EnterPasswordHeader(
 	}
 }
 
-/**
- * Local copy of shared [MEnterPassword] class
- */
 data class EnterPasswordModel(
 	val keyCard: KeyCardModelBase,
 	val showError: Boolean,
@@ -196,12 +192,6 @@ data class EnterPasswordModel(
 		)
 	}
 }
-
-fun MEnterPassword.toEnterPasswordModel(withShowError: Boolean = false) = EnterPasswordModel(
-	keyCard = KeyCardModelBase.fromAddress(authorInfo, networkInfo?.networkLogo),
-	showError = withShowError,
-	attempt = counter.toInt(),
-)
 
 
 @Preview(

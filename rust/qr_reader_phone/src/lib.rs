@@ -4,7 +4,6 @@
 use std::convert::TryFrom;
 
 use banana_recovery::Share;
-use constants::ENABLE_DYNAMIC_DERIVATIONS;
 
 use definitions::navigation::{BananaSplitRecoveryResult, DecodeSequenceResult};
 
@@ -15,7 +14,6 @@ pub mod process_payload;
 use crate::parser::{parse_qr_payload, LegacyFrame, RaptorqFrame};
 pub use error::{Error, Result};
 use process_payload::{process_decoded_payload, InProgress, Ready};
-use transaction_parsing::decode_payload;
 
 pub fn get_payload(line: &str, cleaned: bool) -> Result<Vec<u8>> {
     let payload = match cleaned {
@@ -69,7 +67,7 @@ pub fn decode_sequence(
         }
     }
     match final_result {
-        Some(s) => Ok(decode_payload(&s, ENABLE_DYNAMIC_DERIVATIONS)?),
+        Some(s) => Ok(DecodeSequenceResult::Other { s }),
         None => Err(Error::UnableToDecode),
     }
 }
