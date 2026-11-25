@@ -32,6 +32,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import android.os.SystemClock
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -55,6 +59,71 @@ import net.rotko.zigner.ui.theme.textSecondary
 import net.rotko.zigner.ui.theme.textTertiary
 
 
+// Number of taps on the version line that reveals developer options.
+private const val REVEAL_TAP_TARGET = 5
+// Start showing the "N taps away" hint from this tap onwards (Android-style).
+private const val REVEAL_TAP_HINT_AFTER = 2
+// Taps must land within this window of each other or the counter resets.
+private const val TAP_WINDOW_MS = 3_000L
+
+// Mutable, non-recomposing holder for the tap gesture. Kept out of snapshot state
+// on purpose: taps must not trigger recomposition, only accumulate.
+private class RevealTapState {
+	var count: Int = 0
+	var lastTapMs: Long = 0L
+}
+
+/**
+ * Hidden 5-tap gesture, styled after Android's "tap Build number 7 times"
+ * developer-mode unlock. Tapping the version line 5 times within a short
+ * window REVEALS the developer options. It does not enable anything on its
+ * own - online mode stays off and still requires an explicit, authenticated
+ * confirmation to turn on.
+ */
+@Composable
+private fun rememberDeveloperOptionsTapGesture(
+	developerOptionsRevealed: Boolean,
+	onRevealDeveloperOptions: Callback,
+): Callback {
+	val context = LocalContext.current
+	val tapState = remember { RevealTapState() }
+	return {
+		val now = SystemClock.elapsedRealtime()
+		if (now - tapState.lastTapMs > TAP_WINDOW_MS) {
+			tapState.count = 0
+		}
+		tapState.lastTapMs = now
+		tapState.count += 1
+
+		when {
+			developerOptionsRevealed -> {
+				// Already unlocked; silently ignore further taps.
+			}
+			tapState.count >= REVEAL_TAP_TARGET -> {
+				tapState.count = 0
+				onRevealDeveloperOptions()
+				Toast.makeText(
+					context,
+					context.getString(R.string.developer_options_revealed_toast),
+					Toast.LENGTH_LONG,
+				).show()
+			}
+			tapState.count >= REVEAL_TAP_HINT_AFTER -> {
+				val remaining = REVEAL_TAP_TARGET - tapState.count
+				Toast.makeText(
+					context,
+					context.resources.getQuantityString(
+						R.plurals.developer_options_countdown_toast,
+						remaining,
+						remaining,
+					),
+					Toast.LENGTH_SHORT,
+				).show()
+			}
+		}
+	}
+}
+
 @Composable
 internal fun SettingsScreenGeneralView(
 	navController: NavController,
@@ -70,7 +139,13 @@ internal fun SettingsScreenGeneralView(
 	securitySummary: String,
 	appVersion: String,
 	networkState: State<NetworkState?>,
+	developerOptionsRevealed: Boolean = false,
+	onRevealDeveloperOptions: Callback = {},
 ) {
+	val revealGesture = rememberDeveloperOptionsTapGesture(
+		developerOptionsRevealed,
+		onRevealDeveloperOptions,
+	)
 	Column(Modifier.background(MaterialTheme.colors.background)) {
 		ScreenHeaderClose(
 			title = stringResource(R.string.settings_title),
@@ -140,6 +215,11 @@ internal fun SettingsScreenGeneralView(
 						text = stringResource(R.string.settings_version, appVersion),
 						style = SignerTypeface.BodyM,
 						color = MaterialTheme.colors.textSecondary,
+						modifier = Modifier.clickable(
+							indication = null,
+							interactionSource = remember { MutableInteractionSource() },
+							onClick = revealGesture,
+						),
 					)
 					Text(
 						text = "Security: $securitySummary",

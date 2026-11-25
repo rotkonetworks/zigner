@@ -38,7 +38,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun ScanScreen(
 	onClose: Callback,
-	performPayloads: suspend (String) -> Unit,
 	onBananaSplit: (List<String>) -> Unit,
 	onPenumbraSignRequest: (String) -> Unit = {},
 	onCosmosSignRequest: (String) -> Unit = {},
@@ -91,7 +90,6 @@ fun ScanScreen(
 	val captured by viewModel.captured.collectAsStateWithLifecycle()
 	val total by viewModel.total.collectAsStateWithLifecycle()
 
-	val currentPerformPayloads by rememberUpdatedState(performPayloads)
 	val currentOnBananaSplit by rememberUpdatedState(onBananaSplit)
 	val currentOnPenumbraSignRequest by rememberUpdatedState(onPenumbraSignRequest)
 	val currentOnCosmosSignRequest by rememberUpdatedState(onCosmosSignRequest)
@@ -108,16 +106,6 @@ fun ScanScreen(
 	LaunchedEffect(viewModel) {
 		//there can be data from last time camera was open since it's scanning during transition to a new screen
 		viewModel.resetPendingTransactions()
-
-		launch {
-			viewModel.pendingTransactionPayloads
-				.filter { it.isNotEmpty() }
-				.collect {
-					//scanned qr codes is signer transaction qr code
-					currentPerformPayloads(it.joinToString(separator = ""))
-					viewModel.resetPendingTransactions()
-				}
-		}
 
 		launch {
 			viewModel.bananaSplitPayload
@@ -373,7 +361,7 @@ private fun CameraViewWithPermission(viewModel: CameraViewModel) {
 private fun PreviewScanScreen() {
 	SignerNewTheme {
 		Box(modifier = Modifier.size(350.dp, 550.dp)) {
-			ScanScreen({}, { _ -> }, { _ -> }, { _ -> }, { _ -> }, { _ -> })
+			ScanScreen({}, { _ -> }, { _ -> }, { _ -> }, { _ -> })
 		}
 	}
 }

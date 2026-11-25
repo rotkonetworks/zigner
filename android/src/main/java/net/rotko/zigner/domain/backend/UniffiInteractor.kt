@@ -5,12 +5,10 @@ import net.rotko.zigner.domain.AuthResult
 import net.rotko.zigner.domain.KeySetDetailsModel
 import net.rotko.zigner.domain.KeySetsListModel
 import net.rotko.zigner.domain.NetworkModel
-import net.rotko.zigner.domain.VerifierDetailsModel
 import net.rotko.zigner.domain.submitErrorState
 import net.rotko.zigner.domain.toKeySetDetailsModel
 import net.rotko.zigner.domain.toKeySetsSelectModel
 import net.rotko.zigner.domain.toNetworkModel
-import net.rotko.zigner.domain.toVerifierDetailsModel
 import net.rotko.zigner.screens.keydetails.exportprivatekey.PrivateKeyExportModel
 import net.rotko.zigner.screens.keydetails.exportprivatekey.toPrivateKeyExportModel
 import io.parity.signer.uniffi.*
@@ -240,17 +238,6 @@ class UniffiInteractor(val appContext: Context) {
 				transactionResult
 			} catch (e: ErrorDisplayed) {
 				OperationResult.Err(e)
-			}
-		}
-
-	suspend fun getVerifierDetails(): UniffiResult<VerifierDetailsModel> =
-		withContext(Dispatchers.IO) {
-			try {
-				val transactionResult =
-					io.parity.signer.uniffi.getVerifierDetails().toVerifierDetailsModel()
-				UniffiResult.Success(transactionResult)
-			} catch (e: ErrorDisplayed) {
-				UniffiResult.Error(e)
 			}
 		}
 

@@ -11,7 +11,6 @@ import net.rotko.zigner.components.networkicon.IdentIconImage
 import net.rotko.zigner.domain.BASE58_STYLE_ABBREVIATE
 import net.rotko.zigner.domain.abbreviateString
 import net.rotko.zigner.domain.encodeHex
-import net.rotko.zigner.screens.scan.transaction.components.TransactionPreviewField
 import io.parity.signer.uniffi.*
 
 /**
@@ -22,7 +21,6 @@ fun HistoryCardExtended(
 	event: MEventMaybeDecoded,
 	timestamp: String
 ) {
-	val decodedTransaction = event.decoded
 	val signedBy = event.signedBy
 	val verifierDetails = event.verifierDetails
 	when (val eventVal = event.event) {
@@ -264,12 +262,6 @@ fun HistoryCardExtended(
 		is Event.TransactionSigned -> {
 			Column {
 				Text("Transaction signed")
-
-				if (decodedTransaction != null) {
-					TransactionPreviewField(
-						cardSet = decodedTransaction
-					)
-				}
 				Text("Signed by:")
 				Row {
 					signedBy?.address?.identicon?.let { identicon ->

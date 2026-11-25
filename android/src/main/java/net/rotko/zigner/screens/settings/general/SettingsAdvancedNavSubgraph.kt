@@ -37,7 +37,6 @@ internal fun SettingsAdvancedNavSubgraph(
 	Box(modifier = Modifier.statusBarsPadding()) {
 		SettingsAdvancedScreen(
 			onBack = { coreNavController.popBackStack() },
-			onVerifierCertificate = { coreNavController.navigate(SettingsNavSubgraph.generalVerifier) },
 			onOnlineModeToggle = {
 				if (onlineModeEnabled.value) {
 					menuNavController.navigate(SettingsAdvancedMenu.offline_mode_confirm)

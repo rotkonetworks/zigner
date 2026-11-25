@@ -34,6 +34,7 @@ internal fun SettingsGeneralNavSubgraph(
 	val appVersion = rememberSaveable { vm.getAppVersion(context) }
 	val shieldState = vm.networkState.collectAsStateWithLifecycle()
 	val lightThemeEnabled = vm.lightThemeEnabled.collectAsStateWithLifecycle()
+	val developerOptionsRevealed = vm.developerOptionsRevealed.collectAsStateWithLifecycle()
 
 	val menuNavController = rememberNavController()
 
@@ -56,6 +57,8 @@ internal fun SettingsGeneralNavSubgraph(
 			securitySummary = securitySummary,
 			appVersion = appVersion,
 			networkState = shieldState,
+			developerOptionsRevealed = developerOptionsRevealed.value,
+			onRevealDeveloperOptions = { vm.revealDeveloperOptions() },
 		)
 	}
 

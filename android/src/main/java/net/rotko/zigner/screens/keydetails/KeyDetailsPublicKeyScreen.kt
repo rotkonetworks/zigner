@@ -57,7 +57,6 @@ import net.rotko.zigner.components.base.ScreenHeaderClose
 import net.rotko.zigner.components.base.SignerDivider
 import net.rotko.zigner.components.sharedcomponents.ShowBase58Collapsible
 import net.rotko.zigner.domain.Callback
-import net.rotko.zigner.domain.EmptyNavigator
 import net.rotko.zigner.domain.KeyDetailsModel
 import net.rotko.zigner.domain.intoImageBitmap
 import net.rotko.zigner.ui.helpers.PreviewData

@@ -4,7 +4,6 @@ import android.content.Context
 import android.widget.Toast
 import androidx.navigation.NavController
 import net.rotko.zigner.R
-import net.rotko.zigner.domain.NavigationError
 import net.rotko.zigner.domain.backend.AuthOperationResult
 import net.rotko.zigner.domain.backend.OperationResult
 import net.rotko.zigner.domain.getDebugDetailedDescriptionString
@@ -30,14 +29,6 @@ inline fun <reified T, E> OperationResult<T, E>.handleErrorAppState(
 							argHeader = error.argHeader,
 							argDescription = error.argDescription,
 							argVerbose = error.argVerbose,
-						)
-					}
-
-					is NavigationError -> {
-						CoreUnlockedNavSubgraph.ErrorScreenGeneral.destination(
-							argHeader = "Operation navigation error trying to get ${T::class.java}",
-							argDescription = error.message,
-							argVerbose = "",
 						)
 					}
 

@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.rotko.zigner.components.base.SignerDivider
-import net.rotko.zigner.screens.scan.transaction.transactionElements.TCNameValueElement
 import net.rotko.zigner.ui.theme.*
 
 /**

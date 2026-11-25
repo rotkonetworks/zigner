@@ -11,7 +11,6 @@ import net.rotko.zigner.domain.getDbNameFromContext
 import net.rotko.zigner.domain.isDbCreatedAndOnboardingPassed
 import net.rotko.zigner.domain.storage.DatabaseAssetsInteractor
 import net.rotko.zigner.screens.error.ErrorStateDestinationState
-import io.parity.signer.uniffi.historyInitHistoryNoCert
 import io.parity.signer.uniffi.historyInitHistoryWithCert
 import io.parity.signer.uniffi.initNavigation
 
@@ -45,33 +44,6 @@ class ResetUseCase {
 				databaseAssetsInteractor.wipe()
 				val result = totalRefresh()
 				onAfterWipe()
-				return result
-			}
-		}
-	}
-
-	/**
-	 * Auth user and wipe Vault to state without general verifier certificate
-	 */
-	suspend fun wipeNoGeneralCertWithAuth(onAfterWide: Callback): OperationResult<Unit, ErrorStateDestinationState> {
-		val authentication = ServiceLocator.authentication
-		return when (authentication.authenticate(activity)) {
-			AuthResult.AuthError,
-			AuthResult.AuthFailed,
-			AuthResult.AuthUnavailable -> {
-				Toast.makeText(
-					activity.baseContext,
-					activity.baseContext.getString(R.string.auth_failed_message),
-					Toast.LENGTH_SHORT
-				).show()
-				OperationResult.Ok(Unit)
-			}
-			AuthResult.AuthSuccess -> {
-				databaseAssetsInteractor.wipe()
-				databaseAssetsInteractor.copyAsset("")
-				val result = totalRefresh()
-				historyInitHistoryNoCert()
-				onAfterWide()
 				return result
 			}
 		}

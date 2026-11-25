@@ -134,12 +134,22 @@ class SettingsGeneralViewModel: ViewModel() {
 
 	/**
 	 * Whether developer options have been revealed via the hidden 5-tap gesture on
-	 * the verifier certificate screen. When false (the default), the online mode
+	 * the version line in Settings. When false (the default), the online mode
 	 * toggle is not shown at all and the app stays fully air-gapped.
 	 */
 	val developerOptionsRevealed: StateFlow<Boolean> =
 		preferencesRepository.developerOptionsRevealed
 			.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+	/**
+	 * Reveal the hidden developer options (which surface the online mode toggle in
+	 * Advanced Settings). This only REVEALS the option; it never enables online mode.
+	 */
+	fun revealDeveloperOptions() {
+		viewModelScope.launch {
+			preferencesRepository.setDeveloperOptionsRevealed(true)
+		}
+	}
 
 	fun toggleLightTheme() {
 		viewModelScope.launch {

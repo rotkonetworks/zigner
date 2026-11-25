@@ -20,7 +20,6 @@ import net.rotko.zigner.screens.settings.general.SettingsAdvancedNavSubgraph
 import net.rotko.zigner.screens.settings.general.SettingsGeneralNavSubgraph
 import net.rotko.zigner.screens.settings.logs.logsNavigationSubgraph
 import net.rotko.zigner.screens.settings.releasekey.ReleaseKeyIntegratedScreen
-import net.rotko.zigner.screens.settings.verifiercert.verifierSettingsDestination
 import net.rotko.zigner.ui.mainnavigation.CoreUnlockedNavSubgraph
 
 /**
@@ -64,7 +63,6 @@ fun NavGraphBuilder.settingsFullSubgraph(
 		logsNavigationSubgraph(
 			navController = coreNavController,
 		)
-		verifierSettingsDestination(coreNavController)
 		composable(SettingsNavSubgraph.multisig) {
 			FrostSettingsScreen(
 				onBack = { coreNavController.popBackStack() },
@@ -100,7 +98,6 @@ internal object SettingsNavSubgraph {
 	const val backup = "settings_backup"
 	const val advanced = "settings_advanced"
 	const val logs = "settings_logs"
-	const val generalVerifier = "settings_general_verifier"
 	const val zcashTestQr = "settings_zcash_test_qr"
 	const val multisig = "settings_multisig"
 	const val multisigBackup = "settings_multisig_backup"

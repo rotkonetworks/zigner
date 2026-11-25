@@ -302,25 +302,6 @@ fun MmNetwork.toNetworkModel(): NetworkModel = NetworkModel(
 )
 
 
-data class VerifierDetailsModel(
-	val publicKey: String,
-	val identicon: Identicon,
-	val encryption: String,
-) {
-	companion object {
-		fun createStub() = VerifierDetailsModel(
-			publicKey = "5DCmwXp8XLzSMUyE4uhJMKV4vwvsWqqBYFKJq38CW53VHEVq",
-			identicon = PreviewData.Identicon.dotIcon,
-			encryption = "sr25519",
-		)
-	}
-}
-
-fun MVerifierDetails.toVerifierDetailsModel() = VerifierDetailsModel(
-	publicKey = publicKey,
-	identicon = identicon,
-	encryption = encryption,
-)
 
 
 

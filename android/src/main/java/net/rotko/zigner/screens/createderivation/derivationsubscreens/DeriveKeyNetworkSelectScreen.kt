@@ -49,7 +49,6 @@ fun DeriveKeyNetworkSelectScreen(
 	onClose: Callback,
 	onAdvancePath: (NetworkModel) -> Unit,
 	onFastCreate: (NetworkModel) -> Unit,
-	onNetworkHelp: Callback,
 	modifier: Modifier = Modifier
 ) {
 	val selected = remember { mutableStateOf(preselectd) }
@@ -93,11 +92,6 @@ fun DeriveKeyNetworkSelectScreen(
 					SignerDivider()
 				}
 			}
-			NetworkHelpAlarm(
-				Modifier
-					.padding(horizontal = 24.dp)
-					.clickable(onClick = onNetworkHelp)
-			)
 			Spacer(modifier = Modifier.weight(1f))
 			val network = selected.value
 			PrimaryButtonWide(
@@ -124,38 +118,6 @@ fun DeriveKeyNetworkSelectScreen(
 		}
 	}
 }
-
-@Composable
-fun NetworkHelpAlarm(modifier: Modifier = Modifier) {
-	val innerShape =
-		RectangleShape
-	Row(
-		modifier = modifier
-			.padding(vertical = 8.dp)
-			.border(
-				BorderStroke(1.dp, MaterialTheme.colors.appliedStroke),
-				innerShape
-			)
-	) {
-		Text(
-			text = stringResource(R.string.derivation_create_help_network_setup_label),
-			color = MaterialTheme.colors.textTertiary,
-			style = SignerTypeface.BodyM,
-			modifier = Modifier
-				.weight(1f)
-				.padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
-		)
-		Icon(
-			imageVector = Icons.Outlined.HelpOutline,
-			contentDescription = null,
-			tint = MaterialTheme.colors.pink300,
-			modifier = Modifier
-				.align(Alignment.CenterVertically)
-				.padding(start = 18.dp, end = 18.dp)
-		)
-	}
-}
-
 
 @Preview(
 	name = "light", group = "general", uiMode = Configuration.UI_MODE_NIGHT_NO,
@@ -195,7 +157,6 @@ private fun PreviewDeriveKeyNetworkSelectScreen() {
 			onClose = {},
 			onAdvancePath = {},
 			onFastCreate = {},
-			onNetworkHelp = {},
 		)
 	}
 }
@@ -229,7 +190,6 @@ private fun PreviewDeriveKeyNetworkMenu() {
 			onClose = {},
 			onAdvancePath = {},
 			onFastCreate = {},
-			onNetworkHelp = {},
 		)
 	}
 }
@@ -264,7 +224,6 @@ private fun PreviewDeriveKeyNetworkNoSelection() {
 			onClose = {},
 			onAdvancePath = {},
 			onFastCreate = {},
-			onNetworkHelp = {},
 		)
 	}
 }

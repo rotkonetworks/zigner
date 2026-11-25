@@ -240,11 +240,6 @@ class CameraViewModel() : ViewModel() {
 	val bananaSplitPayload: StateFlow<List<String>?> =
 		_bananaSplitPayload.asStateFlow()
 
-	private val _pendingTransactionPayloads =
-		MutableStateFlow<Set<String>>(emptySet())
-	val pendingTransactionPayloads: StateFlow<Set<String>> =
-		_pendingTransactionPayloads.asStateFlow()
-
 	// Penumbra sign request payload (detected by 530310 prefix)
 	private val _penumbraSignRequestPayload = MutableStateFlow<String?>(null)
 	val penumbraSignRequestPayload: StateFlow<String?> =
@@ -519,11 +514,9 @@ class CameraViewModel() : ViewModel() {
 						if (!allow(ScanCapability.ZCASH)) return
 						_zcashModulePcztPayload.value = payload.s
 					} else {
-						// The Substrate path: SCALE plus runtime metadata, the
-						// largest parser in the app and the one with the most
-						// upstream churn.
-						if (!allow(ScanCapability.SUBSTRATE)) return
-						addPendingTransaction(payload.s)
+						// Everything else in this envelope was a Substrate
+						// request. Zigner no longer has a parser for them.
+						allow(ScanCapability.SUBSTRATE)
 					}
 				}
 
@@ -814,10 +807,6 @@ class CameraViewModel() : ViewModel() {
 		}
 	}
 
-	private fun addPendingTransaction(payload: String) {
-		_pendingTransactionPayloads.value += payload
-	}
-
 	/**
 	 * Clears camera progress
 	 */
@@ -829,7 +818,6 @@ class CameraViewModel() : ViewModel() {
 	}
 
 	fun resetPendingTransactions() {
-		_pendingTransactionPayloads.value = emptySet()
 		_bananaSplitPayload.value = null
 		_penumbraSignRequestPayload.value = null
 		_cosmosSignRequestPayload.value = null

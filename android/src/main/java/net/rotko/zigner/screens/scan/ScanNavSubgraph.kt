@@ -16,17 +16,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import net.rotko.zigner.R
-import net.rotko.zigner.bottomsheets.password.EnterPassword
 import net.rotko.zigner.domain.Callback
-import net.rotko.zigner.domain.FakeNavigator
 import net.rotko.zigner.screens.scan.backuprestore.BackupRestoreSubgraph
 import net.rotko.zigner.screens.scan.bananasplitrestore.BananaSplitSubgraph
 import net.rotko.zigner.screens.scan.camera.ScanScreen
 import net.rotko.zigner.screens.scan.elements.WrongPasswordBottomSheet
 import net.rotko.zigner.screens.scan.errors.LocalErrorBottomSheet
 import net.rotko.zigner.screens.scan.errors.LocalErrorSheetModel
-import net.rotko.zigner.screens.scan.transaction.TransactionPreviewType
-import net.rotko.zigner.screens.scan.transaction.TransactionsScreenFull
 import net.rotko.zigner.screens.scan.transaction.AuthChallengeScreen
 import net.rotko.zigner.screens.scan.transaction.ZidSignScreen
 import net.rotko.zigner.screens.scan.transaction.frost.FrostDkgScreen
@@ -38,9 +34,7 @@ import net.rotko.zigner.screens.scan.transaction.ZcashNoteSyncScreen
 import net.rotko.zigner.screens.scan.transaction.ZcashPcztScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedTransactionScreen
 import net.rotko.zigner.screens.scan.transaction.UnifiedSignatureQrScreen
-import net.rotko.zigner.screens.scan.transaction.previewType
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
-import io.parity.signer.uniffi.Action
 import net.rotko.zigner.domain.module.ModuleSlotStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,13 +53,10 @@ fun ScanNavSubgraph(
 ) {
 	val scanViewModel: ScanViewModel = viewModel()
 
-	val transactions = scanViewModel.transactions.collectAsStateWithLifecycle()
-	val signature = scanViewModel.signature.collectAsStateWithLifecycle()
 	val bananaSplitPassword =
 		scanViewModel.bananaSplitPassword.collectAsStateWithLifecycle()
 	val transactionError =
 		scanViewModel.transactionError.collectAsStateWithLifecycle()
-	val passwordModel = scanViewModel.passwordModel.collectAsStateWithLifecycle()
 	val errorWrongPassword =
 		scanViewModel.errorWrongPassword.collectAsStateWithLifecycle()
 
@@ -86,8 +77,6 @@ fun ScanNavSubgraph(
 	val modulePackageInfo = scanViewModel.modulePackageInfo.collectAsStateWithLifecycle()
 	val modulePackageError = scanViewModel.modulePackageError.collectAsStateWithLifecycle()
 
-	val showingModals = transactionError.value != null ||
-		passwordModel.value != null || errorWrongPassword.value
 
 	val backAction = {
 		val wasState = scanViewModel.ifHasStateThenClear()
@@ -117,7 +106,6 @@ fun ScanNavSubgraph(
 	}
 
 	//Full screens
-	val transactionsValue = transactions.value
 	val bananaQrData = bananaSplitPassword.value
 	val urBackupData = urBackupFrames.value
 
@@ -138,7 +126,7 @@ fun ScanNavSubgraph(
 					error = LocalErrorSheetModel(
 						title = "Module update failed",
 						subtitle = "Failed to stage the module package for installation",
-						details = modulePackageError.value
+						description = modulePackageError.value
 					),
 					onOk = {
 						scanViewModel.modulePackageError.value = null
@@ -429,13 +417,9 @@ fun ScanNavSubgraph(
 			prefixBytes = releaseSignPrefixValue,
 			onDone = { scanViewModel.releaseSignPrefix.value = null },
 		)
-	} else if (transactionsValue == null || showingModals) {
-
+	} else {
 		ScanScreen(
 			onClose = onCloseCamera,
-			performPayloads = { payloads ->
-				scanViewModel.performTransactionPayload(payloads, context)
-			},
 			onBananaSplit = { payloads ->
 				scanViewModel.bananaSplitPassword.value = payloads
 			},
@@ -473,46 +457,6 @@ fun ScanNavSubgraph(
 				scanViewModel.zidSignPayload.value = json
 			},
 		)
-	} else {
-
-		TransactionsScreenFull(
-			transactions = transactionsValue.transactions,
-			signature = signature.value,
-			modifier = Modifier.statusBarsPadding(),
-			onBack = {
-				FakeNavigator().backAction()
-				scanViewModel.clearState()
-			},
-			onApprove = {
-				when (val previewType =
-					transactions.value?.transactions?.previewType) {
-					is TransactionPreviewType.Metadata -> {
-						Toast.makeText(
-							context,
-							context.getString(
-								R.string.toast_metadata_added,
-								previewType.network,
-								previewType.version
-							),
-							Toast.LENGTH_LONG
-						).show()
-					}
-
-					else -> {
-						//nothing
-					}
-				}
-				//finally clear transaction state and stay in scan screen
-				scanViewModel.clearState()
-				val fakeNavigator = FakeNavigator()
-				fakeNavigator.navigate(Action.GO_FORWARD)
-				fakeNavigator.navigate(Action.START)
-				fakeNavigator.navigate(Action.NAVBAR_SCAN)
-			},
-			onImportKeys = {
-				scanViewModel.onImportKeysTap(transactionsValue, context)
-			}
-		)
 	}
 	//Bottom sheets
 	transactionError.value?.let { presentableErrorValue ->
@@ -520,24 +464,6 @@ fun ScanNavSubgraph(
 			LocalErrorBottomSheet(
 				error = presentableErrorValue,
 				onOk = scanViewModel::clearState,
-			)
-		}
-	} ?: passwordModel.value?.let { passwordModelValue ->
-		BottomSheetWrapperRoot(onClosedAction = {
-			scanViewModel.resetRustModalToNewScan()
-			scanViewModel.clearState()
-		}) {
-			EnterPassword(
-				data = passwordModelValue,
-				proceed = { password ->
-					scanViewModel.viewModelScope.launch {
-						scanViewModel.handlePasswordEntered(password)
-					}
-				},
-				onClose = {
-					scanViewModel.resetRustModalToNewScan()
-					scanViewModel.clearState()
-				},
 			)
 		}
 	} ?: if (errorWrongPassword.value) {

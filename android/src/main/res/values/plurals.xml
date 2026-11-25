@@ -19,17 +19,6 @@
 		<item quantity="one">Export %1$d key</item>
 		<item quantity="other">Export %1$d keys</item>
 	</plurals>
-
-	<plurals name="transactions_title_other">
-		<item quantity="one">Sign transaction</item>
-		<item quantity="other">Sign %1$d transactions</item>
-	</plurals>
-
-
-	<plurals name="import_derivations_success_keys_imported">
-		<item quantity="one">%1$d key has been imported</item>
-		<item quantity="other">%1$d keys has been imported</item>
-	</plurals>
 </resources>
 
 

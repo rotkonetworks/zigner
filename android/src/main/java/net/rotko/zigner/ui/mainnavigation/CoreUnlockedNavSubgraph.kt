@@ -23,7 +23,6 @@ import net.rotko.zigner.screens.settings.frost.FrostBackupAllScreen
 import net.rotko.zigner.screens.settings.frost.FrostSendToZafuScreen
 import net.rotko.zigner.screens.settings.frost.FrostWalletDetailScreen
 import net.rotko.zigner.screens.settings.frost.FrostWalletListScreen
-import net.rotko.zigner.screens.settings.networks.helper.networkHelpersCoreSubgraph
 import net.rotko.zigner.screens.settings.settingsFullSubgraph
 
 @Composable
@@ -112,13 +111,6 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 
 			DerivationCreateSubgraph(
 				onBack = { navController.popBackStack() },
-				onOpenCamera = {
-					navController.navigate(
-						CoreUnlockedNavSubgraph.Camera.destination(
-							null
-						)
-					)
-				},
 				seedName = seedName,
 			)
 		}
@@ -223,9 +215,6 @@ fun CoreUnlockedNavSubgraph(navController: NavHostController) {
 		settingsFullSubgraph(
 			coreNavController = navController,
 		)
-		networkHelpersCoreSubgraph(
-			navController = navController,
-		)
 		errorStateDestination(
 			navController = navController,
 		)
@@ -306,7 +295,6 @@ object CoreUnlockedNavSubgraph {
 
 	const val airgapBreached = "core_airgap_blocker"
 	const val settings = "core_settings_flow"
-	const val networkHelpers = "network_helpers_path"
 	const val frostWalletList = "frost_wallet_list"
 	const val frostBackupAll = "frost_backup_all"
 

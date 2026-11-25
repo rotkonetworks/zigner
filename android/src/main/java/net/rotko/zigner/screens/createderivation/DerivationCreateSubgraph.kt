@@ -22,7 +22,6 @@ import net.rotko.zigner.screens.createderivation.derivationsubscreens.Derivation
 import net.rotko.zigner.screens.createderivation.derivationsubscreens.DerivationPathScreen
 import net.rotko.zigner.screens.createderivation.derivationsubscreens.DeriveKeyNetworkSelectScreen
 import net.rotko.zigner.screens.createderivation.help.DerivationMethodsHelpBottomSheet
-import net.rotko.zigner.screens.settings.networks.helper.networkHelpersSubgraph
 import net.rotko.zigner.ui.BottomSheetWrapperRoot
 import kotlinx.coroutines.launch
 
@@ -31,7 +30,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun DerivationCreateSubgraph(
 	onBack: Callback,
-	onOpenCamera: Callback,
 	seedName: String,
 ) {
 
@@ -63,7 +61,6 @@ fun DerivationCreateSubgraph(
 						onBack()
 					}
 				},
-				onNetworkHelp = { navController.navigate(DerivationCreateSubgraph.network_help) },
 				modifier = Modifier
 					.statusBarsPadding()
 					.background(MaterialTheme.colors.background)
@@ -126,18 +123,12 @@ fun DerivationCreateSubgraph(
 				}
 			}
 		}
-		networkHelpersSubgraph(
-			routePath = DerivationCreateSubgraph.network_help,
-			onScanClicked = onOpenCamera,
-			navController = navController,
-		)
 	}
 }
 
 private object DerivationCreateSubgraph {
 	const val select_network = "derivation_creation_select_network"
 	const val path = "derivation_creation_path"
-	const val network_help = "network_help_screens"
 }
 
 private object PathDerivationSheetsSubGraph {
