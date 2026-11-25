@@ -10,12 +10,10 @@ Key crates worth starting with:
 
 - [`signer`](../rustdocs/signer/index.html) — UniFFI surface; the
   entry point for everything the native apps can call.
-- [`navigator`](../rustdocs/navigator/index.html) — screen state
-  machine.
 - [`transaction_signing`](../rustdocs/transaction_signing/index.html)
-  — Penumbra, Zcash, and Substrate signing logic.
+  — Penumbra, Zcash, and Cosmos signing logic.
 - [`transaction_parsing`](../rustdocs/transaction_parsing/index.html)
-  — UR / CBOR / PCZT parsers and inspection helpers.
+  — Penumbra signing-request parser.
 - [`db_handling`](../rustdocs/db_handling/index.html) — encrypted sled
   storage layout.
 - [`frost-spend`](https://github.com/rotkonetworks/zcli/tree/master/crates/frost-spend)

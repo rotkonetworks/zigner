@@ -1,7 +1,7 @@
 # Getting started
 
 This walks through setting up Zigner for **Zcash** as the primary use case.
-The same device handles Penumbra and Substrate too.
+The same device handles Penumbra too.
 
 ## 1. Set up the device
 

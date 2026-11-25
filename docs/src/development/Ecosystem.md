@@ -3,7 +3,7 @@
 ## Zigner repo
 
 - [Zigner app](https://github.com/rotkonetworks/zigner) — air-gapped
-  cold signer for Zcash, Penumbra, and Substrate
+  cold signer for Zcash and Penumbra
 - [`qr_reader_pc`](https://github.com/rotkonetworks/zigner/tree/master/rust/qr_reader_pc)
   — desktop QR scanner used during development
 
@@ -22,5 +22,3 @@
 
 - [Prax](https://prax.fyi/) — Penumbra browser wallet (FVK import,
   transaction signing)
-- [Polkadot.js Apps](https://polkadot.js.org/apps/) — Substrate
-  transaction construction and broadcast

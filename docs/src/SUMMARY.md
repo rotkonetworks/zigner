@@ -13,5 +13,4 @@
     - [Vault Structure](./development/Vault-Structure.md)
     - [Troubleshooting](./development/Troubleshooting.md)
     - [Rust Docs](./development/Rustdocs.md)
-    - [Universal Offline Signature](./development/UOS.md)
     - [Ecosystem](./development/Ecosystem.md)

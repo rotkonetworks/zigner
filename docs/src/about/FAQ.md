@@ -8,20 +8,19 @@
 - [Hot wallet (Zafu pro)](#hot-wallet-zafu-pro)
 - [Encrypted backup](#encrypted-backup)
 - [Penumbra](#penumbra)
-- [Substrate](#substrate)
 - [Seeds and keys](#seeds-and-keys)
 
 ## General
 
 ### What is Zigner?
 
-An air-gapped cold signer focused on Zcash, with Penumbra and Substrate
-also supported. It holds private keys on an offline phone and signs
+An air-gapped cold signer focused on Zcash, with Penumbra also
+supported. It holds private keys on an offline phone and signs
 transactions presented as QR codes. It never touches a network.
 
 ### What does it protect against?
 
-A compromised hot wallet. Even if Zafu, Zashi, Prax, or Polkadot.js is
+A compromised hot wallet. Even if Zafu, Zashi, or Prax is
 backdoored, the attacker cannot extract your spending key — it never
 leaves the signing device. They can present a malicious transaction,
 but Zigner displays the decoded contents and enforces several
@@ -278,15 +277,16 @@ Yes. Every signing request includes a chain ID. Zigner rejects requests
 where the chain ID doesn't match what the transaction plan specifies.
 Prevents cross-chain replay and mainnet/testnet confusion.
 
-## Substrate
+### What happened to Substrate (Polkadot, Kusama)?
 
-Polkadot, Kusama, and Westend ship built-in. Sr25519 and Ed25519
-signing. Substrate is a secondary use case for Zigner; if you need
-chain-agility tooling, use a dedicated Polkadot signer.
+Zigner no longer signs Substrate transactions or messages, and no longer
+loads network specs or metadata. Keys made by earlier versions stay in
+the key list. To sign for a Substrate chain, use a dedicated Polkadot
+signer with the same seed phrase.
 
 ## Seeds and keys
 
-### Can I use one seed for Zcash, Penumbra, and Substrate?
+### Can I use one seed for Zcash and Penumbra?
 
 Yes. Each chain derives keys from the same BIP-39 seed using distinct
 derivation paths (different BIP-44 coin types), so keys are

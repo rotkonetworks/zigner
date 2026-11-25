@@ -18,19 +18,16 @@ zigner/
 | Crate                | Purpose                                                                               |
 |----------------------|---------------------------------------------------------------------------------------|
 | `signer`             | UniFFI bridge to native; owns auth, FROST, backup, hot wallet, anchor verify          |
-| `transaction_signing`| Penumbra (decaf377-rdsa), Zcash (Orchard RedPallas + transparent secp256k1), Substrate |
-| `transaction_parsing`| QR / UR / CBOR decoders; PCZT inspection; Penumbra metadata; Substrate extrinsics     |
-| `db_handling`        | Encrypted sled storage — seeds, FROST key packages, contacts, anchors, attestation flag |
-| `navigator`          | Cross-platform screen state machine                                                   |
+| `transaction_signing`| Penumbra (decaf377-rdsa), Zcash (Orchard RedPallas + transparent secp256k1), Cosmos |
+| `transaction_parsing`| Penumbra signing-request parser                                                       |
+| `db_handling`        | Encrypted sled storage — seeds, FROST key packages, contacts, anchors, attestation flag; builds the shipped database (`make_cold_release`) |
 | `qrcode_rtx`         | Animated UR encoder (raptorq fountain codes)                                          |
 | `qrcode_static`      | Static QR generation                                                                  |
 | `qr_reader_phone`    | Camera frame UR decoder (multi-part reassembly)                                       |
 | `qr_reader_pc`       | Desktop dev tool (uses `opencv`; not part of mobile builds)                           |
 | `zcash-wasm`         | Browser-compatible Orchard derivation (used by Zafu)                                  |
-| `constants`          | Pinned verifier keys, sled tree names, network defaults                               |
+| `constants`          | Pinned verifier keys, sled tree names                                                 |
 | `definitions`        | Shared error / model types crossed by FFI                                             |
-| `defaults`           | Built-in chain specs and test data                                                    |
-| `printing_balance`   | Token amount formatting helper                                                        |
 
 External git dependencies:
 
@@ -65,9 +62,13 @@ database. Tree names are constants in `rust/constants/src/lib.rs`:
 | `frost_keys`          | FROST key packages and group metadata per multisig       |
 | `contacts`            | Address book entries                                     |
 | `zcash_notes`         | Verified Orchard notes + anchor metadata                 |
-| `settings`            | Verifier certificates, chain registry, attestation flag  |
-| `transaction`         | Pending transaction state (cleared after sign)           |
+| `chainspecs`          | Network specs keys point at (Zcash, Penumbra, Cosmos)    |
+| `settings`            | Danger status, schema version, attestation flag          |
 | `history`             | Append-only device history log                           |
+
+Databases from releases that still signed Substrate also hold
+`metadata`, `verifiers` and `transaction` trees and `types` /
+`general_verifier` settings. Nothing reads them any more.
 
 Anchor metadata in `zcash_notes` is laid out as
 `anchor(32) || height(4) || mainnet(1) || synced_at(8)`.
@@ -87,16 +88,11 @@ Zigner consumes and produces these UR types:
 | `ur:zafu-hot-wallet`| cold → hot       | Derived BIP-39 mnemonic for Zafu pro              |
 | `ur:penumbra-accounts` | cold → hot    | Penumbra FVK for Prax                             |
 
-Substrate signing uses the **UOS** (Universal Offline Signature)
-format — see [UOS spec](./UOS.md).
-
 ## Native layers
 
 Both native apps consume the UniFFI-generated bindings as their only
-contact with the core. Screen flows are driven by the Rust
-`navigator` state machine: native code requests the next screen, the
-Rust core computes which screen to show, the native code renders
-it. This keeps UX consistent across platforms.
+contact with the core. Screen flows live in the native layers and call
+the Rust core for data and signing.
 
 Camera capture (CameraX on Android, AVFoundation on iOS) hands raw
 frames to the Rust `qr_reader_phone` crate, which decodes UR

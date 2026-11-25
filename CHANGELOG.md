@@ -4,6 +4,18 @@ All notable changes to zigner are documented in this file.
 
 ## Unreleased
 
+### Removed
+
+- **Substrate signing.** Zigner no longer signs Polkadot/Substrate
+  transactions or messages, and no longer adds networks, loads metadata
+  or types, or keeps a general verifier certificate. The camera already
+  refused these codes; the screens, the Rust parser and the host-side
+  metadata tooling behind them are gone. Keys made by earlier versions
+  still list, and old log entries still show. A new device ships with
+  Zcash, Penumbra and the Cosmos networks only.
+- The hidden developer-options reveal moved from the verifier
+  certificate to the version line in Settings (tap it five times).
+
 ### Fixes
 
 - Dropped `android.permission.FLASHLIGHT` from the manifest. Android has no
