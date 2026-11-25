@@ -6,14 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-frame-metadata = {version = "16.0.0", features = ["std", "legacy"]}
 hex = "0.4.3"
 libsecp256k1 = "0.7.1"
 parity-scale-codec = {version = "3.6.9", features = ["derive"]}
 sled = "0.34.6"
 sp-core = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, features = ["full_crypto"]}
-sp-runtime = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false}
-sp-version = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3"}
+sp-runtime = {git = "https://github.com/paritytech/substrate", rev = "49734dd1d72a00b9d3b87ba397661a63e0e17af3", default-features = false, features = ["std"]}
 thiserror = "1.0.57"
 constants = {path = "../constants"}
 

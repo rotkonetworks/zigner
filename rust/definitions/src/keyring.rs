@@ -1,45 +1,26 @@
-//! Key types and key generation for hot and cold databases
+//! Database key types
 //!
-//! Cold database has following trees:  
+//! Cold database trees and their keys:
 //!
-//! - `SPECSTREE`, for network specs `OrderedNetworkSpecs` entries, with keys
-//!   [`NetworkSpecsKey`]  
-//! - `VERIFIERS`, for network verifier [`CurrentVerifier`](crate::network_specs::CurrentVerifier)
-//!   entries, with keys [`VerifierKey`]  
-//! - `METATREE`, for `Vec<u8>` metadata entries, with keys [`MetaKey`] and
-//!   prefix search with [`MetaKeyPrefix`]  
-//! - `ADDRTREE`, for [`AddressDetails`](crate::users::AddressDetails) entries
+//! - `SPECSTREE`, network specs `OrderedNetworkSpecs` entries, with keys
+//!   [`NetworkSpecsKey`]
+//! - `ADDRTREE`, [`AddressDetails`](crate::users::AddressDetails) entries
 //!   with public information associated with user addresses, with keys
-//!   [`AddressKey`]  
-//! - `SETTREE`, for types information, Vault danger status, and general
-//!   verifier  
-//! - `TRANSACTION`, to temporarily store transaction information while waiting
-//!   for user approval  
-//! - `HISTORY`, for [`Entry`](crate::history::Entry) log of all events
+//!   [`AddressKey`]
+//! - `SETTREE`, danger status and database schema version
+//! - `HISTORY`, [`Entry`](crate::history::Entry) log of all events
 //!   happening in Vault, with keys [`Order`]
 //!
-//! Hot database has following trees:  
-//!
-//! - `SPECSTREEPREP`, for network specs [`NetworkSpecs`](crate::network_specs::NetworkSpecs)
-//!   entries, with keys [`NetworkSpecsKey`]  
-//! - `METATREE`, for `Vec<u8>` metadata entries, with keys [`MetaKey`] and
-//!   prefix search with [`MetaKeyPrefix`]  
-//! - `META_HISTORY`, for [`H256`] block hash entries, with keys [`MetaKey`] and
-//!   prefix search with [`MetaKeyPrefix`]
-//! - `SETTREE`, for types information  
-//! - `ADDRESS_BOOK` for `AddressBookEntry` data needed to maintain hot database
-//!   and send RPC calls to fetch network information, with keys `AddressBookKey`
-//!
+//! Databases from before Substrate signing was removed also hold `METATREE`,
+//! `VERIFIERS` and `TRANSACTION`, and `TYPES` / `GENERALVERIFIER` entries in
+//! `SETTREE`. Nothing reads them.
 use parity_scale_codec::{Decode, Encode};
 use sled::IVec;
 use sp_core::H256;
 use sp_runtime::MultiSigner;
 
 use crate::helpers::{get_multisigner, unhex};
-use crate::{
-    crypto::Encryption,
-    error::{Error, Result},
-};
+use crate::{crypto::Encryption, error::Result};
 
 /// Key in `SPECSTREE` tree (cold database) and in `SPECSPREPTREE` (hot database)  
 ///
@@ -130,46 +111,6 @@ impl NetworkSpecsKey {
     /// Transform [`NetworkSpecsKey`] into `Vec<u8>` database key  
     pub fn key(&self) -> Vec<u8> {
         self.0.to_vec()
-    }
-}
-
-/// Key in `VERIFIERS` tree (cold database)  
-///
-/// [`VerifierKey`] is used to retrieve network verifier information.  
-///
-/// Key is derived from network genesis hash.  
-///
-/// Same [`VerifierKey`] and same [`CurrentVerifier`](crate::network_specs::CurrentVerifier)
-/// are corresponding to all network-associated information:
-///
-/// - network specs, for any encryption algorithm  
-/// - network metadata
-#[derive(Decode, Encode, Debug, Clone, PartialEq, Eq)]
-pub struct VerifierKey(H256);
-
-impl VerifierKey {
-    /// Generate [`VerifierKey`] from network genesis hash
-    pub fn from_parts(genesis_hash: H256) -> Self {
-        Self(genesis_hash)
-    }
-
-    /// Transform database `IVec` key into [`VerifierKey`]  
-    pub fn from_ivec(ivec: &IVec) -> Result<Self> {
-        let bytes: [u8; 32] = ivec
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::WrongPublicKeyLength)?;
-        Ok(Self(bytes.into()))
-    }
-
-    /// Get genesis hash from the [`VerifierKey`]
-    pub fn genesis_hash(&self) -> H256 {
-        self.0
-    }
-
-    /// Transform [`VerifierKey`] into `Vec<u8>` database key  
-    pub fn key(&self) -> Vec<u8> {
-        self.0.as_bytes().to_vec()
     }
 }
 
@@ -271,101 +212,6 @@ impl AddressKey {
     }
 }
 
-/// Key in `METATREE` (cold and hot database) and in `META_HISTORY` tree (hot
-/// database)
-///
-/// [`MetaKey`] is used to retrieve raw `Vec<u8>` metadata from `METATREE` and
-/// relevant block hash entries from `META_HISTORY`.  
-///
-/// Key is derived from network name as it appears in the metadata and network
-/// version.  
-///
-/// Each [`MetaKey`] corresponds to single metadata entry and each metadata
-/// entry has unique [`MetaKey`]. This is so because:
-///
-/// - Metadata that could be used in Vault must contain `Version` constant in
-///   pallet `System`, and only such metadata can be added in the databases.  
-///
-/// - Two raw metadata entries corresponding to same network name and network
-///   version must be identical. If the metadata changes without bumping the
-///   network version, both Vault and hot database client would produce an error.
-///   It is not possible to switch the metadata in cold or hot database to the
-///   changed one without removing the old entry first.  
-#[derive(Debug, Clone)]
-pub struct MetaKey(Vec<u8>);
-
-/// Decoded `MetaKey` content, struct with network name and network version inside  
-#[derive(Decode, Encode)]
-struct MetaKeyContent {
-    name: String,
-    version: u32,
-}
-
-impl MetaKey {
-    /// Generate [`MetaKey`] from parts: network name and network version
-    pub fn from_parts(name: &str, version: u32) -> Self {
-        let meta_key_content = MetaKeyContent {
-            name: name.to_string(),
-            version,
-        };
-        Self(meta_key_content.encode())
-    }
-
-    /// Transform database `IVec` key into [`MetaKey`] prior to processing  
-    ///
-    /// Infallible, the validity of resulting `MetaKey` is not checked.
-    pub fn from_ivec(ivec: &IVec) -> Self {
-        Self(ivec.to_vec())
-    }
-
-    /// Get network name and network version from the [`MetaKey`]
-    ///
-    /// Could result in error if key is corrupted.  
-    pub fn name_version(&self) -> Result<(String, u32)> {
-        let res = <MetaKeyContent>::decode(&mut &self.0[..])?;
-        Ok((res.name, res.version))
-    }
-
-    /// Transform [`MetaKey`] into `Vec<u8>` database key  
-    pub fn key(&self) -> Vec<u8> {
-        self.0.to_vec()
-    }
-}
-
-/// Prefix for searching in `METATREE` (cold and hot database) and in
-/// `META_HISTORY` tree (hot database)
-///
-/// [`MetaKeyPrefix`] is used to retrieve all available `Vec<u8>` metadata
-/// for a given network name from `METATREE` and all relevant block hash entries
-/// from `META_HISTORY`.  
-///
-/// Prefix is derived from network name as it appears in the metadata.  
-///
-/// [`MetaKey`] consists of concatenated encoded network name and encoded
-/// network version.
-/// [`MetaKeyPrefix`] consists only of encoded network name, and is therefore
-/// a common prefix for all [`MetaKey`] corresponding to the given network
-/// name and all available network versions.  
-#[derive(Debug)]
-pub struct MetaKeyPrefix(Vec<u8>);
-
-/// Decoded `MetaKeyPrefix` content, struct with network name inside  
-#[derive(Decode, Encode)]
-struct MetaKeyPrefixContent(String);
-
-impl MetaKeyPrefix {
-    /// Generate [`MetaKeyPrefix`] from network name
-    pub fn from_name(name: &str) -> Self {
-        let meta_key_prefix_content = MetaKeyPrefixContent(name.to_string());
-        Self(meta_key_prefix_content.encode())
-    }
-
-    /// Transform [`MetaKeyPrefix`] into `Vec<u8>` database key prefix  
-    pub fn prefix(&self) -> Vec<u8> {
-        self.0.to_vec()
-    }
-}
-
 /// Key in `HISTORY` tree (cold database)  
 ///
 /// [`Order`] is used to retrieve history log entry.  
@@ -405,57 +251,10 @@ impl Order {
     }
 }
 
-/// Key in `ADDRESS_BOOK` tree (hot database)  
-///
-/// Key is used to retrieve the `AddressBookEntry` for network.
-///
-/// Key is a SCALE-encoded address book title, which is either a network name
-/// as it is stated in the metadata for default networks, or the name with
-/// `-<encryption>` added for non-default networks.
-///
-/// Database could have a few entries for related networks, for example,
-/// entry "westend" for default Westend, and entry "westend-ed25519" for
-/// Westend with `Ed25519` encryption. Such entries would not conflict.
-#[derive(Debug, Clone)]
-#[cfg(feature = "active")]
-pub struct AddressBookKey(Vec<u8>);
-
-/// Decoded `AddressBookKey` content, struct with network address book title inside  
-#[derive(Decode, Encode)]
-#[cfg(feature = "active")]
-struct AddressBookKeyContent(String);
-
-#[cfg(feature = "active")]
-impl AddressBookKey {
-    /// Generate [`AddressBookKey`] from network address book title
-    pub fn from_title(title: &str) -> Self {
-        let address_book_key_content = AddressBookKeyContent(title.to_string());
-        Self(address_book_key_content.encode())
-    }
-
-    /// Transform database `IVec` key into [`AddressBookKey`] prior to processing  
-    ///
-    /// Infallible, the validity of resulting `AddressBookKey` is not checked.
-    pub fn from_ivec(ivec: &IVec) -> Self {
-        Self(ivec.to_vec())
-    }
-
-    /// Get the network address book title from the [`AddressBookKey`]
-    ///
-    /// Could result in error if key is corrupted.
-    pub fn title(&self) -> Result<String> {
-        Ok(<AddressBookKeyContent>::decode(&mut &self.0[..])?.0)
-    }
-
-    /// Transform [`AddressBookKey`] into `Vec<u8>` database key  
-    pub fn key(&self) -> Vec<u8> {
-        self.0.to_vec()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Error;
 
     #[test]
     fn error_in_network_specs_key_signer() {

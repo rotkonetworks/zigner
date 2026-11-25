@@ -21,29 +21,16 @@ pub mod danger;
 
 pub mod error;
 
-pub mod error_active;
-
-pub mod error_signer;
-
 pub mod helpers;
 
 pub mod history;
 
 pub mod keyring;
 
-pub mod metadata;
-
 pub mod network_specs;
-
-pub mod qr_transfers;
-
-pub mod types;
 
 pub mod users;
 
 pub mod navigation;
 
-pub mod derivations;
-
-pub mod dynamic_derivations;
 pub mod schema_version;

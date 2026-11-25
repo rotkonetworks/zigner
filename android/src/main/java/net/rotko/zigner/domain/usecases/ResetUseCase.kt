@@ -11,7 +11,7 @@ import net.rotko.zigner.domain.getDbNameFromContext
 import net.rotko.zigner.domain.isDbCreatedAndOnboardingPassed
 import net.rotko.zigner.domain.storage.DatabaseAssetsInteractor
 import net.rotko.zigner.screens.error.ErrorStateDestinationState
-import io.parity.signer.uniffi.historyInitHistoryWithCert
+import io.parity.signer.uniffi.historyInitHistory
 import io.parity.signer.uniffi.initNavigation
 
 
@@ -63,7 +63,7 @@ class ResetUseCase {
 		databaseAssetsInteractor.wipe()
 		databaseAssetsInteractor.copyAsset("")
 		totalRefreshDbExist()
-		historyInitHistoryWithCert()
+		historyInitHistory()
 	}
 
 	/**

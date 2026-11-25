@@ -1,21 +1,18 @@
 use constants::test_values::alice_ethereum_polkadot;
-use db_handling::cold_default::populate_all_network_specs;
+use parity_scale_codec::Encode;
 use pretty_assertions::{assert_eq, assert_ne};
 use sled::{Batch, Tree};
 use sp_core::ecdsa::Public as EcdsaPublic;
-use sp_core::ed25519::Public as Ed25519Public;
 use sp_core::sr25519::Public;
 use sp_core::H256;
 use sp_runtime::MultiSigner;
-use std::collections::HashMap;
 use std::{convert::TryInto, str::FromStr};
 
 use constants::{
-    test_values::{alice_sr_alice, empty_png, types_known, westend_9000, westend_9010},
-    ADDRTREE, ALICE_SEED_PHRASE, METATREE, SCHEMA_VERSION, SPECSTREE,
+    test_values::{alice_sr_alice, empty_png},
+    ADDRTREE, ALICE_SEED_PHRASE, SCHEMA_VERSION, SPECSTREE,
 };
 use db_handling::Error;
-use defaults::default_chainspecs;
 use definitions::{
     crypto::Encryption,
     history::{
@@ -23,50 +20,35 @@ use definitions::{
         NetworkSpecsDisplay, NetworkSpecsExport, NetworkVerifierDisplay, SignDisplay,
         SignMessageDisplay, TypesDisplay, TypesExport,
     },
-    keyring::{AddressKey, MetaKey, MetaKeyPrefix, NetworkSpecsKey, VerifierKey},
-    metadata::MetaValues,
+    keyring::{AddressKey, NetworkSpecsKey},
     navigation::{
-        Address, DerivationCheck as NavDerivationCheck, DerivationDestination, DerivationEntry,
-        DerivationPack, Identicon, MBackup, MDeriveKey, MKeyDetails, MMMNetwork, MMNetwork,
-        MManageMetadata, MMetadataRecord, MNetworkDetails, MNetworkMenu, MRawKey, MSCNetworkInfo,
-        MTypesInfo, MVerifier, Network, NetworkSpecs, SeedNameCard,
+        Address, DerivationCheck as NavDerivationCheck, DerivationDestination, Identicon,
+        MKeyDetails, MMNetwork, MSCNetworkInfo, NetworkSpecs, SeedNameCard,
     },
     network_specs::{OrderedNetworkSpecs, ValidCurrentVerifier, Verifier, VerifierValue},
     users::AddressDetails,
 };
 
 use db_handling::identities::{
-    create_key_set, dynamic_derivations_response, get_all_addresses,
-    process_dynamic_derivations_v1, validate_key_password,
+    create_key_set, generate_test_identities, get_all_addresses, validate_key_password,
 };
 use db_handling::{
-    cold_default::{
-        populate_cold, populate_cold_no_metadata, signer_init_no_cert, signer_init_with_cert,
-    },
+    cold_default::{default_chainspecs as zigner_chainspecs, init_db},
     db_transactions::TrDbCold,
-    default_cold_release, default_hot,
-    helpers::{
-        get_danger_status, get_general_verifier, open_tree, remove_metadata, remove_network,
-        remove_types_info, transfer_metadata_to_cold, try_get_valid_current_verifier,
-    },
+    default_cold_release,
+    helpers::{get_danger_status, open_tree},
     identities::{
         create_increment_set, derivation_check, export_secret_key, get_addresses_by_seed_name,
         remove_key, remove_seed, try_create_address, try_create_seed, DerivationCheck,
     },
     interface_signer::{
-        addresses_set_seed_name_network, backup_prep, derive_prep, dynamic_path_check, export_key,
-        first_network, get_all_seed_names_with_identicons, metadata_details,
-        network_details_by_key, print_all_identities, show_all_networks,
-        show_all_networks_with_flag, show_types_status,
+        addresses_set_seed_name_network, dynamic_path_check, export_key,
+        get_all_seed_names_with_identicons, show_all_networks,
     },
     manage_history::{
         device_was_online, enter_events, get_history, get_history_entry_by_order,
         reset_danger_status_to_safe,
     },
-};
-use definitions::dynamic_derivations::{
-    DynamicDerivationRequestInfo, DynamicDerivationsAddressRequestV1,
-    DynamicDerivationsAddressResponse, DynamicDerivationsRequestInfo,
 };
 use definitions::helpers::multisigner_to_public;
 use definitions::navigation::MAddressCard;
@@ -74,12 +56,127 @@ use definitions::navigation::MAddressCard;
 use db_handling::helpers::assert_db_version;
 use tempfile::tempdir;
 
-fn westend_genesis() -> H256 {
-    H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap()
+// Zigner no longer ships Substrate networks, but keys on them stay in the
+// identity layer and are what most of these tests derive. The test databases
+// below are the shipped defaults plus the three networks 0.12 shipped with
+// (and Mythos, for an Ethereum-encryption network).
+
+#[allow(clippy::too_many_arguments)]
+fn substrate_specs(
+    name: &str,
+    title: &str,
+    unit: &str,
+    base58prefix: u16,
+    decimals: u8,
+    color: &str,
+    genesis_hash: &str,
+    encryption: Encryption,
+    order: u8,
+) -> OrderedNetworkSpecs {
+    OrderedNetworkSpecs {
+        specs: NetworkSpecs {
+            base58prefix,
+            color: color.to_string(),
+            decimals,
+            encryption,
+            genesis_hash: H256::from_str(genesis_hash).unwrap(),
+            logo: name.to_string(),
+            name: name.to_string(),
+            path_id: format!("//{name}"),
+            secondary_color: String::from("#262626"),
+            title: title.to_string(),
+            unit: unit.to_string(),
+        },
+        order,
+    }
 }
 
-fn polkadot_genesis() -> H256 {
-    H256::from_str("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap()
+/// The shipped default networks plus Kusama, Polkadot and Westend, in the
+/// order 0.12 listed them.
+fn default_chainspecs() -> Vec<OrderedNetworkSpecs> {
+    let mut out = vec![
+        substrate_specs(
+            "kusama",
+            "Kusama",
+            "KSM",
+            2,
+            12,
+            "#000",
+            "b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe",
+            Encryption::Sr25519,
+            0,
+        ),
+        substrate_specs(
+            "polkadot",
+            "Polkadot",
+            "DOT",
+            0,
+            10,
+            "#E6027A",
+            "91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3",
+            Encryption::Sr25519,
+            1,
+        ),
+        substrate_specs(
+            "westend",
+            "Westend",
+            "WND",
+            42,
+            12,
+            "#660D35",
+            "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e",
+            Encryption::Sr25519,
+            2,
+        ),
+    ];
+    out.extend(zigner_chainspecs());
+    out
+}
+
+fn write_specs(db: &sled::Db, specs: &[OrderedNetworkSpecs]) {
+    let tree = db.open_tree(SPECSTREE).unwrap();
+    for x in specs {
+        let key = NetworkSpecsKey::from_parts(&x.specs.genesis_hash, &x.specs.encryption);
+        tree.insert(key.key(), x.encode()).unwrap();
+    }
+}
+
+/// Initiated database with the networks of [`default_chainspecs`], no keys.
+fn populate_cold_no_metadata(db: &sled::Db, _verifier: Verifier) -> Result<(), Error> {
+    default_cold_release(Some(db))?;
+    write_specs(db, &default_chainspecs());
+    init_db(db)
+}
+
+/// As [`populate_cold_no_metadata`], with Alice's test keys.
+fn populate_cold(db: &sled::Db, verifier: Verifier) -> Result<(), Error> {
+    populate_cold_no_metadata(db, verifier)?;
+    generate_test_identities(db)
+}
+
+/// Not initiated database with the networks of [`default_chainspecs`] and
+/// Mythos.
+fn populate_all_network_specs(db: &sled::Db) -> Result<(), Error> {
+    default_cold_release(Some(db))?;
+    let mut specs = default_chainspecs();
+    let order = specs.iter().map(|x| x.order).max().unwrap() + 1;
+    specs.push(substrate_specs(
+        "mythos",
+        "Mythos",
+        "MYTH",
+        29972,
+        18,
+        "#262528",
+        "f6ee56e9c5277df5b4ce6ae9983ee88f3cbed27d31beeb98f9f84f997a1ab0b9",
+        Encryption::Ethereum,
+        order,
+    ));
+    write_specs(db, &specs);
+    Ok(())
+}
+
+fn westend_genesis() -> H256 {
+    H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap()
 }
 
 fn mythos_genesis() -> H256 {
@@ -133,139 +230,6 @@ fn print_seed_names_with_orphan() {
         },
     ];
     assert_eq!(cards, expected_cards);
-}
-
-#[test]
-fn print_all_ids() {
-    use definitions::navigation::Identicon;
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let keys = print_all_identities(&db).unwrap();
-
-    let expected_keys = vec![MRawKey {
-        address_key: concat!(
-            "01d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
-            "01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e"
-        )
-        .to_string(),
-        public_key: "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d".to_string(),
-        address: Address {
-            seed_name: "Alice".to_string(),
-            identicon: Identicon::Dots {
-                identity: alice_sr_alice().to_vec(),
-            },
-            has_pwd: false,
-            path: "//Alice".to_string(),
-            secret_exposed: false,
-        },
-        network_logo: "westend".to_owned(),
-    }];
-
-    assert_eq!(keys, expected_keys);
-}
-
-#[test]
-fn print_show_all_networks_flag_westend() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let menu = show_all_networks_with_flag(
-        &db,
-        &NetworkSpecsKey::from_parts(
-            &H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap(),
-            &Encryption::Sr25519,
-        ),
-    )
-    .unwrap();
-    let expected_menu = MNetworkMenu {
-        networks: vec![
-            Network {
-                key: "01b0a8d493285c2df73290dfb7e61f870f17b41801197a149ca93654499ea3dafe"
-                    .to_string(),
-                logo: "kusama".to_string(),
-                order: 0,
-                selected: false,
-                title: "Kusama".to_string(),
-            },
-            Network {
-                key: "0191b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3"
-                    .to_string(),
-                logo: "polkadot".to_string(),
-                order: 1,
-                selected: false,
-                title: "Polkadot".to_string(),
-            },
-            Network {
-                key: "01e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e"
-                    .to_string(),
-                logo: "westend".to_string(),
-                order: 2,
-                selected: true,
-                title: "Westend".to_string(),
-            },
-            Network {
-                key: "0500040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08"
-                    .to_string(),
-                logo: "zcash".to_string(),
-                order: 3,
-                selected: false,
-                title: "Zcash".to_string(),
-            },
-            Network {
-                key: "040000000000000000000000000000000000000000000000000000000000006532"
-                    .to_string(),
-                logo: "penumbra".to_string(),
-                order: 4,
-                selected: false,
-                title: "Penumbra".to_string(),
-            },
-            Network {
-                key: "0700000000000000000000000000000000000000006f736d6f7369732d31000001"
-                    .to_string(),
-                logo: "osmosis".to_string(),
-                order: 5,
-                selected: false,
-                title: "Osmosis".to_string(),
-            },
-            Network {
-                key: "07000000000000000000000000000000000000000000006e6f626c652d31000001"
-                    .to_string(),
-                logo: "noble".to_string(),
-                order: 6,
-                selected: false,
-                title: "Noble".to_string(),
-            },
-            Network {
-                key: "070000000000000000000000000000000000000063656c65737469610000000001"
-                    .to_string(),
-                logo: "celestia".to_string(),
-                order: 7,
-                selected: false,
-                title: "Celestia".to_string(),
-            },
-            Network {
-                key: "07000000000000000000000000000000000000636f736d6f736875622d34000001"
-                    .to_string(),
-                logo: "cosmos".to_string(),
-                order: 8,
-                selected: false,
-                title: "Cosmos Hub".to_string(),
-            },
-            Network {
-                key: "07000000000000000000000000000000000000000070686f656e69782d31000001"
-                    .to_string(),
-                logo: "terra".to_string(),
-                order: 9,
-                selected: false,
-                title: "Terra".to_string(),
-            },
-        ],
-    };
-    assert_eq!(menu, expected_menu);
 }
 
 #[test]
@@ -348,16 +312,6 @@ fn show_all_networks_no_flag() {
         },
     ];
     assert_eq!(networks, expected_networks);
-}
-
-#[test]
-fn first_standard_network() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let specs = first_network(&db).unwrap();
-    assert_eq!(specs.unwrap().specs.name, "kusama");
 }
 
 #[test]
@@ -474,262 +428,6 @@ fn export_alice_mythos() {
 }
 
 #[test]
-fn backup_prep_alice() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let backup = backup_prep(&db, "Alice").unwrap();
-    let expected_backup = MBackup {
-        seed_name: "Alice".to_string(),
-        derivations: vec![DerivationPack {
-            network_title: "westend".to_string(),
-            network_logo: "westend".to_string(),
-            network_order: 2.to_string(),
-            id_set: vec![DerivationEntry {
-                path: "//Alice".to_string(),
-                has_pwd: false,
-            }],
-        }],
-    };
-    assert_eq!(backup, expected_backup);
-}
-
-#[test]
-fn derive_prep_alice() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let key = derive_prep(&db, "Alice", None, "//secret//derive", false).unwrap();
-    let expected_key = MDeriveKey {
-        seed_name: "Alice".to_string(),
-    };
-    assert_eq!(key, expected_key);
-}
-
-#[test]
-fn derive_prep_alice_collided() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let network_specs_key = NetworkSpecsKey::from_parts(
-        &H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-            .unwrap(),
-        &Encryption::Sr25519,
-    );
-    let mut collision = None;
-    for (multisigner, address_details) in
-        addresses_set_seed_name_network(&db, "Alice", &network_specs_key)
-            .unwrap()
-            .into_iter()
-    {
-        if address_details.path == "//Alice" {
-            collision = Some((multisigner, address_details));
-            break;
-        }
-    }
-    let collision = match collision {
-        Some(a) => a,
-        None => panic!("Did not create address?"),
-    };
-    let key = derive_prep(&db, "Alice", Some(collision), "//Alice", false).unwrap();
-    let expected_key = MDeriveKey {
-        seed_name: "Alice".to_string(),
-    };
-    assert_eq!(key, expected_key);
-}
-
-#[test]
-fn derive_prep_alice_collided_with_password() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let network_specs_key = NetworkSpecsKey::from_parts(
-        &H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-            .unwrap(),
-        &Encryption::Sr25519,
-    );
-    try_create_address(
-        &db,
-        "Alice",
-        ALICE_SEED_PHRASE,
-        "//secret///abracadabra",
-        &network_specs_key,
-    )
-    .unwrap();
-    let mut collision = None;
-    for (multisigner, address_details) in
-        addresses_set_seed_name_network(&db, "Alice", &network_specs_key)
-            .unwrap()
-            .into_iter()
-    {
-        if address_details.path == "//secret" {
-            collision = Some((multisigner, address_details));
-            break;
-        }
-    }
-    let collision = match collision {
-        Some(a) => a,
-        None => panic!("Did not create address?"),
-    };
-    let key = derive_prep(
-        &db,
-        "Alice",
-        Some(collision),
-        "//secret///abracadabra",
-        false,
-    )
-    .unwrap();
-    let expected_key = MDeriveKey {
-        seed_name: "Alice".to_string(),
-    };
-    assert_eq!(key, expected_key);
-}
-
-#[test]
-fn westend_network_details() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let details = network_details_by_key(
-        &db,
-        &NetworkSpecsKey::from_parts(
-            &H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap(),
-            &Encryption::Sr25519,
-        ),
-    )
-    .unwrap();
-    let expected_details = MNetworkDetails {
-        base58prefix: 42,
-        color: "#660D35".to_string(),
-        decimals: 12,
-        encryption: Encryption::Sr25519,
-        genesis_hash: H256::from_str(
-            "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e",
-        )
-        .unwrap(),
-        logo: "westend".to_string(),
-        name: "westend".to_string(),
-        order: "2".to_string(),
-        path_id: "//westend".to_string(),
-        secondary_color: "#262626".to_string(),
-        title: "Westend".to_string(),
-        unit: "WND".to_string(),
-        current_verifier: MVerifier {
-            ttype: "general".to_string(),
-            details: definitions::navigation::MVerifierDetails {
-                public_key: "".to_string(),
-                identicon: Identicon::Dots {
-                    identity: empty_png().to_vec(),
-                },
-                encryption: "".to_string(),
-            },
-        },
-        meta: vec![
-            MMetadataRecord {
-                specname: "westend".to_string(),
-                specs_version: "9000".to_string(),
-                meta_hash: "e80237ad8b2e92b72fcf6beb8f0e4ba4a21043a7115c844d91d6c4f981e469ce"
-                    .to_string(),
-                meta_id_pic: Identicon::Dots {
-                    identity: westend_9000().to_vec(),
-                },
-            },
-            MMetadataRecord {
-                specname: "westend".to_string(),
-                specs_version: "9010".to_string(),
-                meta_hash: "70c99738c27fb32c87883f1c9c94ee454bf0b3d88e4a431a2bbfe1222b46ebdf"
-                    .to_string(),
-                meta_id_pic: Identicon::Dots {
-                    identity: westend_9010().to_vec(),
-                },
-            },
-        ],
-    };
-    assert_eq!(details, expected_details);
-}
-
-#[test]
-fn westend_9010_metadata_details() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let network = metadata_details(
-        &db,
-        &NetworkSpecsKey::from_parts(
-            &H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap(),
-            &Encryption::Sr25519,
-        ),
-        9010,
-    )
-    .unwrap();
-    let expected_network = MManageMetadata {
-        name: "westend".to_string(),
-        version: "9010".to_string(),
-        meta_hash: "70c99738c27fb32c87883f1c9c94ee454bf0b3d88e4a431a2bbfe1222b46ebdf".to_string(),
-        meta_id_pic: Identicon::Dots {
-            identity: westend_9010().to_vec(),
-        },
-        networks: vec![MMMNetwork {
-            title: "Westend".to_string(),
-            logo: "westend".to_string(),
-            order: 2,
-            current_on_screen: true,
-        }],
-    };
-    assert_eq!(network, expected_network);
-}
-
-#[test]
-fn types_status_and_history() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-
-    let types = show_types_status(&db).unwrap();
-    let mut expected_types = MTypesInfo {
-        types_on_file: true,
-        types_hash: Some(
-            "d091a5a24a97e18dfe298b167d8fd5a2add10098c8792cba21c39029a9ee0aeb".to_string(),
-        ),
-        types_id_pic: Some(Identicon::Dots {
-            identity: types_known().to_vec(),
-        }),
-    };
-    assert_eq!(types, expected_types);
-
-    remove_types_info(&db).unwrap();
-    let types = show_types_status(&db).unwrap();
-    expected_types.types_on_file = false;
-    expected_types.types_hash = None;
-    expected_types.types_id_pic = None;
-
-    assert_eq!(types, expected_types);
-
-    let history_printed = get_history(&db).unwrap();
-    let expected_element = Event::TypesRemoved {
-        types_display: TypesDisplay {
-            types_hash: H256::from_str(
-                "d091a5a24a97e18dfe298b167d8fd5a2add10098c8792cba21c39029a9ee0aeb",
-            )
-            .unwrap(),
-            verifier: Verifier { v: None },
-        },
-    };
-    assert!(history_printed
-        .iter()
-        .any(|h| h.1.events.contains(&expected_element)));
-}
-
-#[test]
 fn path_is_known() {
     let dbname = tempdir().unwrap();
     let db = sled::open(dbname).unwrap();
@@ -814,7 +512,7 @@ fn get_danger_status_properly() {
     let db = sled::open(dbname).unwrap();
 
     default_cold_release(Some(&db)).unwrap();
-    signer_init_no_cert(&db).unwrap();
+    init_db(&db).unwrap();
     assert!(
         !get_danger_status(&db).unwrap(),
         "Expected danger status = false after the database initiation."
@@ -829,64 +527,6 @@ fn get_danger_status_properly() {
         !get_danger_status(&db).unwrap(),
         "Expected danger status = false after the danger reset."
     );
-}
-
-#[test]
-fn display_general_verifier_properly() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    default_cold_release(Some(&db)).unwrap();
-    signer_init_no_cert(&db).unwrap();
-    let verifier = get_general_verifier(&db).unwrap();
-
-    let expected_verifier = Verifier { v: None };
-    assert_eq!(verifier, expected_verifier);
-
-    signer_init_with_cert(&db).unwrap();
-    let verifier = get_general_verifier(&db).unwrap();
-    let expected_verifier = Verifier {
-        v: Some(VerifierValue::Standard {
-            m: MultiSigner::Ed25519(
-                Ed25519Public::try_from(
-                    hex::decode("5fbcaabe9b00d23a2bebb6370f1acba30e61854ece40200df6f323d6a21ac784")
-                        .unwrap()
-                        .as_ref(),
-                )
-                .unwrap(),
-            ),
-        }),
-    };
-    assert_eq!(verifier, expected_verifier);
-}
-
-#[test]
-fn find_westend_verifier() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold_no_metadata(&db, Verifier { v: None }).unwrap();
-    let verifier_key = VerifierKey::from_parts(
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
-    );
-    let westend_verifier = try_get_valid_current_verifier(&db, &verifier_key).unwrap();
-    assert_eq!(westend_verifier, Some(ValidCurrentVerifier::General));
-}
-
-#[test]
-fn not_find_mock_verifier() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold_no_metadata(&db, Verifier { v: None }).unwrap();
-    let verifier_key = VerifierKey::from_parts(
-        H256::from_str("62bacaaa3d9bb01313bb882c23615aae6509ab2ef1e7e807581ee0b74c77416b").unwrap(),
-    );
-    match try_get_valid_current_verifier(&db, &verifier_key) {
-        Ok(Some(_)) => panic!("Found network key that should not be in database."),
-        Ok(None) => (),
-        Err(e) => panic!("Error looking for mock verifier: {e}"),
-    }
 }
 
 #[test]
@@ -1011,31 +651,18 @@ fn history_with_identities() {
     let db = sled::open(dbname).unwrap();
 
     default_cold_release(Some(&db)).unwrap();
-    signer_init_with_cert(&db).unwrap();
+    init_db(&db).unwrap();
     let history_printed = get_history(&db).unwrap();
     let element1 = Event::DatabaseInitiated;
-    let element2 = Event::GeneralVerifierSet {
-        verifier: Verifier {
-            v: Some(VerifierValue::Standard {
-                m: MultiSigner::Ed25519(
-                    Ed25519Public::try_from(
-                        hex::decode(
-                            "5fbcaabe9b00d23a2bebb6370f1acba30e61854ece40200df6f323d6a21ac784",
-                        )
-                        .unwrap()
-                        .as_ref(),
-                    )
-                    .unwrap(),
-                ),
-            }),
-        },
-    };
     assert!(history_printed
         .iter()
         .any(|e| e.1.events.contains(&element1)));
-    assert!(history_printed
+    // No general verifier any more.
+    assert!(!history_printed.iter().any(|e| e
+        .1
+        .events
         .iter()
-        .any(|e| e.1.events.contains(&element2)));
+        .any(|ev| matches!(ev, Event::GeneralVerifierSet { .. }))));
     try_create_seed(&db, "Alice", ALICE_SEED_PHRASE, true).unwrap();
     let history_printed_after_create_seed: Vec<_> =
         get_history(&db).unwrap().into_iter().map(|e| e.1).collect();
@@ -1047,10 +674,6 @@ fn history_with_identities() {
     assert!(entries_contain_event(
         &history_printed_after_create_seed,
         &element1
-    ));
-    assert!(entries_contain_event(
-        &history_printed_after_create_seed,
-        &element2
     ));
 
     for (i, e) in element3.iter().enumerate() {
@@ -1444,80 +1067,6 @@ fn creating_derivation_5() {
             }
         }
     }
-}
-
-fn insert_metadata_from_file(database: &sled::Db, filename: &str) {
-    let meta_str = std::fs::read_to_string(filename).unwrap();
-    let meta_values = MetaValues::from_str_metadata(meta_str.trim()).unwrap();
-    let mut meta_batch = Batch::default();
-    meta_batch.insert(
-        MetaKey::from_parts(&meta_values.name, meta_values.version).key(),
-        meta_values.meta,
-    );
-    TrDbCold::new()
-        .set_metadata(meta_batch)
-        .apply(database)
-        .unwrap();
-}
-
-fn metadata_len(database: &sled::Db) -> usize {
-    let metadata = open_tree(database, METATREE).unwrap();
-    metadata.len()
-}
-
-fn metadata_contents(database: &sled::Db) -> Vec<(String, u32)> {
-    let metadata = open_tree(database, METATREE).unwrap();
-    let mut out: Vec<(String, u32)> = Vec::new();
-    for (meta_key_vec, _) in metadata.iter().flatten() {
-        let new = MetaKey::from_ivec(&meta_key_vec).name_version().unwrap();
-        out.push(new);
-    }
-    out
-}
-
-#[test]
-fn test_metadata_transfer() {
-    let dbname_hot = tempdir().unwrap();
-    let dbname_cold = tempdir().unwrap();
-
-    let database_hot = sled::open(&dbname_hot).unwrap();
-    let database_cold = sled::open(&dbname_cold).unwrap();
-
-    default_hot(Some(&database_hot)).unwrap();
-    populate_cold(&database_cold, Verifier { v: None }).unwrap();
-
-    insert_metadata_from_file(&database_hot, "for_tests/westend9010");
-    assert!(
-        metadata_len(&database_hot) == 1,
-        "Fresh hot database, should have only the single network added."
-    );
-    assert!(
-        format!("{:?}", metadata_contents(&database_cold))
-            == r#"[("kusama", 2030), ("westend", 9000), ("westend", 9010), ("polkadot", 30)]"#,
-        "expected: \n{:?}",
-        metadata_contents(&database_cold)
-    );
-
-    transfer_metadata_to_cold(&database_hot, &database_cold).unwrap();
-    assert!(
-        format!("{:?}", metadata_contents(&database_cold))
-            == r#"[("kusama", 2030), ("westend", 9000), ("westend", 9010), ("polkadot", 30)]"#,
-        "expected: \n{:?}",
-        metadata_contents(&database_cold)
-    );
-
-    insert_metadata_from_file(&database_hot, "for_tests/westend9090");
-    assert!(metadata_len(&database_hot) == 2, "Now 2 entries in hot db.");
-    transfer_metadata_to_cold(&database_hot, &database_cold).unwrap();
-    assert!(
-        format!("{:?}", metadata_contents(&database_cold))
-            == r#"[("kusama", 2030), ("westend", 9000), ("westend", 9010), ("westend", 9090), ("polkadot", 30)]"#,
-        "expected: \n{:?}",
-        metadata_contents(&database_cold)
-    );
-
-    std::fs::remove_dir_all(dbname_hot).unwrap();
-    std::fs::remove_dir_all(dbname_cold).unwrap();
 }
 
 #[test]
@@ -1988,158 +1537,13 @@ fn print_single_event() {
 
     populate_cold(&db, Verifier { v: None }).unwrap();
     let entry = get_history_entry_by_order(&db, 0).unwrap();
-    let expected_events = vec![
-        Event::DatabaseInitiated,
-        Event::GeneralVerifierSet {
-            verifier: Verifier { v: None },
-        },
-    ];
+    let expected_events = vec![Event::DatabaseInitiated];
 
     assert_eq!(entry.events, expected_events);
 }
 
-fn check_for_network(database: &sled::Db, name: &str, version: u32) -> bool {
-    let metadata: Tree = database.open_tree(METATREE).unwrap();
-    let meta_key = MetaKey::from_parts(name, version);
-    metadata.contains_key(meta_key.key()).unwrap()
-}
-
 fn entries_contain_event(entries: &[Entry], event: &Event) -> bool {
     entries.iter().any(|e| e.events.contains(event))
-}
-
-#[test]
-fn remove_all_westend() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-
-    let genesis_hash = "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e";
-    let network_specs_key =
-        NetworkSpecsKey::from_parts(&H256::from_str(genesis_hash).unwrap(), &Encryption::Sr25519);
-    remove_network(&db, &network_specs_key).unwrap();
-
-    {
-        let chainspecs: Tree = db.open_tree(SPECSTREE).unwrap();
-        assert!(
-            chainspecs.get(network_specs_key.key()).unwrap().is_none(),
-            "Westend network specs were not deleted"
-        );
-        let metadata: Tree = db.open_tree(METATREE).unwrap();
-        let prefix_meta = MetaKeyPrefix::from_name("westend");
-        assert!(
-            metadata.scan_prefix(prefix_meta.prefix()).next().is_none(),
-            "Some westend metadata was not deleted"
-        );
-        let identities: Tree = db.open_tree(ADDRTREE).unwrap();
-        for a in identities.iter().flatten() {
-            let (_, address_details) = AddressDetails::process_entry_checked(a).unwrap();
-            assert_ne!(
-                address_details.network_id.as_ref(),
-                Some(&network_specs_key)
-            );
-        }
-    }
-    let history: Vec<_> = get_history(&db).unwrap().into_iter().map(|e| e.1).collect();
-
-    assert!(entries_contain_event(&history, &Event::DatabaseInitiated));
-    assert!(entries_contain_event(
-        &history,
-        &Event::NetworkSpecsRemoved {
-            network_specs_display: NetworkSpecsDisplay {
-                network: OrderedNetworkSpecs {
-                    specs: NetworkSpecs {
-                        base58prefix: 42,
-                        color: "#660D35".to_string(),
-                        decimals: 12,
-                        encryption: Encryption::Sr25519,
-                        genesis_hash: H256::from_str(
-                            "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e"
-                        )
-                        .unwrap(),
-                        logo: "westend".to_string(),
-                        name: "westend".to_string(),
-                        path_id: "//westend".to_string(),
-                        secondary_color: "#262626".to_string(),
-                        title: "Westend".to_string(),
-                        unit: "WND".to_string(),
-                    },
-                    order: 2,
-                },
-                valid_current_verifier: ValidCurrentVerifier::General,
-                general_verifier: Verifier { v: None },
-            }
-        }
-    ));
-
-    assert!(entries_contain_event(
-        &history,
-        &Event::MetadataRemoved {
-            meta_values_display: MetaValuesDisplay {
-                name: "westend".to_string(),
-                version: 9000,
-                meta_hash: H256::from_str(
-                    "e80237ad8b2e92b72fcf6beb8f0e4ba4a21043a7115c844d91d6c4f981e469ce"
-                )
-                .unwrap(),
-            }
-        }
-    ));
-
-    assert!(entries_contain_event(
-        &history,
-        &Event::MetadataRemoved {
-            meta_values_display: MetaValuesDisplay {
-                name: "westend".to_string(),
-                version: 9010,
-                meta_hash: H256::from_str(
-                    "70c99738c27fb32c87883f1c9c94ee454bf0b3d88e4a431a2bbfe1222b46ebdf"
-                )
-                .unwrap(),
-            }
-        }
-    ));
-
-    assert!(entries_contain_event(
-        &history,
-        &Event::IdentityRemoved {
-            identity_history: IdentityHistory {
-                seed_name: "Alice".to_string(),
-                encryption: Encryption::Sr25519,
-                public_key: hex::decode(
-                    "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d"
-                )
-                .unwrap(),
-                path: "//Alice".to_string(),
-                network_genesis_hash: H256::from_str(
-                    "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e"
-                )
-                .unwrap()
-            },
-        }
-    ));
-}
-
-#[test]
-fn remove_westend_9010() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    let genesis_hash = "e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e";
-    let network_specs_key =
-        NetworkSpecsKey::from_parts(&H256::from_str(genesis_hash).unwrap(), &Encryption::Sr25519);
-    let network_version = 9010;
-    assert!(
-        check_for_network(&db, "westend", network_version),
-        "No westend 9010 to begin with."
-    );
-    remove_metadata(&db, &network_specs_key, network_version).unwrap();
-    assert!(
-        !check_for_network(&db, "westend", network_version),
-        "Westend 9010 not removed."
-    );
 }
 
 #[test]
@@ -2249,92 +1653,6 @@ fn test_create_key_set_generate_default_addresses() {
     )
     .unwrap();
     assert!(identities.contains_key(test_key.key()).unwrap());
-}
-
-#[test]
-fn test_dynamic_derivations() {
-    let dbname = tempdir().unwrap();
-    let db = sled::open(&dbname).unwrap();
-
-    populate_cold(&db, Verifier { v: None }).unwrap();
-    create_key_set(&db, "Alice", ALICE_SEED_PHRASE, vec![]).unwrap();
-
-    let multisigner_path_set = get_multisigner_path_set(&db);
-    let (seed_multisigner, _) = multisigner_path_set
-        .iter()
-        .find(|(_q, path)| path.is_empty())
-        .unwrap();
-    let request = DynamicDerivationsAddressRequestV1 {
-        addr: DynamicDerivationsRequestInfo {
-            multisigner: seed_multisigner.clone(),
-            dynamic_derivations: vec![
-                DynamicDerivationRequestInfo {
-                    derivation_path: "//dd".to_string(),
-                    encryption: Encryption::Sr25519,
-                    genesis_hash: polkadot_genesis(),
-                },
-                DynamicDerivationRequestInfo {
-                    derivation_path: "//nonetwork".to_string(),
-                    encryption: Encryption::Sr25519,
-                    genesis_hash: H256::zero(),
-                },
-            ],
-        },
-    };
-    let mut seeds = HashMap::new();
-    seeds.insert("Alice".to_string(), ALICE_SEED_PHRASE.to_string());
-    let result = process_dynamic_derivations_v1(&db, seeds.clone(), request.clone()).unwrap();
-    assert_eq!(result.key_set.seed_name, "Alice");
-    assert_eq!(result.key_set.derivations.len(), 1);
-    let derivation = result
-        .key_set
-        .derivations
-        .first()
-        .expect("dynamic derivations is missing from result");
-    assert_eq!(derivation.path, "//dd");
-    assert_eq!(
-        derivation.base58,
-        "14fiUi4zizXAAWP3HkMuS3qoCSP51owPoGaYhUmwuJZKTHwS"
-    );
-
-    let response = dynamic_derivations_response(&request, ALICE_SEED_PHRASE).unwrap();
-    match response {
-        DynamicDerivationsAddressResponse::V1(r) => {
-            let key_set = r.addr;
-            assert_eq!(key_set.dynamic_derivations.len(), 2);
-            let derivation_1 = key_set.dynamic_derivations.first().unwrap();
-            assert_eq!(derivation_1.derivation_path, "//dd");
-            assert_eq!(
-                derivation_1.public_key,
-                MultiSigner::Sr25519(
-                    sp_core::sr25519::Public::try_from(
-                        hex::decode(
-                            "a23ba6f64806d989d494723a1178dc101407f03358270219b3e734d68ed2ab2f"
-                        )
-                        .unwrap()
-                        .as_ref()
-                    )
-                    .unwrap()
-                )
-            );
-
-            let derivation_2 = key_set.dynamic_derivations.get(1).unwrap();
-            assert_eq!("//nonetwork", derivation_2.derivation_path);
-            assert_eq!(
-                MultiSigner::Sr25519(
-                    sp_core::sr25519::Public::try_from(
-                        hex::decode(
-                            "d438e94ff924a54e473760f058f9329ebbe59abcf2b6cb92a4c9914cf3855571"
-                        )
-                        .unwrap()
-                        .as_ref()
-                    )
-                    .unwrap()
-                ),
-                derivation_2.public_key,
-            );
-        }
-    }
 }
 
 #[test]

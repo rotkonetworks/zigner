@@ -5,9 +5,9 @@ DBPATH=./src/main/assets/Database
 
 set -e
 
-pushd ../rust/generate_message
+pushd ../rust/db_handling
 
-cargo run --locked make-cold-release
+cargo run --locked --features active --bin make_cold_release
 
 popd
 

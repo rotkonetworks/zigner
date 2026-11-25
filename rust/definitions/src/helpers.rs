@@ -417,20 +417,6 @@ pub fn base58_or_eth_pubkey_to_multisigner(
     }
 }
 
-/// Print id pic for metadata hash
-///
-/// Currently uses PNG identicon generator, could be changed later.
-pub fn pic_meta(meta_hash: &[u8]) -> Identicon {
-    make_identicon(meta_hash)
-}
-
-/// Print id pic for hash of SCALE-encoded types data
-///
-/// Currently uses PNG identicon generator, could be changed later.
-pub fn pic_types(types_hash: &[u8]) -> Identicon {
-    make_identicon(types_hash)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

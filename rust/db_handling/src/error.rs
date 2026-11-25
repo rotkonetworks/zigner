@@ -3,7 +3,7 @@ use std::result;
 use definitions::{
     crypto::Encryption,
     helpers::multisigner_to_public,
-    keyring::{AddressKey, NetworkSpecsKey, VerifierKey},
+    keyring::{AddressKey, NetworkSpecsKey},
     users::AddressDetails,
 };
 use sp_core::H256;
@@ -17,9 +17,6 @@ pub enum Error {
 
     #[error(transparent)]
     DbTransactionError(#[from] sled::transaction::TransactionError),
-
-    #[error(transparent)]
-    Defaults(#[from] defaults::Error),
 
     #[error(transparent)]
     Other(#[from] anyhow::Error),
@@ -41,48 +38,6 @@ pub enum Error {
 
     #[error("Database schema version mismatch. Expected v{expected}, found v{found}.")]
     DbSchemaMismatch { expected: u32, found: u32 },
-
-    /// Temporary database entry in `TRANSACTION` tree of the Vault database
-    /// under the key `STUB`, used to store the update data awaiting for the
-    /// user approval.
-    ///
-    /// Missing `Stub` when it is expected always indicates the database
-    /// corruption.
-    #[error(
-        "Unable to decode temporary entry with information \
-        needed for accepting approved information."
-    )]
-    Stub,
-
-    /// Network [`CurrentVerifier`](definitions::network_specs::CurrentVerifier) is
-    /// `ValidCurrentVerifier::Custom(_)`, but the custom verifier value
-    /// coincides with the general verifier.
-    ///
-    /// Associated data is [`VerifierKey`] corresponding to faulty entry.
-    #[error(
-        "Network with genesis hash {} verifier is set as a custom one. \
-        This custom verifier coinsides the database general verifier \
-        and not None. This should not have happened and likely \
-        indicates database corruption.",
-        hex::encode(.0.key()),
-    )]
-    CustomVerifierIsGeneral(VerifierKey),
-
-    /// Network has no entry for
-    /// [`CurrentVerifier`](definitions::network_specs::CurrentVerifier) under
-    /// `verifier_key` in `VERIFIERS` tree of the database, however, the
-    /// corresponding genesis hash is encountered in a
-    /// [`OrderedNetworkSpecs`](definitions::network_specs::OrderedNetworkSpecs) entry under
-    /// `network_specs_key` in `SPECSTREE` tree of the database.
-    /// No network specs record can get into database without the verifier
-    /// entry, and the verifier could not be removed while network specs still
-    /// remain, so this indicates the database got corrupted.
-    #[error(
-        "Network {name} with genesis hash {} has some network specs entries, \
-        while there is no verifier entry.",
-        hex::encode(genesis_hash)
-    )]
-    UnexpectedGenesisHash { name: String, genesis_hash: H256 },
 
     /// History log [`Entry`](definitions::history::Entry) stored in `HISTORY` tree
     /// of the Vault database under the key [`Order`]
@@ -258,21 +213,6 @@ pub enum Error {
     #[error("Derivations not found.")]
     DerivationsNotFound,
 
-    /// Temporary database entry in `TRANSACTION` tree of the Vault database
-    /// under the key `SIGN`, used to store the signable transaction data
-    /// awaiting for the user approval.
-    ///
-    /// Missing `Sign` when it is expected always indicates the database
-    /// corruption.
-    #[error(
-        "Could not find database temporary entry with information \
-        needed for signing approved transaction."
-    )]
-    Sign,
-
-    #[error("Unable to decode current verifier entry for key {}.", hex::encode(.0.key()))]
-    NoValidCurrentVerifier(VerifierKey),
-
     /// While searching for all networks with same genesis hash, found that
     /// there are networks with same genesis hash, but different names.
     #[error(
@@ -296,20 +236,6 @@ pub enum Error {
         genesis_hash: H256,
     },
 
-    /// General verifier [`Verifier`](definitions::network_specs::Verifier) information
-    /// stored in `SETTREE` tree of the database under key `GENERALVERIFIER`.
-    ///
-    /// Missing general verifier always indicates the database corruption.
-    #[error("Could not find general verifier.")]
-    GeneralVerifierNotFound,
-
-    /// [`DangerRecord`](definitions::danger::DangerRecord) information
-    /// stored in `SETTREE` tree of the database under key `DANGER`.
-    ///
-    /// Missing `DangerRecord` always indicates the database corruption.
-    #[error("Types not found.")]
-    TypesNotFound,
-
     /// [`OrderedNetworkSpecs`](definitions::network_specs::OrderedNetworkSpecs) for a network
     /// in `SPECSTREE` tree of the Vault database, searched by
     /// [`NetworkSpecsKey`].
@@ -326,21 +252,6 @@ pub enum Error {
         "Could not find address details for address key {}.", hex::encode(.0.key())
     )]
     AddressNotFound(AddressKey),
-
-    /// Network metadata in `METATREE` tree of the Vault database, for network
-    /// name and version combination.
-    #[error("Meta values not found for {name} version {version}")]
-    MetaValuesNotFound {
-        /// network name
-        name: String,
-
-        /// network version
-        version: u32,
-    },
-
-    /// Database checksum does not match the expected value.
-    #[error("Checksum mismatch.")]
-    ChecksumMismatch,
 
     /// [`DangerRecord`](definitions::danger::DangerRecord) information
     /// stored in `SETTREE` tree of the database under key `DANGER`.

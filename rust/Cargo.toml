@@ -4,11 +4,7 @@ resolver = "1"
 members = [
 	"constants",
 	"db_handling",
-	"defaults",
 	"definitions",
-	"generate_message",
-	"parser",
-	"printing_balance",
 	"qr_reader_phone",
 	"qr_reader_pc",
 	"qrcode_rtx",

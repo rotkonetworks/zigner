@@ -7,7 +7,6 @@ yanked = "warn"
 ignore = [
     "RUSTSEC-2024-0344",
     "RUSTSEC-2021-0139",
-    "RUSTSEC-2024-0370",
     "RUSTSEC-2022-0061",
     "RUSTSEC-2022-0081",
     "RUSTSEC-2024-0384",
@@ -24,16 +23,10 @@ ignore = [
     "RUSTSEC-2025-0119", # number_prefix
     "RUSTSEC-2024-0436", # paste
     "RUSTSEC-2026-0173", # proc-macro-error2
-    "RUSTSEC-2025-0134", # rustls-pemfile
     # rand 0.8 unsound with custom logger; fix is the breaking 0.9 bump
     "RUSTSEC-2026-0097",
     # tracing-subscriber 0.2 ANSI log poisoning; 0.3 bump blocked by substrate pins
     "RUSTSEC-2025-0055",
-    # rustls-webpki 0.101 name-constraint/CRL advisories; fixes only in 0.102+
-    # which the pinned rustls 0.21 stack cannot take
-    "RUSTSEC-2026-0098",
-    "RUSTSEC-2026-0099",
-    "RUSTSEC-2026-0104",
     # rsa Marvin timing attack - no patched release exists. Linked via age's
     # ssh support. The attack needs an RSA *decryption* timing oracle; this
     # device decrypts only with its own Ed25519 identity
@@ -45,19 +38,6 @@ ignore = [
     "RUSTSEC-2026-0247",
     "RUSTSEC-2026-0248",
     "RUSTSEC-2026-0251",
-    # h2 0.3 / rustls 0.21 network-client advisories - only in generate_message,
-    # the host-side Substrate metadata tool (NOT shipped in the APK; it runs on
-    # a developer machine against a configured RPC node). Fixes need h2 0.4 /
-    # rustls 0.23, which its jsonrpsee pin cannot take. Goes away when the
-    # Substrate tooling is deleted.
-    "RUSTSEC-2026-0258",
-    "RUSTSEC-2026-0346",
-    "RUSTSEC-2026-0349",
-    # webpki-roots / rustls-webpki 0.101 distrusted-intermediate advisories -
-    # same host-side path as above (jsonrpsee 0.16 via generate_message and the
-    # subxt dev-dependency); never in the APK.
-    "RUSTSEC-2026-0381",
-    "RUSTSEC-2026-0382",
     # basic-toml unmaintained (no vulnerability) - read at compile time by the
     # i18n-embed-fl proc macro behind age; nothing on the device parses TOML.
     "RUSTSEC-2026-0374",

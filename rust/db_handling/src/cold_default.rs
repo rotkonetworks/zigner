@@ -1,335 +1,248 @@
-//! Making and restoring **cold** database with default content
+//! Making and initiating the **cold** database with default content
 //!
 //! Cold database is the database that is operated from inside the Vault.
 //!
-//! Cold database contains following trees:
+//! For release, the cold database is generated at build time
+//! (`cargo run --features active --bin make_cold_release` in this crate)
+//! and copied verbatim into the app assets. It holds:
 //!
-//! - `ADDRTREE` with public addresses data
-//! - `HISTORY` with Vault history log
-//! - `METATREE` with network metadata
-//! - `SETTREE` with settings: types information, Vault dangerous exposures
-//!   record and Vault database general verifier
-//! - `SPECSTREE` with network specs
-//! - `TRANSACTION` for temporary storage of the transaction data
-//! - `VERIFIERS` with network verifiers data
+//! - `SPECSTREE` with the default network specs (Zcash, Penumbra and the
+//!   Cosmos chains); keys are stored against these
+//! - `SETTREE` with the danger record and the database schema version
 //!
-//! For release, the cold database is generated on the hot side and then copied
-//! verbatim into Vault files during the build.
+//! Before the database could be used, it must be initiated with [`init_db`]:
+//! old history log entries (if any) are removed and a new entry
+//! `Event::DatabaseInitiated` is added.
 //!
-//! Before the database could be used, it must be initiated:
-//!
-//! - History log old entries (if any are present) are removed and a new entry
-//!   `Event::DatabaseInitiated` is added
-//! - General verifier is set and this event is recorded in the history log. By
-//!   default, Vault sets up Parity-associated key as a general verifier. This
-//!   could be later on changed by the user.
-//!
-//! Vault then reads and updates the database as it operates.
-//!
-//! There are two ways to reset the database from the Vault user interface.
-//! Either would remove all the keys and restore the database to the release
-//! state. The difference would be only in the general verifier setting:
-//!
-//! - `Wipe all data` would set the general verifier to default `Some(_)`,
-//!   with Parity-associated key inside
-//! - `Remove general certificate` would set the general verifier to `None`.
-//!   User would then be able to set up own general verifier, preferably
-//!   immediately afterwards, by loading to Vault any verified data.
-//!   Setting up a new general verifier would remove all data associated with the
-//!   general verifier from the Vault database to avoid confusion as to who
-//!   verified what information.
+//! Databases written by older releases also hold `METATREE`, `VERIFIERS`,
+//! `TRANSACTION` and the `TYPES` / `GENERALVERIFIER` settings, all for
+//! Substrate signing. Nothing reads them any more; they are left in place.
 #[cfg(feature = "active")]
 use parity_scale_codec::Encode;
 #[cfg(feature = "active")]
 use sled::Batch;
-
-use constants::SCHEMA_VERSION;
 #[cfg(feature = "active")]
-use constants::{DANGER, TYPES};
-#[cfg(feature = "active")]
-use constants::{GENERALVERIFIER, HISTORY};
+use sp_core::H256;
 
+use constants::HISTORY;
+#[cfg(feature = "active")]
+use constants::{DANGER, SCHEMA_VERSION, SETTREE, SPECSTREE};
+
+use definitions::history::Event;
 #[cfg(feature = "active")]
 use definitions::{
+    crypto::Encryption,
     danger::DangerRecord,
-    keyring::{MetaKey, NetworkSpecsKey},
+    keyring::NetworkSpecsKey,
+    network_specs::{NetworkSpecs, OrderedNetworkSpecs},
+    schema_version::SchemaVersion,
 };
-#[cfg(feature = "active")]
-use definitions::{history::Event, network_specs::Verifier};
 
-use defaults::default_general_verifier;
-#[cfg(feature = "active")]
-use defaults::{default_chainspecs, default_types_content, default_verifiers, release_metadata};
-use defaults::{nav_test_metadata, test_metadata};
-use definitions::schema_version::SchemaVersion;
-
-use crate::identities::generate_test_identities;
-#[cfg(feature = "active")]
 use crate::{
     db_transactions::TrDbCold, helpers::make_batch_clear_tree, manage_history::events_in_batch,
+    Result,
 };
 
-use crate::Result;
-
-/// Cold database generation purpose, determining the metadata to be loaded.
-///
-/// Default metadata is loaded into the cold database for default networks.
-/// `Purpose` determines the metadata source folder and the versions to be
-/// loaded.
+/// A network every new database starts with.
 #[cfg(feature = "active")]
-enum Purpose {
-    /// Two (or fewer) latest released versions of the metadata for each of the
-    /// default networks
-    Release,
-
-    /// Old metadata set, used mostly in `transaction_parsing` tests
-    Test,
-
-    /// Not so old metadata set, used for `navigator` tests
-    TestNavigator,
+struct DefaultNetwork {
+    color: &'static str,
+    decimals: u8,
+    encryption: Encryption,
+    /// Not a chain genesis hash for these networks: a fixed 32-byte
+    /// identifier. Keys are stored under it, so it must never change.
+    genesis_hash: [u8; 32],
+    logo: &'static str,
+    name: &'static str,
+    order: u8,
+    path_id: &'static str,
+    secondary_color: &'static str,
+    title: &'static str,
+    unit: &'static str,
 }
 
-/// Make [`Batch`] with default networks metadata, for [`METATREE`] tree, in
-/// purged database.
-///
-/// Adds default metadata entries, according to [`Purpose`].
+/// Right-aligns an ASCII tag in 32 zero bytes, ending in `suffix`.
 #[cfg(feature = "active")]
-fn default_cold_metadata(purpose: Purpose) -> Result<Batch> {
-    let mut batch = Batch::default();
-    let metadata_set = match purpose {
-        Purpose::Release => release_metadata()?,
-
-        Purpose::Test => test_metadata()?,
-
-        Purpose::TestNavigator => nav_test_metadata()?,
-    };
-    for x in metadata_set.iter() {
-        let meta_key = MetaKey::from_parts(&x.name, x.version);
-        batch.insert(meta_key.key(), &x.meta[..]);
+const fn id(tag: &[u8], suffix: &[u8]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let start = 32 - tag.len() - suffix.len();
+    let mut i = 0;
+    while i < tag.len() {
+        out[start + i] = tag[i];
+        i += 1;
     }
-    Ok(batch)
-}
-
-/// Make [`Batch`] with default networks
-/// [`OrderedNetworkSpecs`](definitions::network_specs::OrderedNetworkSpecs), for
-/// [`SPECSTREE`] tree, in purged database.
-///
-/// Adds default network specs entries.
-#[cfg(feature = "active")]
-fn default_cold_network_specs() -> Batch {
-    let mut batch = Batch::default();
-    for x in default_chainspecs().iter() {
-        let network_specs_key =
-            NetworkSpecsKey::from_parts(&x.specs.genesis_hash, &x.specs.encryption);
-        batch.insert(network_specs_key.key(), x.encode());
+    let mut j = 0;
+    while j < suffix.len() {
+        out[start + tag.len() + j] = suffix[j];
+        j += 1;
     }
-    batch
+    out
 }
 
-/// Make [`Batch`] with default settings, for [`SETTREE`] tree, in purged
-/// database.
-///
-/// Adds default entries: types information
-/// [`ContentLoadTypes`](definitions::qr_transfers::ContentLoadTypes) and danger
-/// record [`DangerRecord`].
-///
-/// Note that the general verifier is **not** set up here.
-///
-/// General verifier is set up separately, during the database initiation
-/// [`init_db`]. Without general verifier (i.e. a value in the [`SETTREE`] tree
-/// under the key [`GENERALVERIFIER`]) the database is not usable by the Vault.
+/// The default networks, as shipped since 0.12. Their identifiers and
+/// encryptions are what existing keys point at.
 #[cfg(feature = "active")]
-fn default_cold_settings_init_later() -> Result<Batch> {
-    let mut batch = Batch::default();
-    let types_prep = default_types_content()?;
-    batch.insert(TYPES, types_prep.store());
-    batch.insert(DANGER, DangerRecord::safe().store());
-    batch.insert(SCHEMA_VERSION, SchemaVersion::store_current());
-    Ok(batch)
+const DEFAULT_NETWORKS: [DefaultNetwork; 7] = [
+    DefaultNetwork {
+        color: "#F4B728",
+        decimals: 8,
+        encryption: Encryption::Zcash,
+        genesis_hash: [
+            0x00, 0x04, 0x0f, 0xe8, 0xec, 0x84, 0x71, 0x91, 0x1b, 0xaa, 0x1d, 0xb1, 0x26, 0x6e,
+            0xa1, 0x5d, 0xd0, 0x6b, 0x4a, 0x8a, 0x5c, 0x45, 0x38, 0x83, 0xc0, 0x00, 0xb0, 0x31,
+            0x97, 0x3d, 0xce, 0x08,
+        ],
+        logo: "zcash",
+        name: "zcash",
+        order: 3,
+        path_id: "m/32'/133'/0'",
+        secondary_color: "#C9941E",
+        title: "Zcash",
+        unit: "ZEC",
+    },
+    DefaultNetwork {
+        color: "#F4A31E",
+        decimals: 6,
+        encryption: Encryption::Penumbra,
+        genesis_hash: id(b"", &[0x65, 0x32]),
+        logo: "penumbra",
+        name: "penumbra",
+        order: 4,
+        path_id: "m/44'/6532'/0'",
+        secondary_color: "#B8841A",
+        title: "Penumbra",
+        unit: "UM",
+    },
+    DefaultNetwork {
+        color: "#5E12A0",
+        decimals: 6,
+        encryption: Encryption::Cosmos,
+        genesis_hash: id(b"osmosis-1", &[0, 0, 1]),
+        logo: "osmosis",
+        name: "osmosis",
+        order: 5,
+        path_id: "m/44'/118'/0'/0/0",
+        secondary_color: "#4A0E80",
+        title: "Osmosis",
+        unit: "OSMO",
+    },
+    DefaultNetwork {
+        color: "#00D2FF",
+        decimals: 6,
+        encryption: Encryption::Cosmos,
+        genesis_hash: id(b"noble-1", &[0, 0, 1]),
+        logo: "noble",
+        name: "noble",
+        order: 6,
+        path_id: "m/44'/118'/0'/0/0",
+        secondary_color: "#00A8CC",
+        title: "Noble",
+        unit: "USDC",
+    },
+    DefaultNetwork {
+        color: "#7B2BF9",
+        decimals: 6,
+        encryption: Encryption::Cosmos,
+        genesis_hash: id(b"celestia", &[0, 0, 0, 0, 1]),
+        logo: "celestia",
+        name: "celestia",
+        order: 7,
+        path_id: "m/44'/118'/0'/0/0",
+        secondary_color: "#6222C7",
+        title: "Celestia",
+        unit: "TIA",
+    },
+    DefaultNetwork {
+        color: "#2E3148",
+        decimals: 6,
+        encryption: Encryption::Cosmos,
+        genesis_hash: id(b"cosmoshub-4", &[0, 0, 1]),
+        logo: "cosmos",
+        name: "cosmos",
+        order: 8,
+        path_id: "m/44'/118'/0'/0/0",
+        secondary_color: "#1B1E36",
+        title: "Cosmos Hub",
+        unit: "ATOM",
+    },
+    DefaultNetwork {
+        color: "#5493F7",
+        decimals: 6,
+        encryption: Encryption::Cosmos,
+        genesis_hash: id(b"phoenix-1", &[0, 0, 1]),
+        logo: "terra",
+        name: "terra",
+        order: 9,
+        path_id: "m/44'/330'/0'/0/0",
+        secondary_color: "#3B6FC5",
+        title: "Terra",
+        unit: "LUNA",
+    },
+];
+
+/// Network specs of the default networks, for the cold database.
+#[cfg(feature = "active")]
+pub fn default_chainspecs() -> Vec<OrderedNetworkSpecs> {
+    DEFAULT_NETWORKS
+        .iter()
+        .map(|x| OrderedNetworkSpecs {
+            specs: NetworkSpecs {
+                base58prefix: 0,
+                color: x.color.to_string(),
+                decimals: x.decimals,
+                encryption: x.encryption,
+                genesis_hash: H256::from(x.genesis_hash),
+                logo: x.logo.to_string(),
+                name: x.name.to_string(),
+                path_id: x.path_id.to_string(),
+                secondary_color: x.secondary_color.to_string(),
+                title: x.title.to_string(),
+                unit: x.unit.to_string(),
+            },
+            order: x.order,
+        })
+        .collect()
 }
 
-/// Make [`Batch`] with default networks verifiers, for [`VERIFIERS`] tree, in
-/// purged database.
-///
-/// Adds default
-/// [`CurrentVerifier`](definitions::network_specs::CurrentVerifier) entries.
+/// Wipe the database and load the default network specs, danger record and
+/// schema version. The result is not initiated: see [`init_db`].
 #[cfg(feature = "active")]
-fn default_cold_verifiers() -> Batch {
-    let mut batch = Batch::default();
-    for (verifier_key, current_verifier) in default_verifiers().iter() {
-        batch.insert(verifier_key.key(), current_verifier.encode());
+pub(crate) fn populate_cold_release(database: &sled::Db) -> Result<()> {
+    for tree in database.tree_names() {
+        if tree != b"__sled__default" {
+            database.drop_tree(tree)?;
+        }
     }
-    batch
-}
-
-/// Make or restore the cold database with default content, according to
-/// [`Purpose`].
-///
-/// Function wipes everything in the database directory and loads into database
-/// defaults for:
-///
-/// - metadata
-/// - network specs
-/// - types information and danger status
-/// - network verifiers
-///
-/// Note that the resulting database is not initiated and is not ready to be
-/// used by the Vault.
-#[cfg(any(feature = "active", feature = "test"))]
-fn cold_database_no_init(database: &sled::Db, purpose: Purpose) -> Result<()> {
-    use constants::{METATREE, SETTREE, SPECSTREE, VERIFIERS};
-
-    database.drop_tree(SPECSTREE)?;
-    database.drop_tree(VERIFIERS)?;
-    database.drop_tree(METATREE)?;
-    database.drop_tree(SETTREE)?;
     database.clear()?;
 
-    TrDbCold::new()
-        .set_metadata(default_cold_metadata(purpose)?) // set default metadata
-        .set_network_specs(default_cold_network_specs()) // set default network specs
-        .set_settings(default_cold_settings_init_later()?) // set default types and danger status, no general verifier yet
-        .set_verifiers(default_cold_verifiers()) // set default verifiers
-        .apply(database)?;
+    let mut specs = Batch::default();
+    for x in default_chainspecs() {
+        let key = NetworkSpecsKey::from_parts(&x.specs.genesis_hash, &x.specs.encryption);
+        specs.insert(key.key(), x.encode());
+    }
+    let mut settings = Batch::default();
+    settings.insert(DANGER, DangerRecord::safe().store());
+    settings.insert(SCHEMA_VERSION, SchemaVersion::store_current());
 
+    database.open_tree(SPECSTREE)?.apply_batch(specs)?;
+    database.open_tree(SETTREE)?.apply_batch(settings)?;
     Ok(())
 }
 
-/// Initiate cold database and set up the database general verifier to given
-/// [`Verifier`].
+/// Initiate the database: clear the history log and start it with
+/// `Event::DatabaseInitiated`.
 ///
-/// Function simultaneously sets up the general verifier and marks the new start
-/// of the history log.
-///
-/// Could be used both from the Vault side (with `Wipe all data` and with
-/// `Remove general certificate` procedures) and from the active side, when
-/// when preparing the test databases.
-///
-/// After applying this function the database becomes ready to be used by the
-/// Vault.
-pub fn init_db(database: &sled::Db, general_verifier: Verifier) -> Result<()> {
-    let mut settings_batch = Batch::default();
-    settings_batch.insert(GENERALVERIFIER, general_verifier.encode());
-
+/// Applied on the first start of the Vault and after `Wipe all data`.
+/// After this the database is ready to be used by the Vault.
+pub fn init_db(database: &sled::Db) -> Result<()> {
     let clear_history_batch = make_batch_clear_tree(database, HISTORY)?;
-    let events = vec![
-        Event::DatabaseInitiated,
-        Event::GeneralVerifierSet {
-            verifier: general_verifier,
-        },
-    ];
+    let events = vec![Event::DatabaseInitiated];
     let start_zero = true;
     let history_batch = events_in_batch(database, start_zero, clear_history_batch, events)?;
 
     TrDbCold::new()
         .set_history(history_batch) // set *start* history
-        .set_settings(settings_batch) // set general_verifier
         .apply(database)?;
 
-    Ok(())
-}
-
-/// Initiate Vault database with default general verifier (Parity-associated
-/// key).
-///
-/// Function is applied during the initial start of the Vault and during
-/// `Wipe all data` procedure.
-pub fn signer_init_with_cert(database: &sled::Db) -> Result<()> {
-    init_db(database, default_general_verifier())
-}
-
-/// Initiate Vault database with general verifier set up to `Verifier(None)`.
-///
-/// Function is applied during `Remove general certificate` procedure.
-pub fn signer_init_no_cert(database: &sled::Db) -> Result<()> {
-    init_db(database, Verifier { v: None })
-}
-
-/// Generate initiated test cold database with no network-associated data.
-///
-/// Function wipes everything in the database directory and loads into database
-/// defaults for types information and danger status. Then the database is
-/// initiated with given general verifier.
-pub fn populate_cold_no_networks(database: &sled::Db, general_verifier: Verifier) -> Result<()> {
-    database.clear()?;
-    TrDbCold::new()
-        .set_settings(default_cold_settings_init_later()?) // set general verifier and load default types
-        .apply(database)?;
-    init_db(database, general_verifier)
-}
-
-/// Generate initiated test cold database without network metadata.
-///
-/// Function wipes everything in the database directory and loads into database
-/// defaults for:
-///
-/// - network specs
-/// - types information and danger status
-/// - network verifiers
-///
-/// Then the database is initiated with given general verifier.
-pub fn populate_cold_no_metadata(database: &sled::Db, general_verifier: Verifier) -> Result<()> {
-    use constants::{METATREE, SETTREE, SPECSTREE, VERIFIERS};
-
-    database.drop_tree(SPECSTREE)?;
-    database.drop_tree(VERIFIERS)?;
-    database.drop_tree(METATREE)?;
-    database.drop_tree(SETTREE)?;
-    database.clear()?;
-
-    TrDbCold::new()
-        .set_network_specs(default_cold_network_specs()) // set default network specs
-        .set_settings(default_cold_settings_init_later()?) // set general verifier and load default types
-        .set_verifiers(default_cold_verifiers()) // set default verifiers
-        .apply(database)?;
-    init_db(database, general_verifier)
-}
-
-/// Generate initiated test cold database with default content, and create in it
-/// Alice default addresses.
-pub fn populate_cold(database: &sled::Db, general_verifier: Verifier) -> Result<()> {
-    cold_database_no_init(database, Purpose::Test)?;
-    init_db(database, general_verifier)?;
-    generate_test_identities(database)
-}
-
-/// Generate **not initiated** release cold database.
-#[cfg(feature = "active")]
-pub(crate) fn populate_cold_release(database: &sled::Db) -> Result<()> {
-    cold_database_no_init(database, Purpose::Release)
-}
-
-/// Generate **not initiated** test cold database for `navigator` testing.
-pub fn populate_cold_nav_test(database: &sled::Db) -> Result<()> {
-    cold_database_no_init(database, Purpose::TestNavigator)
-}
-
-/// Generate **not initiated** test cold database for `navigator` testing with Mythos network.
-pub fn populate_cold_nav_test_with_ethereum_based_networks(database: &sled::Db) -> Result<()> {
-    populate_all_network_specs(database)
-}
-
-/// Generate database with networks specs both for substrate and ethereum
-pub fn populate_all_network_specs(database: &sled::Db) -> Result<()> {
-    use constants::{METATREE, SETTREE, SPECSTREE, VERIFIERS};
-
-    database.drop_tree(SPECSTREE)?;
-    database.drop_tree(VERIFIERS)?;
-    database.drop_tree(METATREE)?;
-    database.drop_tree(SETTREE)?;
-    database.clear()?;
-
-    let mut batch = Batch::default();
-    for x in defaults::substrate_chainspecs_with_ethereum().iter() {
-        let network_specs_key =
-            NetworkSpecsKey::from_parts(&x.specs.genesis_hash, &x.specs.encryption);
-        batch.insert(network_specs_key.key(), x.encode());
-    }
-
-    TrDbCold::new()
-        .set_network_specs(batch) // set default network specs including Mythos
-        .set_settings(default_cold_settings_init_later()?) // set general verifier and load default types
-        .set_verifiers(default_cold_verifiers()) // set default verifiers
-        .apply(database)?;
     Ok(())
 }

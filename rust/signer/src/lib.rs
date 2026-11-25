@@ -305,8 +305,8 @@ fn try_create_address_by_genesis(
 
 /// Must be called once on normal first start of the app upon accepting conditions; relies on old
 /// data being already removed
-fn history_init_history_with_cert() -> anyhow::Result<(), ErrorDisplayed> {
-    db_handling::cold_default::signer_init_with_cert(&get_db()?).map_err(|e| e.to_string().into())
+fn history_init_history() -> anyhow::Result<(), ErrorDisplayed> {
+    db_handling::cold_default::init_db(&get_db()?).map_err(|e| e.to_string().into())
 }
 
 /// Must be called every time network detector detects network. Sets alert flag in database that could

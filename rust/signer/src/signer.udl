@@ -383,7 +383,7 @@ namespace signer {
     void try_create_address_by_genesis([ByRef] string seed_name, [ByRef] string seed_phrase, [ByRef] string path, [ByRef] string genesis_hash_hex);
 
     [Throws=ErrorDisplayed]
-    void history_init_history_with_cert();
+    void history_init_history();
 
     [Throws=ErrorDisplayed]
     void history_device_was_online();

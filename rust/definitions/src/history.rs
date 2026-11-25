@@ -24,12 +24,9 @@ use std::convert::TryInto;
 
 use crate::{
     crypto::Encryption,
-    keyring::VerifierKey,
-    metadata::MetaValues,
     network_specs::{
         NetworkSpecs, OrderedNetworkSpecs, ValidCurrentVerifier, Verifier, VerifierValue,
     },
-    qr_transfers::ContentLoadTypes,
 };
 
 /// Event content for importing or removing metadata of a known network
@@ -50,18 +47,9 @@ impl MetaValuesDisplay {
             meta_hash,
         }
     }
-
-    /// Generate [`MetaValuesDisplay`] from [`MetaValues`]
-    pub fn get(meta_values: &MetaValues) -> Self {
-        Self {
-            name: meta_values.name.to_string(),
-            version: meta_values.version,
-            meta_hash: blake2_256(&meta_values.meta).into(),
-        }
-    }
 }
 
-/// Event content for generating [`SufficientCrypto`](crate::crypto::SufficientCrypto)
+/// Event content for generating `SufficientCrypto`
 /// QR code for `load_metadata` message  
 ///
 /// Effectively records that network metadata was signed by user.
@@ -82,17 +70,6 @@ impl MetaValuesExport {
             version,
             meta_hash,
             signed_by,
-        }
-    }
-
-    /// Generate [`MetaValuesExport`] from [`MetaValues`] and [`VerifierValue`]
-    /// of address used for `SufficientCrypto` generation.  
-    pub fn get(meta_values: &MetaValues, signed_by: &VerifierValue) -> Self {
-        Self {
-            name: meta_values.name.to_string(),
-            version: meta_values.version,
-            meta_hash: blake2_256(&meta_values.meta).into(),
-            signed_by: signed_by.to_owned(),
         }
     }
 }
@@ -122,7 +99,7 @@ impl NetworkSpecsDisplay {
     }
 }
 
-/// Event content for generating [`SufficientCrypto`](crate::crypto::SufficientCrypto)
+/// Event content for generating `SufficientCrypto`
 /// QR code for `add_specs` message  
 ///
 /// Effectively records that network specs were signed by user.
@@ -153,23 +130,6 @@ pub struct NetworkVerifierDisplay {
     pub general_verifier: Verifier,
 }
 
-impl NetworkVerifierDisplay {
-    /// Generate [`NetworkVerifierDisplay`] from [`VerifierKey`],
-    /// [`ValidCurrentVerifier`], the setting of which the event records,
-    /// and general verifier [`Verifier`]  
-    pub fn get(
-        verifier_key: &VerifierKey,
-        valid_current_verifier: &ValidCurrentVerifier,
-        general_verifier: &Verifier,
-    ) -> Self {
-        Self {
-            genesis_hash: verifier_key.genesis_hash(),
-            valid_current_verifier: valid_current_verifier.to_owned(),
-            general_verifier: general_verifier.to_owned(),
-        }
-    }
-}
-
 /// Event content for importing or removing types information
 ///
 /// Contains hash of SCALE-encoded types data and types information [`Verifier`].
@@ -186,18 +146,9 @@ impl TypesDisplay {
             verifier,
         }
     }
-
-    /// Generate [`TypesDisplay`] from [`ContentLoadTypes`] and types information
-    /// [`Verifier`]  
-    pub fn get(types_content: &ContentLoadTypes, verifier: &Verifier) -> Self {
-        Self {
-            types_hash: blake2_256(&types_content.store()).into(),
-            verifier: verifier.to_owned(),
-        }
-    }
 }
 
-/// Event content for generating [`SufficientCrypto`](crate::crypto::SufficientCrypto)
+/// Event content for generating `SufficientCrypto`
 /// QR code for `load_types` message  
 ///
 /// Effectively records that types information was signed by user.
@@ -215,15 +166,6 @@ impl TypesExport {
         Self {
             types_hash,
             signed_by,
-        }
-    }
-
-    /// Generate [`TypesExport`] from [`ContentLoadTypes`] and [`VerifierValue`]
-    /// of address used for `SufficientCrypto` generation  
-    pub fn get(types_content: &ContentLoadTypes, signed_by: &VerifierValue) -> Self {
-        Self {
-            types_hash: blake2_256(&types_content.store()).into(),
-            signed_by: signed_by.to_owned(),
         }
     }
 }
@@ -400,7 +342,7 @@ pub enum Event {
         meta_values_display: MetaValuesDisplay,
     },
 
-    /// User has generated [`SufficientCrypto`](crate::crypto::SufficientCrypto)
+    /// User has generated `SufficientCrypto`
     /// with one of Vault addresses for `load_metadata` update
     MetadataSigned {
         meta_values_export: MetaValuesExport,
@@ -416,7 +358,7 @@ pub enum Event {
         network_specs_display: NetworkSpecsDisplay,
     },
 
-    /// User has generated [`SufficientCrypto`](crate::crypto::SufficientCrypto)
+    /// User has generated `SufficientCrypto`
     /// with one of Vault addresses for `add_specs` update
     NetworkSpecsSigned {
         network_specs_export: NetworkSpecsExport,
@@ -436,7 +378,7 @@ pub enum Event {
     /// Types information was removed
     TypesRemoved { types_display: TypesDisplay },
 
-    /// User has generated [`SufficientCrypto`](crate::crypto::SufficientCrypto)
+    /// User has generated `SufficientCrypto`
     /// with one of Vault addresses for `load_types` update
     TypesSigned { types_export: TypesExport },
 
@@ -523,13 +465,10 @@ pub struct Entry {
 /// Uses mock values and is needed to test [`Event`] format in displaying all events
 /// in user interface.  
 pub fn all_events_preview() -> Vec<Event> {
-    let meta_values = MetaValues {
-        name: String::from("westend"),
-        version: 9000,
-        optional_base58prefix: Some(42),
-        warn_incomplete_extensions: false,
-        meta: Vec::new(),
-    };
+    // Hash of empty content, as 0.12 computed it for empty metadata and an
+    // empty types list.
+    let meta_hash: H256 = blake2_256(&[]).into();
+    let types_hash = meta_hash;
     let public = [
         142, 175, 4, 21, 22, 135, 115, 99, 38, 201, 254, 161, 126, 37, 252, 82, 135, 97, 54, 147,
         201, 18, 144, 156, 178, 38, 170, 71, 148, 242, 106, 72,
@@ -564,13 +503,18 @@ pub fn all_events_preview() -> Vec<Event> {
     };
     vec![
         Event::MetadataAdded {
-            meta_values_display: MetaValuesDisplay::get(&meta_values),
+            meta_values_display: MetaValuesDisplay::new(String::from("westend"), 9000, meta_hash),
         },
         Event::MetadataRemoved {
-            meta_values_display: MetaValuesDisplay::get(&meta_values),
+            meta_values_display: MetaValuesDisplay::new(String::from("westend"), 9000, meta_hash),
         },
         Event::MetadataSigned {
-            meta_values_export: MetaValuesExport::get(&meta_values, &verifier_value),
+            meta_values_export: MetaValuesExport::new(
+                String::from("westend"),
+                9000,
+                meta_hash,
+                verifier_value.clone(),
+            ),
         },
         Event::NetworkSpecsAdded {
             network_specs_display: NetworkSpecsDisplay::get(
@@ -593,23 +537,23 @@ pub fn all_events_preview() -> Vec<Event> {
             ),
         },
         Event::NetworkVerifierSet {
-            network_verifier_display: NetworkVerifierDisplay::get(
-                &VerifierKey::from_parts(ordered_network_specs.specs.genesis_hash),
-                &valid_current_verifier,
-                &verifier,
-            ),
+            network_verifier_display: NetworkVerifierDisplay {
+                genesis_hash: ordered_network_specs.specs.genesis_hash,
+                valid_current_verifier: valid_current_verifier.clone(),
+                general_verifier: verifier.clone(),
+            },
         },
         Event::GeneralVerifierSet {
             verifier: verifier.to_owned(),
         },
         Event::TypesAdded {
-            types_display: TypesDisplay::get(&ContentLoadTypes::from_slice(&[]), &verifier),
+            types_display: TypesDisplay::new(types_hash, verifier.clone()),
         },
         Event::TypesRemoved {
-            types_display: TypesDisplay::get(&ContentLoadTypes::from_slice(&[]), &verifier),
+            types_display: TypesDisplay::new(types_hash, verifier.clone()),
         },
         Event::TypesSigned {
-            types_export: TypesExport::get(&ContentLoadTypes::from_slice(&[]), &verifier_value),
+            types_export: TypesExport::new(types_hash, verifier_value.clone()),
         },
         Event::TransactionSigned {
             sign_display: SignDisplay::get(

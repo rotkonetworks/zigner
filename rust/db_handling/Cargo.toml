@@ -8,9 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.82"
 constants = {path = "../constants"}
-defaults = {path = "../defaults", default-features = false, optional = true}
 definitions = {path = "../definitions", default-features = false}
-qrcode_rtx = {path = "../qrcode_rtx", default-features = false}
 hex = {version = "0.4.3"}
 lazy_static = "1.4.0"
 parity-scale-codec = {version = "3.6.9", features = ["derive"]}
@@ -55,7 +53,7 @@ tempfile = { version = "3.10" }
 
 [features]
 default = []
-active = ["defaults/active", "definitions/active", "tiny-bip39", "sp-core", "sp-runtime", "zeroize", "penumbra", "ledger", "cosmos", "zcash"]
+active = ["definitions/active", "tiny-bip39", "sp-core", "sp-runtime", "zeroize", "penumbra", "ledger", "cosmos", "zcash"]
 test = []
 penumbra = ["blake2b_simd", "tiny-bip39", "zeroize", "penumbra-keys", "rand_core"]
 ledger = ["hmac", "sha2", "tiny-bip39", "zeroize", "sp-core", "sp-runtime"]
@@ -65,3 +63,7 @@ zcash = ["bip32/bip39", "tiny-bip39", "zeroize", "orchard", "zcash_address", "zi
 [lib]
 name = "db_handling"
 crate-type = ["lib"]
+
+[[bin]]
+name = "make_cold_release"
+required-features = ["active"]

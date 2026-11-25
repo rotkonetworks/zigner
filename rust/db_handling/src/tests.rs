@@ -5,7 +5,7 @@ use constants::ALICE_SEED_PHRASE;
 
 use crate::helpers::validate_mnemonic;
 use crate::{
-    identities::{check_derivation_set, generate_random_phrase, is_passworded},
+    identities::{generate_random_phrase, is_passworded},
     interface_signer::{guess, SeedDraft},
 };
 
@@ -187,26 +187,6 @@ fn must_check_for_valid_derivation_phrase() {
         is_passworded("//path///password///password").expect("password///password is a password")
     );
     assert!(!is_passworded("//путь").expect("valid utf8 abomination"));
-}
-
-#[test]
-fn checking_derivation_set() {
-    assert!(check_derivation_set(&[
-        "/0".to_string(),
-        "//Alice/westend".to_string(),
-        "//secret//westend".to_string()
-    ])
-    .is_ok());
-    assert!(check_derivation_set(&[
-        "/0".to_string(),
-        "/0".to_string(),
-        "//Alice/westend".to_string(),
-        "//secret//westend".to_string()
-    ])
-    .is_ok());
-    assert!(check_derivation_set(&["//remarkably///ugly".to_string()]).is_ok());
-    assert!(check_derivation_set(&["no_path_at_all".to_string()]).is_err());
-    assert!(check_derivation_set(&["///".to_string()]).is_err());
 }
 
 #[test]

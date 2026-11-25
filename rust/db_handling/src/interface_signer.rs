@@ -2,43 +2,32 @@
 use bip39::{Language, Mnemonic};
 use definitions::helpers::IdenticonStyle;
 use hex;
-use parity_scale_codec::Encode;
-use sp_core::{blake2_256, sr25519, Pair};
+use sp_core::{sr25519, Pair};
 use sp_runtime::MultiSigner;
 use std::collections::{HashMap, HashSet};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use constants::{HISTORY, MAX_WORDS_DISPLAY, TRANSACTION};
+use constants::MAX_WORDS_DISPLAY;
 use definitions::navigation::{Identicon, MAddressCard, MKeyAndNetworkCard, MKeysNew, QrData};
-use definitions::network_specs::NetworkSpecs;
 use definitions::{
     crypto::Encryption,
     helpers::{
-        make_identicon_from_multisigner, multisigner_to_public, pic_meta,
+        make_identicon_from_multisigner, multisigner_to_public,
         print_multisigner_as_base58_or_eth_address,
     },
-    keyring::{AddressKey, NetworkSpecsKey, VerifierKey},
+    keyring::{AddressKey, NetworkSpecsKey},
     navigation::{
-        Address, DerivationCheck as NavDerivationCheck, DerivationDestination, DerivationEntry,
-        DerivationPack, MBackup, MDeriveKey, MKeyDetails, MKeysCard, MMMNetwork, MMNetwork,
-        MManageMetadata, MMetadataRecord, MNetworkDetails, MNetworkMenu, MNewSeedBackup, MRawKey,
-        MSCNetworkInfo, MTypesInfo, MVerifier, Network, SeedNameCard,
+        Address, DerivationCheck as NavDerivationCheck, DerivationDestination, MKeyDetails,
+        MKeysCard, MMNetwork, MNewSeedBackup, MSCNetworkInfo, SeedNameCard,
     },
-    network_specs::{OrderedNetworkSpecs, ValidCurrentVerifier},
-    qr_transfers::ContentLoadTypes,
     users::AddressDetails,
 };
 
-use crate::helpers::{
-    get_address_details, get_all_networks, get_general_verifier, get_meta_values_by_name,
-    get_meta_values_by_name_version, get_network_specs, make_batch_clear_tree, open_tree,
-    try_get_types,
-};
+use crate::helpers::{get_address_details, get_all_networks, get_network_specs};
 use crate::identities::{
     derivation_check, generate_random_phrase, get_addresses_by_seed_name, get_all_addresses,
     DerivationCheck,
 };
-use crate::{db_transactions::TrDbCold, helpers::get_valid_current_verifier};
 use crate::{Error, Result};
 
 /// Get display address for a multisigner - checks for stored addresses first
@@ -156,47 +145,6 @@ pub fn get_all_seed_names_with_identicons(
     Ok(res)
 }
 
-/// Return a `Vec` with address-associated public data for all addresses from the
-/// Vault database.
-///
-/// Function is used to show users all possible addresses, when selecting the
-/// address to generate
-/// `SufficientCrypto` for signing
-/// updates with the Vault.
-pub fn print_all_identities(database: &sled::Db) -> Result<Vec<MRawKey>> {
-    Ok(get_all_addresses(database)?
-        .into_iter()
-        .filter_map(|(multisigner, address_details)| {
-            match &address_details.network_id {
-                Some(id) => {
-                    let network_specs = get_network_specs(database, id).unwrap();
-
-                    let address_key = AddressKey::new(
-                        multisigner.clone(),
-                        Some(network_specs.specs.genesis_hash),
-                    ); // to click
-                    let public_key = multisigner_to_public(&multisigner); // to display
-                    let style = address_details.identicon_style();
-                    let identicon = make_identicon_from_multisigner(&multisigner, style);
-                    Some(MRawKey {
-                        address: Address {
-                            identicon,
-                            has_pwd: address_details.has_pwd,
-                            path: address_details.path,
-                            secret_exposed: address_details.secret_exposed,
-                            seed_name: address_details.seed_name,
-                        },
-                        address_key: hex::encode(address_key.key()),
-                        public_key: hex::encode(public_key),
-                        network_logo: network_specs.specs.logo,
-                    })
-                }
-                None => None,
-            }
-        })
-        .collect())
-}
-
 pub fn keys_by_seed_name(database: &sled::Db, seed_name: &str) -> Result<MKeysNew> {
     let (root, derived): (Vec<_>, Vec<_>) = get_addresses_by_seed_name(database, seed_name)?
         .into_iter()
@@ -281,27 +229,6 @@ pub fn addresses_set_seed_name_network(
         .collect())
 }
 
-/// Return `Vec` with network information for all networks in the Vault database,
-/// with bool indicator which one is currently selected.
-pub fn show_all_networks_with_flag(
-    database: &sled::Db,
-    network_specs_key: &NetworkSpecsKey,
-) -> Result<MNetworkMenu> {
-    let mut networks: Vec<_> = get_all_networks(database)?
-        .into_iter()
-        .map(|network| {
-            let network_specs_key_current =
-                NetworkSpecsKey::from_parts(&network.specs.genesis_hash, &network.specs.encryption);
-            let mut n: Network = network.into();
-            n.selected = network_specs_key == &network_specs_key_current;
-            n
-        })
-        .collect();
-    networks.sort_by_key(|a| a.order);
-
-    Ok(MNetworkMenu { networks })
-}
-
 /// Make `Vec` with network information for all networks in the Vault database,
 /// without any selection.
 pub fn show_all_networks(database: &sled::Db) -> Result<Vec<MMNetwork>> {
@@ -321,19 +248,6 @@ pub fn show_all_networks(database: &sled::Db) -> Result<Vec<MMNetwork>> {
     networks.sort_by_key(|a| a.order);
 
     Ok(networks)
-}
-
-/// Sort database networks by the order and get the network specs for the first
-/// network on the list.
-///
-/// If there are no networks in the system, throws error.
-pub fn first_network(database: &sled::Db) -> Result<Option<OrderedNetworkSpecs>> {
-    let mut networks = get_all_networks(database)?;
-    if networks.is_empty() {
-        return Err(Error::NoNetworksAvailable);
-    }
-    networks.sort_by_key(|a| a.order);
-    Ok(networks.first().cloned())
 }
 
 /// Prepare export key screen struct [`MKeyDetails`].
@@ -443,70 +357,6 @@ pub fn export_key(
     })
 }
 
-/// Prepare seed backup screen struct [`MBackup`] for given seed name.
-///
-/// Function inputs seed name, outputs `Vec` with all known derivations in all
-/// networks.
-pub fn backup_prep(database: &sled::Db, seed_name: &str) -> Result<MBackup> {
-    let networks = get_all_networks(database)?;
-    if networks.is_empty() {
-        return Err(Error::NoNetworksAvailable);
-    }
-    let mut derivations = Vec::new();
-    for network in networks.into_iter() {
-        let id_set: Vec<_> = addresses_set_seed_name_network(
-            database,
-            seed_name,
-            &NetworkSpecsKey::from_parts(&network.specs.genesis_hash, &network.specs.encryption),
-        )?
-        .into_iter()
-        .map(|a| DerivationEntry {
-            path: a.1.path,
-            has_pwd: a.1.has_pwd,
-        })
-        .collect();
-        if !id_set.is_empty() {
-            derivations.push(DerivationPack {
-                network_title: network.specs.name,
-                network_logo: network.specs.logo,
-                network_order: network.order.to_string(),
-                id_set,
-            });
-        }
-    }
-
-    derivations.sort_by(|a, b| a.network_order.cmp(&b.network_order));
-
-    Ok(MBackup {
-        seed_name: seed_name.to_string(),
-        derivations,
-    })
-}
-
-/// Prepare key derivation screen struct [`MDeriveKey`].
-///
-/// Function inputs seed name, network [`NetworkSpecsKey`] and user-suggested
-/// derivation, outputs struct with derived address data and, if the derived
-/// address already exists in the database, shows the its data.
-///
-// TODO: the `collision` part is actually a mislabel, it is really
-// `derivation_exists`, and is referring to the derivation with same
-// [`AddressKey`] in same network (that would be cause by same seed used, same
-// derivation path and same password if any password exists) - this mislabel
-// should be corrected, after json fix; `seed_name` in existing derivation
-// display also seems to be excessive
-pub fn derive_prep(
-    _database: &sled::Db,
-    seed_name: &str,
-    _collision: Option<(MultiSigner, AddressDetails)>,
-    _suggest: &str,
-    _keyboard: bool,
-) -> Result<MDeriveKey> {
-    Ok(MDeriveKey {
-        seed_name: seed_name.to_string(),
-    })
-}
-
 /// Return [`NavDerivationCheck`] with allowed action details for new key derivation.
 ///
 /// Function is used to dynamically check from the frontend if user is allowed
@@ -607,126 +457,6 @@ fn dynamic_path_check_unhexed(
     }
 }
 
-/// Return [`MNetworkDetails`] with network specs and metadata set information
-/// for network with given [`NetworkSpecsKey`].
-pub fn network_details_by_key(
-    database: &sled::Db,
-    network_specs_key: &NetworkSpecsKey,
-) -> Result<MNetworkDetails> {
-    let OrderedNetworkSpecs {
-        specs:
-            NetworkSpecs {
-                base58prefix,
-                color,
-                decimals,
-                encryption,
-                genesis_hash,
-                logo,
-                name,
-                path_id,
-                secondary_color,
-                title,
-                unit,
-            },
-        order,
-    } = get_network_specs(database, network_specs_key)?;
-    let verifier_key = VerifierKey::from_parts(genesis_hash);
-    let general_verifier = get_general_verifier(database)?;
-    let current_verifier = get_valid_current_verifier(database, &verifier_key)?;
-    let meta: Vec<_> = get_meta_values_by_name(database, &name)?
-        .into_iter()
-        .map(|m| {
-            let meta_hash = blake2_256(&m.meta);
-            let meta_id_pic = pic_meta(&meta_hash);
-
-            MMetadataRecord {
-                specname: m.name,
-                specs_version: m.version.to_string(),
-                meta_hash: hex::encode(meta_hash),
-                meta_id_pic,
-            }
-        })
-        .collect();
-
-    let (ttype, details) = match current_verifier {
-        ValidCurrentVerifier::General => ("general".to_string(), general_verifier.show_card()),
-        ValidCurrentVerifier::Custom { v } => ("custom".to_string(), v.show_card()),
-    };
-    let current_verifier = MVerifier { ttype, details };
-
-    Ok(MNetworkDetails {
-        base58prefix,
-        color,
-        decimals,
-        encryption,
-        genesis_hash,
-        logo,
-        name,
-        order: order.to_string(),
-        path_id,
-        secondary_color,
-        title,
-        unit,
-        current_verifier,
-        meta,
-    })
-}
-
-/// Return [`MManageMetadata`] with metadata details for network with given
-/// [`NetworkSpecsKey`] and given version.
-pub fn metadata_details(
-    database: &sled::Db,
-    network_specs_key: &NetworkSpecsKey,
-    network_version: u32,
-) -> Result<MManageMetadata> {
-    let ordered_network_specs = get_network_specs(database, network_specs_key)?;
-    let network_specs = ordered_network_specs.specs;
-    let meta_values =
-        get_meta_values_by_name_version(database, &network_specs.name, network_version)?;
-    let networks: Vec<_> = get_all_networks(database)?
-        .into_iter()
-        .filter(|a| a.specs.name == network_specs.name)
-        .map(|network| MMMNetwork {
-            title: network.specs.title,
-            logo: network.specs.logo,
-            order: network.order as u32,
-            current_on_screen: &NetworkSpecsKey::from_parts(
-                &network.specs.genesis_hash,
-                &network.specs.encryption,
-            ) == network_specs_key,
-        })
-        .collect();
-
-    let meta_hash = blake2_256(&meta_values.meta);
-    let meta_id_pic = pic_meta(&meta_hash);
-    Ok(MManageMetadata {
-        name: network_specs.name,
-        version: network_version.to_string(),
-        meta_hash: hex::encode(meta_hash),
-        meta_id_pic,
-        networks,
-    })
-}
-
-/// Make types status display.
-pub fn show_types_status(database: &sled::Db) -> Result<MTypesInfo> {
-    match try_get_types(database)? {
-        Some(a) => {
-            let (types_hash, types_id_pic) = ContentLoadTypes::generate(&a).show();
-            Ok(MTypesInfo {
-                types_on_file: true,
-                types_hash: Some(types_hash),
-                types_id_pic: Some(types_id_pic),
-            })
-        }
-        None => Ok(MTypesInfo {
-            types_on_file: false,
-            types_hash: None,
-            types_id_pic: None,
-        }),
-    }
-}
-
 /// Generate new random seed phrase, make identicon for `sr25519` public key,
 /// and send to Vault screen.
 pub fn print_new_seed(seed_name: &str) -> Result<MNewSeedBackup> {
@@ -742,23 +472,6 @@ pub fn print_new_seed(seed_name: &str) -> Result<MNewSeedBackup> {
         seed_phrase,
         identicon,
     })
-}
-
-/// Get database history tree checksum to be displayed in log screen.
-pub fn history_hex_checksum(database: &sled::Db) -> Result<String> {
-    let history = open_tree(database, HISTORY)?;
-    let checksum = history.checksum()?;
-    Ok(hex::encode(checksum.encode()).to_uppercase())
-}
-
-/// Clear transaction tree of the database.
-///
-/// Function is intended for cases when transaction is declined by the user
-/// (e.g. user has scanned something, read it, clicked `back` or `decline`)
-pub fn purge_transactions(database: &sled::Db) -> Result<()> {
-    TrDbCold::new()
-        .set_transaction(make_batch_clear_tree(database, TRANSACTION)?) // clear transaction
-        .apply(database)
 }
 
 /// Get possible options of English `bip39` words that start with user-entered

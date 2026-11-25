@@ -16,6 +16,7 @@
 use std::path::Path;
 
 use db_handling::{
+    cold_default::default_chainspecs,
     helpers::{assert_db_version, get_all_networks, get_danger_status},
     identities::get_all_addresses,
     interface_signer::keys_by_seed_name,
@@ -132,4 +133,23 @@ fn legacy_keys_list_for_seed() {
     ]
     .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
     assert_eq!(got, expected);
+}
+
+/// The networks a new database ships with are the 0.12 entries, byte for
+/// byte: existing keys point at them by genesis hash and encryption.
+#[test]
+fn default_networks_match_0_12() {
+    use parity_scale_codec::Encode;
+
+    let (_dir, db) = open_fixture();
+    let legacy = get_all_networks(&db).unwrap();
+    let shipped = default_chainspecs();
+    assert_eq!(shipped.len(), 7);
+    for spec in shipped {
+        let old = legacy
+            .iter()
+            .find(|x| x.specs.name == spec.specs.name)
+            .unwrap_or_else(|| panic!("{} in 0.12", spec.specs.name));
+        assert_eq!(old.encode(), spec.encode(), "{}", spec.specs.name);
+    }
 }
